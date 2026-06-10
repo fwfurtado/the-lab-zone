@@ -1,1 +1,2 @@
-infra/prod/talos/.terraform/
+**/.terraform/
+**/talos/clusterconfig/

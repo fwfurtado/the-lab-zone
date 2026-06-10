@@ -28,6 +28,6 @@ variable "nodes" {
     "cp-2"     = { vcpus = 4, memory = 8192, disk = 60 }
     "cp-3"     = { vcpus = 4, memory = 8192, disk = 60 }
     "worker-1" = { vcpus = 8, memory = 32768, disk = 100 }
-    "worker-1" = { vcpus = 8, memory = 32768, disk = 100 }
+    "worker-2" = { vcpus = 8, memory = 32768, disk = 100 }
   }
 }
