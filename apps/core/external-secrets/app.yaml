@@ -1,0 +1,28 @@
+# apps/core/external-secrets/app.yaml
+spec:
+  project: core
+  sources:
+    # Source 1: o operator (chart + CRDs)
+    - repoURL: https://charts.external-secrets.io
+      chart: external-secrets
+      targetRevision: 0.20.4
+      helm:
+        releaseName: external-secrets
+        valueFiles:
+          - $values/apps/core/external-secrets/values.yaml
+    # Source 2: ref pros values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    # Source 3: manifests puros (o ClusterSecretStore)
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/core/external-secrets/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true

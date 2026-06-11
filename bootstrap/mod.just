@@ -40,6 +40,11 @@ export ARGOCD_VERSION := "9.5.20"
     echo "==> Verificando ArgoCD"
     kubectl get applications -n argocd -o wide
 
+@argocd-port-forward:
+    echo "==> Port forwarding para ArgoCD"
+    echo "Get admin password: kubectl -n argocd get secrets argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+    kubectl port-forward svc/argocd-server -n argocd 8080:80
+
 [confirm("Are you sure you want to create a new 1Password Connect server?")]
 @connet-server-create:
     op connect server create the-lab-zone --vaults the-lab-zone

@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: onepassword-connect
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: core
+  sources:
+    - repoURL: https://1password.github.io/connect-helm-charts
+      chart: connect
+      targetRevision: 2.4.1
+      helm:
+        releaseName: onepassword-connect
+        valueFiles:
+          - $values/apps/core/onepassword-connect/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

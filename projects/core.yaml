@@ -11,6 +11,7 @@ spec:
     - https://argoproj.github.io/argo-helm
     - https://charts.external-secrets.io
     - https://charts.jetstack.io
+    - https://1password.github.io/connect-helm-charts
   destinations:
     - namespace: "*"
       server: https://kubernetes.default.svc
