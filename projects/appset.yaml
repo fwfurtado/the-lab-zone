@@ -6,7 +6,7 @@ metadata:
 spec:
   generators:
     - git:
-        repoURL: https://github.com/mimi/the-lab-zone.git
+        repoURL: https://github.com/fwfurtado/the-lab-zone.git
         revision: main
         directories:
           - path: apps/*
