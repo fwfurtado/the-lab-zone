@@ -20,7 +20,8 @@ spec:
         targetRevision: main
         path: '{{path}}'
         directory:
-          recurse: false               # só os Application YAMLs do topo do domínio
+          recurse: true
+          include: '*/app.yaml'        # contrato: só app.yaml é manifest
       destination:
         server: https://kubernetes.default.svc
         namespace: argocd

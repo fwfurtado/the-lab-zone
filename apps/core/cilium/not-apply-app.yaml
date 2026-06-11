@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: core
+  sources:
+    - repoURL: https://helm.cilium.io
+      chart: cilium
+      targetRevision: 1.19.4
+      helm:
+        releaseName: cilium            # mesmo nome do bootstrap → diff zero
+        valueFiles:
+          - $values/apps/core/cilium/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true           # CRDs gigantes do Cilium exigem
