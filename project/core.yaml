@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: core
+  namespace: argocd
+spec:
+  description: CNI, secrets, certs, ingress — o único projeto com poder cluster-wide
+  sourceRepos:
+    - https://github.com/mimi/the-lab-zone.git
+    - https://helm.cilium.io
+    - https://argoproj.github.io/argo-helm
+    - https://charts.external-secrets.io
+    - https://charts.jetstack.io
+  destinations:
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"

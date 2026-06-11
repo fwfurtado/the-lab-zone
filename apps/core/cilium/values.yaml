@@ -1,0 +1,52 @@
+# Cilium — CNI + kube-proxy replacement + (futuramente) LB-IPAM/L2/Gateway
+# Usado pelo bootstrap.sh E pelo Application do ArgoCD — fonte única.
+
+ipam:
+  mode: kubernetes
+
+kubeProxyReplacement: true
+
+# Talos expõe a API do K8s localmente em cada nó via KubePrism (porta 7445).
+# O Cilium usa isso e fica imune à queda do VIP — sem dependência circular.
+k8sServiceHost: localhost
+k8sServicePort: 7445
+
+# Talos não permite os defaults do chart:
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - PERF_MON
+      - BPF
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+
+operator:
+  replicas: 2
+  rollOutPods: true
+
+rollOutCiliumPods: true
+
+# Hubble desde o dia 1 — observabilidade de rede de graça:
+hubble:
+  relay:
+    enabled: true
+  ui:
+    enabled: true

@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: domains
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/mimi/the-lab-zone.git
+        revision: main
+        directories:
+          - path: apps/*
+  template:
+    metadata:
+      name: '{{path.basename}}'        # core, observability, data, ai, security
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/mimi/the-lab-zone.git
+        targetRevision: main
+        path: '{{path}}'
+        directory:
+          recurse: false               # só os Application YAMLs do topo do domínio
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: argocd
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

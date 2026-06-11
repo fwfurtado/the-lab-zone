@@ -1,5 +1,6 @@
 import "infra/prod/justfile"
 
+mod bootstrap
 
 @setup:
     mkdir -p ~/.config/sops/age

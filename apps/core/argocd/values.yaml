@@ -1,0 +1,39 @@
+# ArgoCD — instalado pelo bootstrap.sh, adotado por ele mesmo via GitOps.
+
+configs:
+  params:
+    # TLS termina no Gateway (Fase 2.5); o server fica HTTP interno:
+    server.insecure: true
+
+  cm:
+    # Diffs mais estáveis com charts que geram campos server-side:
+    application.resourceTrackingMethod: annotation
+    # Health check de Applications dentro de app-of-apps:
+    resource.customizations.health.argoproj.io_Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = ""
+      if obj.status ~= nil and obj.status.health ~= nil then
+        hs.status = obj.status.health.status
+        if obj.status.health.message ~= nil then
+          hs.message = obj.status.health.message
+        end
+      end
+      return hs
+
+# SSO entra com o Authentik (Fase 6); até lá, admin local:
+dex:
+  enabled: false
+
+notifications:
+  enabled: false
+
+# Homelab: sem HA do ArgoCD — réplicas únicas, menos RAM.
+redis-ha:
+  enabled: false
+controller:
+  replicas: 1
+server:
+  replicas: 1
+repoServer:
+  replicas: 1
