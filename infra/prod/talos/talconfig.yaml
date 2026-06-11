@@ -42,7 +42,7 @@ nodes:
           - network: 0.0.0.0/0
             gateway: 10.40.0.1
         vip:
-          ip: 10.10.30.10      # VIP compartilhado entre os CPs
+          ip: 10.40.6.10      # VIP compartilhado entre os CPs
   - hostname: cp-2
     ipAddress: 10.40.6.12
     controlPlane: true

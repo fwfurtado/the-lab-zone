@@ -28,7 +28,7 @@ export ARGOCD_VERSION := "9.5.20"
     kubectl -n external-secrets create secret generic op-connect-token --from-literal=token="$(op read 'op://homelab/1password-connect/token')" --dry-run=client -o yaml | kubectl apply -f -
 
     echo "==> [4/4] Root app — daqui em diante, GitOps"
-    kubectl apply -f bootstrap/root.yaml
+    kubectl apply -f root.yaml
 
     echo "Bootstrap completo. O ArgoCD assume a partir daqui."
 

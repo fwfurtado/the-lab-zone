@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/mimi/the-lab-zone.git
+    repoURL: https://github.com/fwfurtado/the-lab-zone.git
     targetRevision: main
     path: projects
     directory:

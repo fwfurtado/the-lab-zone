@@ -23,10 +23,10 @@ git clone git@github.com:fwfurtado/the-lab-zone.git && cd the-lab-zone && mise i
 ```
 
 
-### Itens esperados no vaul `homelab` (1Password)
+### Itens esperados no vault `homelab` (1Password)
 | Item | Campos | Criado em |
 |------|-------|-----------|
-| `proxmox-terraform` | `api-token`, `admin console URL` |  Fase 1.1 |
+| `Proxmox Terraform Token` | `api-token`, `admin console URL` |  Fase 1.1 |
 | `Backblaze` | `Terraform Key/key-id`, `Terraform Key/application-key` |  Fase 1.2 |
 | `sops-age` | `private-key` |  Fase 1.0 |
 
@@ -36,23 +36,23 @@ git clone git@github.com:fwfurtado/the-lab-zone.git && cd the-lab-zone && mise i
 ### 1.0 Chave SOPS/Age (primeira execução apenas)
 ```bash
 age-keygen 
-# Publica -> .soap.yaml (commitada no repositório)
+# Publica -> .sops.yaml (commitada no repositório)
 # Privada -> 1Password: item `sops-age`
 # Para usar localmente:
-mkdir -p ~/.config/sops/keys
-op read op://homelab/sops-age/private-key -o ~/.config/sops/ages/keys.txt
+mkdir -p ~/.config/sops/age/
+op read op://homelab/sops-age/private-key -o ~/.config/sops/age/keys.txt
 ```
 
 ### 1.1 Proxmox — token de API para o Terraform
 
 Pré-condições: Proxmox VE instalado no T630. No shell do Proxmox (console):
 ```bash
-pvemu user add terraform@pve
-pvemu aclmod / -user terraform@pve -role Administrator
-pvemu user token add terraform@pve provisioner --privsep=0
+pveum user add terraform@pve
+pveum aclmod / -user terraform@pve -role Administrator
+pveum user token add terraform@pve provisioner --privsep=0
 ```
 
--> Salvar o token no 1Password: item `proxmox-terraform`.
+-> Salvar o token no 1Password: item `Proxmox Terraform Token`.
 
 ### 1.2 Backblaze B2 — credenciais para o Terraform
 
@@ -78,8 +78,8 @@ Plano de rede (decisões registradas no [README](./README.md))
 
 | Recurso | Valor |
 |---------|-------|
-| Subnet VMs | 10.10.30.0/24 |
-| Pool LB (Cilium) | 10.10.50.0/24 |
+| Subnet VMs | 10.40.0.x |
+| Pool LB (Cilium) | 10.40.7.0/24 |
 | VMs | 3x CP (4c/8GB/60GB) + 2x workers (8c/32GB/100GB) |
 
 ```bash

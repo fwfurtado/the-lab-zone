@@ -6,7 +6,7 @@ metadata:
 spec:
   description: CNI, secrets, certs, ingress — o único projeto com poder cluster-wide
   sourceRepos:
-    - https://github.com/mimi/the-lab-zone.git
+    - https://github.com/fwfurtado/the-lab-zone.git
     - https://helm.cilium.io
     - https://argoproj.github.io/argo-helm
     - https://charts.external-secrets.io
