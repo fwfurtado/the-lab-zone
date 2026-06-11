@@ -4,8 +4,8 @@ export ARGOCD_VERSION := "9.5.20"
 
 @run:
     echo "==> [1/4] Cilium"
-    helm repo add cilium https://helm.cilium.io/
-    helm template cilium cilium/cilium --version $CILIUM_VERSION --namespace kube-system -f ../apps/core/cilium/values.yaml | kubectl apply -f -
+    helm repo add cilium https://helm.cilium.io/ --force-update
+    helm template cilium cilium/cilium --version $CILIUM_VERSION --namespace kube-system -f ../apps/core/cilium/values.yaml | kubectl apply --server-side --force-conflicts -f -
 
     echo "==> Waiting for Nodes to be ready"
     kubectl wait --for=condition=Ready nodes --all --timeout=5m
@@ -13,7 +13,7 @@ export ARGOCD_VERSION := "9.5.20"
     echo "==> [2/4] ArgoCD"
     helm repo add argo https://argoproj.github.io/argo-helm --force-update
     kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-    helm template argocd argo/argo-cd --version $ARGOCD_VERSION --namespace argocd -f ../apps/core/argocd/values.yaml | kubectl apply -f -
+    helm template argocd argo/argo-cd --version $ARGOCD_VERSION --namespace argocd -f ../apps/core/argocd/values.yaml | kubectl apply --server-side --force-conflicts -f -
 
     echo "==> Waiting for ArgoCD to be ready"
     kubectl -n argocd wait --for=condition=Available deploy  --all --timeout=5m
@@ -31,6 +31,14 @@ export ARGOCD_VERSION := "9.5.20"
     kubectl apply -f root.yaml
 
     echo "Bootstrap completo. O ArgoCD assume a partir daqui."
+
+@check-cilium:
+    echo "==> Verificando Cilium"
+    kubectl get pods -n kube-system -o wide
+
+@check-argocd:
+    echo "==> Verificando ArgoCD"
+    kubectl get applications -n argocd -o wide
 
 [confirm("Are you sure you want to create a new 1Password Connect server?")]
 @connet-server-create:
