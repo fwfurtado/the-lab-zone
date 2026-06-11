@@ -5,7 +5,7 @@ spec:
     # Source 1: o operator (chart + CRDs)
     - repoURL: https://charts.external-secrets.io
       chart: external-secrets
-      targetRevision: 0.20.4
+      targetRevision: 2.6.0
       helm:
         releaseName: external-secrets
         valueFiles:
