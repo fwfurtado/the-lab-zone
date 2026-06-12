@@ -478,6 +478,356 @@ kubectl -n default annotate externalsecret <nome> force-sync=$(date +%s)
   container (incluindo o Bearer token). Para token de smoke-test, ok;
   rotacionar via `op connect token` se for o caso.
 
+# Fase 3 — Ingress TLS: cert-manager, Gateway API e DNS split-horizon
+
+> Seção para append no `BOOTSTRAP.md`. Continua a numeração de incidentes das fases anteriores.
+
+## Objetivo
+
+Expor serviços do cluster em `https://<svc>.lab.the-lab.zone` com certificado válido e sem
+port-forward. Três planos se encontram aqui:
+
+- **Plano de tráfego (cluster):** Gateway API servido pelo Cilium, com um Gateway wildcard
+  terminando TLS, IP fixo via LB-IPAM e anúncio na LAN via L2.
+- **Plano de certificado:** cert-manager emitindo um wildcard `*.lab.the-lab.zone` via ACME
+  DNS-01 no Cloudflare, consumido automaticamente pelo Gateway.
+- **Plano de nome (DNS):** split-horizon — PowerDNS interno resolve `*.lab` para o IP do
+  Gateway; o resto recursa normalmente.
+
+**Critério de saída da fase:** `https://hubble.lab.the-lab.zone` abre no browser com cadeado
+verde (cert de produção), sem port-forward, resolvendo pelo DNS interno.
+
+---
+
+## Decisões (Fase 3)
+
+| Decisão | Escolha | Porquê |
+|---|---|---|
+| Canal dos CRDs do Gateway API | **experimental** (v1.5.1), vendorizado no repo | Cilium 1.19 indexa `TLSRoute` em `gateway.networking.k8s.io/v1alpha2`, que **só existe no canal experimental**. O `standard`, mesmo na v1.5.1, traz `TLSRoute` só em `v1`. Vendorizar evita tanto o timeout de clone do repo gigante quanto o erro de versão. |
+| VAP `safe-upgrades` no Git | **Não vendorizar** | Ela bloqueia a transição standard→experimental e quebraria a reconciliação do ArgoCD a cada troca de canal. Com tudo em experimental, não há o que proteger. |
+| Integração Gateway API no cert-manager | `config.enableGatewayAPI: true` | Desligada por padrão em todas as versões ≥1.15. Sem isso, a annotation no Gateway é ignorada e o secret TLS nunca é criado. |
+| ClusterIssuers | **Dois** (`letsencrypt-staging` + `letsencrypt-prod`), account keys separadas | Flip declarativo via annotation (muda `issuerRef` → reemite sozinho, sem deletar secret), staging permanente para validar serviços futuros, e key por server (prática recomendada). |
+| Desafio ACME | DNS-01 via Cloudflare, cert **wildcard** | Wildcard cobre todos os `*.lab` com um cert só; DNS-01 não exige expor HTTP-01 na borda. Token Cloudflare via ESO, no namespace `cert-manager` (cluster resource namespace). |
+| Pin do IP do Gateway | `spec.infrastructure.annotations` (**não** `metadata.annotations`) | O Cilium só propaga annotations de `spec.infrastructure` para o Service derivado. Em `metadata` a annotation é ignorada e o LB-IPAM atribui o primeiro IP do pool. |
+| Regex da L2AnnouncementPolicy | `^ens[0-9]+$` | O matcher casa o **nome real do kernel** (`ens18`), não o alias do Talos (`ethSel0`). O `^eth[0-9]+` dos blogs não casa nem o nome nem o alias. |
+| Topologia do PowerDNS | **Recursor na frente do Authoritative** | Auth não recursa; apontar a LAN só pra ele quebraria a internet. Recursor na :53 (LAN), auth em `127.0.0.1:5300`, forward de `the-lab.zone` pro auth, recursão raiz pro resto. |
+| Upstream da recursão | **Recursão raiz** (sem forwarder) | Mais privado (queries direto aos autoritativos) e sem dependência de terceiro. Trocável por forward pra 1.1.1.1/Quad9 com uma zona `.` + `recurse: true`. |
+| Re-provisionamento do LXC DNS | `terraform_data` com `triggers_replace` por **hash do script** | `remote-exec` não re-roda em recurso já existente. Hashear o script faz o provisioner re-rodar contra o mesmo LXC quando a config muda, sem recriar o container. |
+
+---
+
+## Componentes e ordem de aplicação
+
+```
+apps/core/gateway-api-crds/   # CRDs experimental vendorizados (manifests/)
+apps/core/cert-manager/       # chart + values (enableGatewayAPI) + issuers + token ESO
+apps/core/gateway/            # Namespace + Gateway main (wildcard, pin IP, annotation issuer)
+apps/core/hubble-route/       # HTTPRoute de smoke test (em kube-system)
+infra/prod/dns/               # LXC PowerDNS (auth + recursor) via Terraform
+```
+
+Ordem importa: **CRDs do Gateway API antes do cert-manator bootar** (ele só checa o suporte no
+startup), e **antes do Cilium operator** registrar o controller de Gateway.
+
+---
+
+## Passo a passo
+
+### 3.1 — CRDs do Gateway API (canal experimental)
+
+Vendorizar no `apps/core/gateway-api-crds/manifests/` os 9 CRDs do canal **experimental** da
+v1.5.1 (`gatewayclasses`, `gateways`, `httproutes`, `grpcroutes`, `referencegrants`,
+`tlsroutes`, `tcproutes`, `udproutes`, `backendtlspolicies`). **Não** copiar o
+`kustomization.yaml`, a VAP `safe-upgrades`, nem os CRDs de mesh (`xmeshes`,
+`xbackendtrafficpolicies`).
+
+```bash
+kubectl apply --server-side --force-conflicts -f apps/core/gateway-api-crds/manifests/
+kubectl get crd tlsroutes.gateway.networking.k8s.io \
+  -o jsonpath='{range .spec.versions[*]}{.name}{" served="}{.served}{"\n"}{end}'
+```
+
+**Exit:** `tlsroutes` lista `v1alpha2 served=true`. GatewayClass `cilium` fica `Accepted=True`
+e o `cilium-operator` sai do CrashLoop.
+
+### 3.2 — cert-manager + issuers + token Cloudflare
+
+No `values.yaml` do chart, habilitar a integração Gateway API:
+
+```yaml
+config:
+  apiVersion: controller.config.cert-manager.io/v1alpha1
+  kind: ControllerConfiguration
+  enableGatewayAPI: true
+```
+
+App com `CreateNamespace=true` (o chart não cria o próprio namespace). ExternalSecret do token
+Cloudflare (`Zone:DNS:Edit` + `Zone:Read`) materializando o secret `cloudflare-dns-token` **no
+namespace `cert-manager`** (é o cluster resource namespace que o ClusterIssuer consulta). Dois
+ClusterIssuers (staging + prod), cada um com seu `privateKeySecretRef`.
+
+```bash
+kubectl -n cert-manager rollout status deploy/cert-manager
+kubectl -n cert-manager get secret cloudflare-dns-token
+kubectl get clusterissuer        # ambos READY=True
+```
+
+**Exit:** cert-manager `Synced/Healthy`, os dois issuers `Ready` (o Ready só registra a conta
+ACME; não depende do token ainda), e o secret do token presente em `cert-manager`.
+
+### 3.3 — Gateway wildcard
+
+Gateway `main` no namespace `gateway`, GatewayClass `cilium`, listener HTTPS wildcard,
+`allowedRoutes.from: All`. **Pin do IP em `spec.infrastructure.annotations`** e annotation do
+issuer (começar em **staging**) em `metadata.annotations`:
+
+```yaml
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging   # cert-manager lê de metadata
+spec:
+  infrastructure:
+    annotations:
+      lbipam.cilium.io/ips: "10.40.7.10"                   # LB-IPAM lê de spec.infrastructure
+  listeners:
+    - name: https-wildcard
+      hostname: "*.lab.the-lab.zone"
+      port: 443
+      protocol: HTTPS
+      allowedRoutes: { namespaces: { from: All } }
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: wildcard-lab-tls    # criado AUTOMATICAMENTE pelo cert-manager
+```
+
+O cert-manager (gateway-shim) lê a annotation, cria um `Certificate` com
+`secretName: wildcard-lab-tls`, emite via DNS-01, e o secret materializa.
+
+```bash
+kubectl -n gateway get certificate,certificaterequest,order,challenge
+kubectl -n gateway get svc cilium-gateway-main -o wide   # EXTERNAL-IP = 10.40.7.10
+kubectl -n gateway get gateway main -o wide              # PROGRAMMED=True
+```
+
+**Exit:** Service `cilium-gateway-main` com EXTERNAL-IP `10.40.7.10`, Gateway `Programmed=True`,
+secret `wildcard-lab-tls` presente (cert de staging).
+
+### 3.4 — L2 announcement do IP do Gateway
+
+A `CiliumL2AnnouncementPolicy` precisa casar o device real (`ens18`) e o lease só nasce quando
+há um Service LB com IP — o Gateway é esse Service.
+
+```bash
+kubectl get ciliuml2announcementpolicy -o yaml | grep -A2 interfaces   # ^ens[0-9]+$
+kubectl -n kube-system get lease | grep cilium-l2announce               # holder = worker-N
+# de um host na LAN:
+arping -c3 10.40.7.10                                                    # responde
+```
+
+**Exit:** lease `cilium-l2announce-gateway-cilium-gateway-main` com holder, e o `10.40.7.10`
+responde ARP na LAN.
+
+### 3.5 — HTTPRoute do Hubble (smoke test)
+
+HTTPRoute **no namespace `kube-system`** (mesmo do `hubble-ui`, evita ReferenceGrant),
+anexando ao Gateway via `parentRefs` cross-namespace:
+
+```yaml
+spec:
+  parentRefs:
+    - name: main
+      namespace: gateway
+      sectionName: https-wildcard
+  hostnames: ["hubble.lab.the-lab.zone"]
+  rules:
+    - matches: [{ path: { type: PathPrefix, value: / } }]
+      backendRefs: [{ name: hubble-ui, port: 80 }]
+```
+
+```bash
+kubectl -n gateway get gateway main -o wide            # attachedRoutes vira 1
+kubectl -n kube-system describe httproute hubble-ui    # Accepted=True, ResolvedRefs=True
+curl -k -I --resolve hubble.lab.the-lab.zone:443:10.40.7.10 https://hubble.lab.the-lab.zone/
+```
+
+**Exit:** `attachedRoutes: 1`, e o `curl --resolve` responde 200/redirect (cert de staging =
+warning esperado).
+
+### 3.6 — DNS split-horizon (PowerDNS auth + recursor)
+
+LXC unprivileged Debian 13 (`10.40.1.53`). PowerDNS **Authoritative** serve `the-lab.zone`;
+**Recursor** na frente resolve interno (forward pro auth) e externo (recursão raiz).
+
+`/etc/powerdns/pdns.conf` (auth — old-style ainda suportado):
+
+```ini
+launch=gsqlite3
+gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
+local-address=127.0.0.1:5300     # auth sai da :53; porta embutida no address (não local-port)
+api=yes
+api-key=<...>
+webserver=yes
+webserver-address=0.0.0.0
+webserver-port=8081
+webserver-allow-from=10.40.0.0/21
+```
+
+`/etc/powerdns/recursor.yml` (Recursor 5.x exige **YAML**):
+
+```yaml
+incoming:
+  listen:
+    - 10.40.1.53
+  allow_from:
+    - 10.40.0.0/21
+recursor:
+  forward_zones:
+    - zone: the-lab.zone
+      forwarders:
+        - 127.0.0.1:5300
+```
+
+Zona wildcard no PowerDNS: `*.lab.the-lab.zone → 10.40.7.10` (pin do Gateway).
+
+```bash
+dig the-lab.zone SOA @127.0.0.1 -p 5300        # auth direto
+dig google.com @10.40.1.53                      # recursor recursa (flag 'ra')
+dig hubble.lab.the-lab.zone @10.40.1.53          # forward → 10.40.7.10
+```
+
+**Exit:** os três `dig` respondem. Apontar a máquina cliente **só** para `10.40.1.53` (sem
+secundário público) e abrir `https://hubble.lab.the-lab.zone`.
+
+### 3.7 — Flip para produção
+
+Validado o acesso com o cert de staging, trocar a annotation do Gateway de
+`letsencrypt-staging` para `letsencrypt-prod`, commitar e sincronizar. O `issuerRef` do
+Certificate muda → cert-manager **reemite sozinho** (sem deletar secret).
+
+**Exit da Fase 3:** `https://hubble.lab.the-lab.zone` abre com cadeado verde, sem port-forward.
+
+---
+
+## Incidentes
+
+### Incidente 3.1 — Cilium operator em CrashLoop após habilitar Gateway API
+
+- **Sintoma:** ao ligar `gatewayAPI.enabled: true` no Cilium, o `cilium-operator` entra em
+  CrashLoopBackOff. Em cascata: agentes dos workers travam em `0/1` ("Still waiting for Cilium
+  Operator to register CRDs: ciliumenvoyconfigs / ciliumclusterwideenvoyconfigs"), taint
+  `node.cilium.io/agent-not-ready` volta, repo-server não agenda, ArgoCD paralisa.
+- **Causa:** operator com fatal `failed to setup field indexer "backendServiceTLSRouteIndex":
+  no matches for kind "TLSRoute" in version "gateway.networking.k8s.io/v1alpha2"`. O Cilium 1.19
+  indexa `TLSRoute` em `v1alpha2`, que **só existe no canal experimental** do Gateway API. Os
+  CRDs vendorizados eram do canal **standard** (TLSRoute só em `v1`).
+- **Diagnóstico:** `kubectl -n kube-system logs -l io.cilium/app=operator` mostra o fatal do
+  field indexer. Os agentes só esperam os CRDs de Envoy que o operator (morto) deveria
+  registrar — são vítimas, não a causa.
+- **Fix:** vendorizar os CRDs do canal **experimental** (TLSRoute serve `v1alpha2`). Aplicar
+  direto (`kubectl apply --server-side`) já que o ArgoCD estava paralisado; o operator recupera,
+  registra os CRDs de Envoy, os agentes ficam Ready, os taints caem, o ArgoCD volta.
+- **Lição:** Cilium 1.19 Gateway API exige o canal `experimental`. O `standard`, mesmo na
+  versão mais nova, tem TLSRoute na versão errada para o field indexer.
+
+### Incidente 3.2 — VAP `safe-upgrades` bloqueia CRDs experimental
+
+- **Sintoma:** `kubectl apply` dos CRDs experimental falha em vários:
+  `ValidatingAdmissionPolicy 'safe-upgrades' ... denied request: Installing experimental CRDs on
+  top of standard channel CRDs is prohibited by default`. Além disso, erro
+  `apiVersion not set, kind not set` no `kustomization.yaml`.
+- **Causa:** o próprio Gateway API instala uma VAP que proíbe trocar CRDs standard→experimental
+  in-place. E o `apply -f <dir>/` tentava aplicar o `kustomization.yaml` como manifesto.
+- **Diagnóstico:** `tcproutes`/`udproutes` passaram (não têm contraparte standard); os que
+  falharam (`gateways`, `httproutes`, `tlsroutes`...) são os que já existiam como standard.
+- **Fix:** deletar a VAP e o binding
+  (`kubectl delete validatingadmissionpolicy[binding] safe-upgrades.gateway.networking.k8s.io`),
+  e vendorizar **só os 9 CRDs** num `manifests/` plano (sem `kustomization.yaml`, sem VAP, sem
+  mesh). **Não** versionar a VAP — ela reintroduz o bloqueio na reconciliação do ArgoCD.
+
+### Incidente 3.3 — cert-manager: namespace não encontrado
+
+- **Sintoma:** app do cert-manager `Failed`: `namespaces "cert-manager" not found, error running
+  rbacReconcile: ... error getting namespace cert-manager (retried 5 times)`.
+- **Causa:** o chart do cert-manager **não cria o próprio namespace**; o `destination.namespace`
+  só diz onde colocar os recursos. O `kubectl auth reconcile` dos RBACs falha sem o namespace.
+- **Fix:** `CreateNamespace=true` no `syncPolicy.syncOptions` (ou um Namespace explícito com
+  `sync-wave: "-1"`). Padronizar com os outros apps.
+
+### Incidente 3.4 — Gateway degraded: `InvalidCertificateRef`
+
+- **Sintoma:** Gateway `Degraded`, listener com
+  `Invalid CertificateRef, Secret "wildcard-lab-tls" not found`.
+- **Causa:** a integração Gateway API do cert-manager vem **desligada** por padrão (≥1.15). A
+  annotation `cert-manager.io/cluster-issuer` no Gateway é ignorada, o Certificate não é criado,
+  e o secret nunca aparece.
+- **Diagnóstico:** `kubectl -n gateway get certificate` vazio = gateway-shim não está agindo.
+- **Fix:** `config.enableGatewayAPI: true` no values. O cert-manager checa o suporte (e a
+  presença dos CRDs Gateway API) **só no boot** — o sync do ArgoCD rola o Deployment e ele pega
+  o flag. Garantir que os CRDs do Gateway API já existam quando ele reinicia.
+
+### Incidente 3.5 — L2 announcement não funciona / regex e lease
+
+- **Sintoma:** `db/show l2-announce` vazio, sem lease, `arping 10.40.7.10` sem resposta.
+- **Causa (dupla):** (a) o lease é **por serviço anunciado** — sem um Service LB com IP, não
+  nasce lease; (b) a regex `^eth[0-9]+` não casa o device real `ens18` (o alias Talos `ethSel0`
+  na coluna ALIAS **não** é o que o Cilium casa — ele usa o nome primário do kernel).
+- **Fix:** regex `^ens[0-9]+$`; e o lease aparece quando o Gateway (primeiro Service LB) recebe
+  IP. Validar com `arping` de um host na LAN e `ip neigh` (sai de `FAILED` para um MAC).
+- **Lição:** `db/show l2-announce` só popula no nó que segura o lease — `exec` no pod do
+  worker-holder, não num pod aleatório do `ds/cilium`.
+
+### Incidente 3.6 — Gateway recebe `10.40.7.0` em vez de `10.40.7.10`
+
+- **Sintoma:** `cilium-gateway-main` com EXTERNAL-IP `10.40.7.0`; `arping`/`curl` no `.10`
+  falham (nada anuncia o `.10`).
+- **Causa:** o pin `lbipam.cilium.io/ips` estava em `metadata.annotations`, que o Cilium **não
+  propaga** para o Service derivado. O LB-IPAM ignorou e atribuiu o primeiro IP do pool (`.0` —
+  que ainda por cima é o endereço de rede, reservado).
+- **Fix:** mover o pin para `spec.infrastructure.annotations`. O Service passa a receber o
+  `10.40.7.10` e o L2 anuncia o IP correto.
+
+### Incidente 3.7 — `curl` não resolve via Cloudflare (split-horizon)
+
+- **Sintoma:** `curl https://hubble.lab.the-lab.zone` → "could not resolve host", mesmo com o
+  `dig @10.40.1.53` funcionando.
+- **Causa:** comportamento **esperado** do split-horizon. O `*.lab → 10.40.7.10` existe só no
+  PowerDNS interno; o Cloudflare hospeda só a zona pública (para o DNS-01 do ACME) e não tem
+  registro `lab.` (nem deveria — IP privado). A máquina ainda usava resolver público.
+- **Fix (teste):** `curl --resolve hubble.lab.the-lab.zone:443:10.40.7.10 ...` bypassa o DNS.
+  **Fix (definitivo):** apontar os clientes da LAN para o PowerDNS.
+
+### Incidente 3.8 — PowerDNS auth-only não pode ser o resolver da LAN
+
+- **Sintoma:** apontar a máquina para `10.40.1.53` quebraria a internet —
+  `dig google.com @10.40.1.53` → `REFUSED`, "recursion requested but not available".
+- **Causa:** rodando só o `pdns` (Authoritative), que não recursa. Lista de DNS no SO não faz
+  failover num REFUSED (só num no-response), então não cai para um secundário.
+- **Fix:** adicionar o `pdns-recursor` na frente (recursor na :53, auth em `127.0.0.1:5300`,
+  forward de `the-lab.zone` pro auth, recursão raiz pro resto). Apontar a máquina **só** para o
+  `10.40.1.53` (sem secundário público).
+
+### Incidente 3.9 — `remote-exec` não re-roda; `local-port` e config do Recursor
+
+Três tropeços encadeados ao adicionar o recursor pela Terraform:
+
+- **(a) Provisioner não re-roda.** `remote-exec` só dispara na criação do recurso. O
+  `terraform_data` tinha `triggers_replace = [var.pdns_api_key, var.dns_ip]`, que não muda
+  quando o script é editado. **Fix:** extrair o `inline` para um `local` e usar
+  `triggers_replace = [sha1(join("\n", local.pdns_script))]` — re-roda quando qualquer coisa no
+  script muda, contra o mesmo LXC, sem recriar o container.
+- **(b) `pdns` não sobe.** PowerDNS auth recente rejeita o `local-port` separado (falha hard em
+  setting desconhecido). **Fix:** `local-address=127.0.0.1:5300` (porta embutida, sem
+  `local-port`).
+- **(c) `pdns-recursor` não sobe.** Recursor **5.x** não aceita mais o formato old-style
+  `key=value` por padrão (`Old-style settings syntax not enabled by default anymore. Use YAML`).
+  **Fix:** escrever `/etc/powerdns/recursor.yml` em YAML (`incoming.listen`,
+  `incoming.allow_from`, `recursor.forward_zones`) e remover o `recursor.conf` antigo.
+- **Lição:** o auth continua old-style; **só o Recursor** virou YAML. Para ver o fatal real do
+  recursor (journal vazio por causa do `--disable-syslog`), rodar em foreground:
+  `pdns_recursor --daemon=no --write-pid=no --config-dir=/etc/powerdns`.
+
 ---
 
 ## Apêndice A — Rollback da fase 1
@@ -512,4 +862,30 @@ argocd app diff <X>                          # diff antes de adoção/sync
 kubectl get clustersecretstore onepassword   # saúde do canal de secrets
 kubectl -n external-secrets logs deploy/onepassword-connect -c connect-sync --tail=30
 kubectl -n default describe externalsecret <X>   # events com o erro real
+```
+
+## Apêndice D — comandos úteis da Fase 3
+
+```bash
+# CRDs / Gateway
+kubectl get crd tlsroutes.gateway.networking.k8s.io -o jsonpath='{.spec.versions[*].name}'
+kubectl -n gateway get gateway main -o wide
+kubectl -n gateway get svc cilium-gateway-main -o wide
+
+# cert-manager
+kubectl get clusterissuer
+kubectl -n gateway get certificate,certificaterequest,order,challenge
+kubectl -n gateway describe challenge      # quando o DNS-01 trava
+
+# L2
+kubectl -n kube-system get lease | grep cilium-l2announce
+POD=$(kubectl -n kube-system get pod -l k8s-app=cilium \
+  --field-selector spec.nodeName=worker-1 -o name)
+kubectl -n kube-system exec "$POD" -- cilium-dbg shell -- db/show l2-announce
+
+# DNS (no LXC)
+ss -ulnp | grep -E ':53|:5300'
+dig the-lab.zone SOA @127.0.0.1 -p 5300
+dig google.com @10.40.1.53
+dig hubble.lab.the-lab.zone @10.40.1.53
 ```
