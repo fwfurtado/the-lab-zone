@@ -1,0 +1,19 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cloudflare-dns-token
+  namespace: cert-manager
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: cloudflare-dns-token
+  data:
+    - secretKey: api-token
+      remoteRef:
+        key: Cloudflare     # nome do item no vault the-lab-zone
+        property: the-lab-zone

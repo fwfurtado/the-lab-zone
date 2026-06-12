@@ -3,8 +3,11 @@ kind: CiliumL2AnnouncementPolicy
 metadata:
   name: lab-l2
 spec:
+  externalIPs: true
   loadBalancerIPs: true
   interfaces:
-    - ^eth[0-9]+      # ajuste se a interface dos nós tiver outro nome
+    - ^ens[0-9]+$
   nodeSelector:
-    matchLabels: {}   # todos os nós elegíveis para anunciar
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist

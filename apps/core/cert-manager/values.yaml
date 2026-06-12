@@ -1,0 +1,7 @@
+crds:
+  enabled: true        # cert-manager instala seus próprios CRDs
+
+# dns01 self-check às vezes falha com resolvers internos;
+# aponta pro DNS público pra validar o propagation do TXT:
+dns01RecursiveNameservers: "1.1.1.1:53,8.8.8.8:53"
+dns01RecursiveNameserversOnly: true
