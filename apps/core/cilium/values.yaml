@@ -50,3 +50,15 @@ hubble:
     enabled: true
   ui:
     enabled: true
+
+
+gatewayAPI:
+  enabled: true
+
+l2announcements:
+  enabled: true
+
+externalIPs:
+  enabled: true
+
+# loadbalancer mode dsr/snat — snat é o default seguro; mantenha

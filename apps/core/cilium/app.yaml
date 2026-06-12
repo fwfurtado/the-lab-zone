@@ -18,6 +18,9 @@ spec:
     - repoURL: https://github.com/fwfurtado/the-lab-zone.git
       targetRevision: main
       ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/core/cilium/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system

@@ -1,0 +1,10 @@
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: lab-l2
+spec:
+  loadBalancerIPs: true
+  interfaces:
+    - ^eth[0-9]+      # ajuste se a interface dos nós tiver outro nome
+  nodeSelector:
+    matchLabels: {}   # todos os nós elegíveis para anunciar
