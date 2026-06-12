@@ -52,8 +52,8 @@ resource "proxmox_virtual_environment_container" "dns" {
 resource "terraform_data" "pdns_provision" {
   depends_on = [proxmox_virtual_environment_container.dns]
 
-  # re-provisiona se a config mudar:
-  triggers_replace = [var.pdns_api_key, var.dns_ip]
+  # re-provisiona quando QUALQUER coisa no script muda:
+  triggers_replace = [sha1(join("\n", local.pdns_script))]
 
   connection {
     type  = "ssh"
@@ -63,29 +63,6 @@ resource "terraform_data" "pdns_provision" {
   }
 
   provisioner "remote-exec" {
-    inline = [
-      "apt-get update -qq",
-      "DEBIAN_FRONTEND=noninteractive apt-get install -y -qq pdns-server pdns-backend-sqlite3 sqlite3",
-      # schema do SQLite (idempotente):
-      "mkdir -p /var/lib/powerdns",
-      "[ -f /var/lib/powerdns/pdns.sqlite3 ] || sqlite3 /var/lib/powerdns/pdns.sqlite3 < /usr/share/pdns-backend-sqlite3/schema/schema.sqlite3.sql",
-      "chown -R pdns:pdns /var/lib/powerdns",
-      # config:
-      "cat > /etc/powerdns/pdns.conf <<'EOF'",
-      "launch=gsqlite3",
-      "gsqlite3-database=/var/lib/powerdns/pdns.sqlite3",
-      "local-address=0.0.0.0",
-      "api=yes",
-      "api-key=${var.pdns_api_key}",
-      "webserver=yes",
-      "webserver-address=0.0.0.0",
-      "webserver-port=8081",
-      "webserver-allow-from=10.40.0.0/21",
-      "EOF",
-      # remove o backend bind default do Debian, se existir:
-      "rm -f /etc/powerdns/pdns.d/bind.conf",
-      "systemctl restart pdns",
-      "systemctl enable pdns",
-    ]
+    inline = local.pdns_script
   }
 }
