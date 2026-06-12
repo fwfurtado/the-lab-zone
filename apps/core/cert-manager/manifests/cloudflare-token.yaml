@@ -16,4 +16,4 @@ spec:
     - secretKey: api-token
       remoteRef:
         key: Cloudflare     # nome do item no vault the-lab-zone
-        property: the-lab-zone
+        property: "the-lab.zone"
