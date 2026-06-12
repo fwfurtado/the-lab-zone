@@ -8,9 +8,9 @@ metadata:
 spec:
   project: core
   source:
-    repoURL: https://github.com/kubernetes-sigs/gateway-api
-    targetRevision: v1.5.1
-    path: config/crd/standard
+    repoURL: https://github.com/fwfurtado/the-lab-zone.git
+    targetRevision: main
+    path: apps/core/gateway-api-crds/crd/standard
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:
