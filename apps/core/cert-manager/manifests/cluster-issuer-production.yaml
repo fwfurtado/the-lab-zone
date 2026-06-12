@@ -6,8 +6,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "2"
 spec:
   acme:
-    # server: https://acme-v02.api.letsencrypt.org/directory
-    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    server: https://acme-v02.api.letsencrypt.org/directory
     email: fwfurtado@gmail.com
     privateKeySecretRef:
       name: letsencrypt-account-key

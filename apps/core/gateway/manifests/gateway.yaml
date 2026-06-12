@@ -4,7 +4,7 @@ metadata:
   name: main
   namespace: gateway
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt
+    cert-manager.io/cluster-issuer: letsencrypt-staging
     # IP pinado — casa com o wildcard do PowerDNS (10.40.7.10):
     lbipam.cilium.io/ips: "10.40.7.10"
 spec:
