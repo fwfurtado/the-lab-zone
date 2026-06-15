@@ -1,0 +1,42 @@
+# VictoriaLogs Single — chart 0.13.7
+#
+# MUDANÇAS EM RELAÇÃO À VERSÃO ANTERIOR DO CHART:
+# - Fluent Bit NÃO é mais subchart embutido nesta versão.
+#   A coleta de logs deve ser feita via:
+#   (a) chart separado `victoria-logs-collector` (recomendado pelo upstream), ou
+#   (b) OTel Collector já deployado em apps/observability/otel-collector/ (nossa escolha),
+#       que encaminha via OTLP para o endpoint /insert/opentelemetry do VictoriaLogs.
+# - server.persistentVolume.storageClassName é a chave correta (não storageClass).
+# - service.clusterIP: None é o default (Headless). Sobrescrevemos para ClusterIP
+#   regular para que o OTel Collector resolva pelo nome do Service normalmente.
+
+nameOverride: vls
+
+server:
+  retentionPeriod: "30d"
+
+  persistentVolume:
+    enabled: true
+    storageClassName: openebs-hostpath
+    size: 30Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+  # Expõe métricas para o VMAgent scraping
+  extraArgs:
+    envflag.enable: "true"
+    envflag.prefix: VM_
+    loggerFormat: json
+
+service:
+  # Sobrescreve o default Headless (clusterIP: None) para ClusterIP normal,
+  # necessário para que o OTel Collector resolva "vls-victoria-logs-single-server"
+  # sem precisar de endereço de pod específico.
+  clusterIP: ""
+  servicePort: 9428
+  type: ClusterIP
