@@ -1,0 +1,24 @@
+# OpenEBS umbrella chart — apenas LocalPV Hostpath.
+# Desligamos LVM, ZFS e Mayastor (replicated). Sobra só o provisioner hostpath,
+# que é o que o tier quente RWO (CNPG/Garage/Qdrant/Memgraph/ClickHouse) consome.
+
+engines:
+  local:
+    lvm:
+      enabled: false
+    zfs:
+      enabled: false
+  replicated:
+    mayastor:
+      enabled: false      # evita arrastar etcd/loki/minio do control plane do Mayastor
+
+localpv-provisioner:
+  # NDM (node-disk-manager) só serve pra "device mode"; hostpath não precisa.
+  openebsNDM:
+    enabled: false
+  deviceClass:
+    enabled: false
+  # A StorageClass é gerenciada explicitamente em manifests/storageclass.yaml
+  # (controlamos o BasePath de forma determinística, sem depender do plumbing do subchart).
+  hostpathClass:
+    enabled: false

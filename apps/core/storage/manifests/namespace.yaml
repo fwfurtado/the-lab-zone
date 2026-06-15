@@ -1,0 +1,13 @@
+# O provisioner hostpath dispara pods auxiliares (mkdir/chmod no nó) que montam
+# hostPath e rodam privilegiados. Em Talos com Pod Security Admission, o namespace
+# precisa do enforce 'privileged'. sync-wave -1 garante que ele nasce antes do chart.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openebs
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

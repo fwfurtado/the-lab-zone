@@ -1,0 +1,19 @@
+# StorageClass default do cluster. BasePath aponta pro mount do user volume do Talos
+# (/var/mnt/pv-data), ou seja: o disco dedicado de PV, separado do disco de OS/efêmero.
+# WaitForFirstConsumer: o PV (hostpath, node-local) nasce no nó onde o pod agenda,
+# e o pod fica pinado ali junto do dado. Durabilidade é no nível da app (backup→Garage→B2).
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-hostpath
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+    openebs.io/cas-type: local
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: "hostpath"
+      - name: BasePath
+        value: "/var/mnt/pv-data/openebs"
+provisioner: openebs.io/local
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete

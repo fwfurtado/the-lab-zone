@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: storage
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: core
+  sources:
+    # 1) chart do OpenEBS (umbrella) — só o engine hostpath fica ligado via values
+    - repoURL: https://openebs.github.io/openebs
+      chart: openebs
+      targetRevision: 4.5.0
+      helm:
+        valueFiles:
+          - $values/apps/core/storage/values.yaml
+    # 2) values vindos do próprio repo (padrão ref:values)
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    # 3) manifests próprios (Namespace com PSA privileged + StorageClass)
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/core/storage/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openebs
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
