@@ -13,6 +13,11 @@ spec:
       targetRevision: 0.27.1
       helm:
         releaseName: clickhouse-operator
+        values: |
+          operator:
+            env:
+              - name: WATCH_NAMESPACES
+                value: "data"
   destination:
     server: https://kubernetes.default.svc
     namespace: clickhouse-operator
