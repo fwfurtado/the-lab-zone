@@ -36,15 +36,13 @@ datasources:
     datasources:
       - name: VictoriaMetrics
         type: prometheus
-        # Service name gerado pelo victoria-metrics-k8s-stack com nameOverride: vmks
-        url: http://vmks-victoria-metrics-single-server.observability.svc.cluster.local:8428
+        url: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428
         isDefault: true
         access: proxy
 
       - name: VictoriaLogs
         type: victoriametrics-logs-datasource
-        # Service name gerado pelo victoria-logs-single com nameOverride: vls
-        url: http://vls-victoria-logs-single-server.observability.svc.cluster.local:9428
+        url: http://victoria-logs-vls-server.observability.svc.cluster.local:9428
         access: proxy
 
 dashboardProviders:
