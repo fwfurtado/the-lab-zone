@@ -5,12 +5,22 @@ metadata:
   namespace: data
 spec:
   parentRefs:
-    - name: main
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: main
       namespace: gateway
       sectionName: https-wildcard
+
   hostnames:
     - "memgraph.lab.the-lab.zone"
   rules:
     - backendRefs:
         - name: memgraph-lab
           port: 3000
+          group: ""
+          kind: Service
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
