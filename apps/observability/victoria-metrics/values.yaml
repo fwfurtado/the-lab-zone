@@ -1,0 +1,66 @@
+# VictoriaMetrics K8s Stack — substitui Prometheus + Thanos
+# Inclui: VMSingle, VMAgent, VMAlert, vmalert-manager, kube-state-metrics, node-exporter
+
+# Componentes internos habilitados
+vmsingle:
+  enabled: true
+  spec:
+    retentionPeriod: "30d"
+    storage:
+      storageClassName: openebs-hostpath
+      resources:
+        requests:
+          storage: 50Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        memory: 2Gi
+
+vmagent:
+  enabled: true
+  spec:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+
+vmalert:
+  enabled: true
+  spec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+
+# Alertmanager via grafana stack (ver apps/observability/alertmanager)
+alertmanager:
+  enabled: false
+
+# Grafana gerenciado como app separado (apps/observability/grafana)
+grafana:
+  enabled: false
+
+# node-exporter e kube-state-metrics incluídos no stack
+prometheus-node-exporter:
+  enabled: true
+
+kube-state-metrics:
+  enabled: true
+
+# scraping do próprio cluster — ServiceMonitors descobertos automaticamente
+serviceMonitorSelector: {}
+podMonitorSelector: {}
+probeSelector: {}
+
+# Regras de alerta base para K8s
+defaultRules:
+  create: true
+  rules:
+    etcd: true
+    kubernetesApps: true
+    kubernetesResources: true
+    kubernetesStorage: true
+    kubernetesSystem: true
+    node: true
