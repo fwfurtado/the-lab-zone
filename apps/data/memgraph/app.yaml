@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: memgraph
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: data
+  sources:
+    - repoURL: https://memgraph.github.io/helm-charts
+      chart: memgraph
+      targetRevision: 1.0.2
+      helm:
+        releaseName: memgraph
+        valueFiles:
+          - $values/apps/data/memgraph/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/data/memgraph/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      name: memgraph
+      namespace: data
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[].apiVersion
+        - .spec.volumeClaimTemplates[].kind
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=false

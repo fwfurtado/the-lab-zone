@@ -1,0 +1,43 @@
+# Memgraph 3.10.1 — standalone, homelab
+# Fase 6: graph store para LightRAG (Fase 7)
+# in-memory first, WAL + snapshots para durabilidade
+
+image:
+  repository: memgraph/memgraph
+  pullPolicy: IfNotPresent
+  tag: ""   # usa appVersion do chart
+
+# Auth via Secret gerado pelo ESO
+secrets:
+  enabled: true
+  name: memgraph-credentials
+  userKey: USER
+  passwordKey: PASSWORD
+
+persistentVolumeClaim:
+  createStorageClaim: true
+  storageClassName: openebs-hostpath
+  storageSize: 50Gi
+  libStorageAccessMode: ReadWriteOnce
+
+# Flags do Memgraph — durabilidade habilitada
+memgraphConfig:
+  - "--storage-snapshot-interval-sec=300"
+  - "--storage-wal-enabled=true"
+  - "--storage-snapshot-on-exit=true"
+  - "--storage-recover-on-startup=true"
+  - "--also-log-to-stderr=true"
+  - "--data-directory=/var/lib/memgraph/mg_data"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    memory: 4Gi   # Memgraph é in-memory — mais memória = mais dados no grafo
+
+service:
+  type: ClusterIP
+  port: 7687       # Bolt
+  enableHttpPort: true
+  httpPort: 3000   # HTTP API (não é o Lab — é a REST API)
