@@ -4,3 +4,9 @@ metadata:
   name: observability
   annotations:
     argocd.argoproj.io/sync-wave: "-1"
+  labels:
+    # node-exporter requer hostNetwork, hostPID e hostPath volumes —
+    # incompatíveis com baseline. privileged é obrigatório.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
