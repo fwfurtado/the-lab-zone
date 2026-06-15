@@ -27,7 +27,7 @@ spec:
   ignoreDifferences:
     - group: apps
       kind: StatefulSet
-      name: garage
+      name: qdrant
       namespace: data
       jqPathExpressions:
         - .spec.volumeClaimTemplates[].apiVersion
