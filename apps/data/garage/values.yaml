@@ -3,25 +3,56 @@
 #          snapshots Qdrant, e blobs gerais (Langfuse, Forgejo LFS)
 
 garage:
-  dbEngine: "lmdb"           # mais rápido que sqlite para este workload
-  replicationMode: "1"       # single-node: sem replicação (honesto)
-  compressionLevel: "1"      # zstd nível 1 — bom trade-off velocidade/espaço
+  dbEngine: "lmdb"
+  replicationMode: "1"        # single-node: sem replicação
+  compressionLevel: "1"       # zstd nível 1
   metadataAutoSnapshotInterval: "6h"
 
   rpcBindAddr: "[::]:3901"
-
-  # rpcSecret injetado via envFrom do Secret gerado pelo ESO
-  # O chart gera um aleatório se vazio — mas queremos controle via 1Password
-  rpcSecret: ""              # sobrescrito via environment.GARAGE_RPC_SECRET abaixo
+  rpcSecret: ""               # vazio = chart gera e armazena num Secret K8s automático
+                              # para single-node não há risco: sem outros nós para autenticar
 
   s3:
     api:
       region: "garage"
-      # path-style: não usamos virtual-hosted (requer DNS wildcard)
-      rootDomain: ""
+      rootDomain: ""          # path-style: sem DNS wildcard necessário
     web:
       rootDomain: ""
       index: "index.html"
+
+  # adminToken injetado via garageTomlString que lê env var
+  # A env var vem do extraVolumes montando o Secret do ESO
+  garageTomlString: |
+    metadata_dir = "/mnt/meta"
+    data_dir = "/mnt/data"
+
+    db_engine = "{{ .Values.garage.dbEngine }}"
+    block_size = {{ .Values.garage.blockSize | default "1048576" }}
+    replication_factor = {{ .Values.garage.replicationMode }}
+    compression_level = {{ .Values.garage.compressionLevel }}
+    metadata_auto_snapshot_interval = "{{ .Values.garage.metadataAutoSnapshotInterval }}"
+
+    rpc_bind_addr = "{{ .Values.garage.rpcBindAddr }}"
+    rpc_secret_file = "/etc/garage-secrets/rpcSecret"
+
+    [kubernetes_discovery]
+    namespace = "{{ .Release.Namespace }}"
+    service_name = "{{ include "garage.fullname" . }}"
+    skip_crd = {{ .Values.garage.kubernetesSkipCrd }}
+
+    [s3_api]
+    s3_region = "{{ .Values.garage.s3.api.region }}"
+    api_bind_addr = "[::]:3900"
+    root_domain = "{{ .Values.garage.s3.api.rootDomain }}"
+
+    [s3_web]
+    bind_addr = "[::]:3902"
+    root_domain = "{{ .Values.garage.s3.web.rootDomain }}"
+    index = "{{ .Values.garage.s3.web.index }}"
+
+    [admin]
+    api_bind_addr = "[::]:3903"
+    admin_token_file = "/etc/garage-secrets/adminToken"
 
 deployment:
   kind: StatefulSet
@@ -32,26 +63,30 @@ persistence:
   enabled: true
   meta:
     storageClass: "openebs-hostpath"
-    size: 5Gi      # lmdb metadata: cresce devagar, 5Gi é muito pra um node
+    size: 5Gi
   data:
     storageClass: "openebs-hostpath"
-    size: 100Gi    # dados S3: WAL CNPG + backups ClickHouse + snapshots Qdrant
+    size: 100Gi
 
 image:
   repository: dxflrs/amd64_garage
   pullPolicy: IfNotPresent
-  tag: ""          # usa a tag default do chart (alinhada com v1.3.x)
+  tag: ""
 
-# rpcSecret e adminToken vindos do ExternalSecret garage-secrets
-environment:
-  GARAGE_RPC_SECRET:
-    secretKeyRef:
-      name: garage-secrets
-      key: rpcSecret
-  GARAGE_ADMIN_TOKEN:
-    secretKeyRef:
-      name: garage-secrets
-      key: adminToken
+# Monta o Secret do ESO como arquivos — garage lê via *_file no toml
+# Evita o problema do campo environment que só aceita strings literais
+extraVolumes:
+  - name: garage-secrets
+    secret:
+      secretName: garage-secrets
+
+extraVolumeMounts:
+  - name: garage-secrets
+    mountPath: /etc/garage-secrets
+    readOnly: true
+
+# environment fica vazio — secrets via arquivo, não env var
+environment: {}
 
 service:
   type: ClusterIP
@@ -61,7 +96,6 @@ service:
     web:
       port: 3902
 
-# Desabilita ingress clássico — usamos HTTPRoute (Gateway API)
 ingress:
   s3:
     api:
@@ -71,9 +105,9 @@ ingress:
 
 monitoring:
   metrics:
-    enabled: true        # expõe /metrics na porta 3903 (admin)
+    enabled: true
     serviceMonitor:
-      enabled: false     # VMAgent faz scrape via annotation, não ServiceMonitor
+      enabled: false
 
 resources:
   requests:
