@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: memgraph-lab
+  namespace: data
+spec:
+  parentRefs:
+    - name: main
+      namespace: gateway
+      sectionName: https-wildcard
+  hostnames:
+    - "memgraph.lab.the-lab.zone"
+  rules:
+    - backendRefs:
+        - name: memgraph-lab
+          port: 3000

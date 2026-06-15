@@ -1,0 +1,22 @@
+# Memgraph Lab 3.10.0 — UI para o Memgraph standalone
+image:
+  repository: memgraph/lab
+  pullPolicy: IfNotPresent
+  tag: ""
+
+service:
+  type: ClusterIP
+  port: 3000
+
+env:
+  - name: QUICK_CONNECT_MG_HOST
+    value: memgraph    # service name do memgraph standalone no mesmo namespace
+  - name: QUICK_CONNECT_MG_PORT
+    value: "7687"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
