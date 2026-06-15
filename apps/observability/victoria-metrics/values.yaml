@@ -1,7 +1,17 @@
-# VictoriaMetrics K8s Stack — substitui Prometheus + Thanos
-# Inclui: VMSingle, VMAgent, VMAlert, vmalert-manager, kube-state-metrics, node-exporter
+# VictoriaMetrics K8s Stack v0.83.0
+# Inclui: VMSingle, VMAgent, VMAlert, Alertmanager, kube-state-metrics, node-exporter
+#
+# NOTA IMPORTANTE (v0.83.0+):
+# O chart valida em helm template que o VMAlert tem ao menos um notifier.
+# Com alertmanager.enabled: false e sem notifier externo o deploy falha com:
+#   "Neither notifier, notifiers nor notifierConfigRef is set for vmalert"
+# Solução: manter alertmanager.enabled: true (interno ao chart) OU declarar
+#   vmalert.spec.extraArgs["notifier.blackhole"]: "true"
+# Optamos por manter o Alertmanager interno — simples e consistente.
 
-# Componentes internos habilitados
+# Evita nomes longos que estouram o limite de 63 chars dos recursos K8s
+nameOverride: vmks
+
 vmsingle:
   enabled: true
   spec:
@@ -33,12 +43,38 @@ vmalert:
       requests:
         cpu: 50m
         memory: 128Mi
+    # Sem canal de notificação real ainda (chega na Fase 9 com Authentik).
+    # Alertmanager interno (abaixo) serve como notifier padrão — basta estar enabled.
 
-# Alertmanager via grafana stack (ver apps/observability/alertmanager)
+# Alertmanager interno ao chart — resolve a validação do VMAlert.
+# Config mínima: recebe alertas, não envia pra lugar nenhum por enquanto.
+# Substitui o app separado apps/observability/alertmanager/ (que deve ser removido).
 alertmanager:
-  enabled: false
+  enabled: true
+  spec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "namespace"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: "blackhole"
+    receivers:
+      - name: "blackhole"
+    inhibit_rules:
+      - source_matchers:
+          - severity="critical"
+        target_matchers:
+          - severity="warning"
+        equal: ["alertname", "namespace"]
 
-# Grafana gerenciado como app separado (apps/observability/grafana)
+# Grafana gerenciado como app separado (apps/observability/grafana/)
 grafana:
   enabled: false
 
@@ -48,11 +84,6 @@ prometheus-node-exporter:
 
 kube-state-metrics:
   enabled: true
-
-# scraping do próprio cluster — ServiceMonitors descobertos automaticamente
-serviceMonitorSelector: {}
-podMonitorSelector: {}
-probeSelector: {}
 
 # Regras de alerta base para K8s
 defaultRules:
@@ -64,3 +95,8 @@ defaultRules:
     kubernetesStorage: true
     kubernetesSystem: true
     node: true
+
+# ArgoCD: dashboards ConfigMaps grandes estouram annotation de 256KB no client-side apply
+defaultDashboards:
+  annotations:
+    argocd.argoproj.io/sync-options: ServerSideApply=true
