@@ -4,7 +4,13 @@
 
 mode: daemonset
 
-# image padrão do chart 0.158.1 já usa otelcol-k8s — não precisa sobrescrever
+# Obrigatório desde chart ~0.127.x — sem isso o helm template falha
+# otelcol-k8s é a distribuição recomendada para Kubernetes (inclui k8s receivers)
+image:
+  repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s
+
+command:
+  name: otelcol-k8s
 
 presets:
   # Adiciona k8s metadata em todos os spans/métricas/logs automaticamente
