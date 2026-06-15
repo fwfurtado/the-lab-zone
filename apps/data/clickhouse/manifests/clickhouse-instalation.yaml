@@ -1,6 +1,5 @@
 # ClickHouseInstallation — single-node, homelab
-# Gerenciado pelo altinity-clickhouse-operator
-# Fase 6: backend do Langfuse e analytics
+# Passwords via passwordSecretRef (suportado pelo operator 0.25+)
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
@@ -15,28 +14,20 @@ spec:
 
   configuration:
     users:
-      # Usuário admin
-      admin/password_sha256_hex:
-        valueFrom:
-          secretKeyRef:
-            name: clickhouse-credentials
-            key: adminPassword
+      admin/passwordSecretRef:
+        name: clickhouse-credentials
+        key: adminPassword
       admin/networks/ip: "::/0"
       admin/access_management: "1"
 
-      # Usuário dedicado para Langfuse
-      langfuse/password_sha256_hex:
-        valueFrom:
-          secretKeyRef:
-            name: clickhouse-credentials
-            key: langfusePassword
+      langfuse/passwordSecretRef:
+        name: clickhouse-credentials
+        key: langfusePassword
       langfuse/networks/ip: "::/0"
       langfuse/profile: default
 
     settings:
-      # UTC obrigatório — Langfuse faz queries que quebram com timezone local
       timezone: UTC
-      # Compressão padrão
       compression/case/method: zstd
 
     clusters:
