@@ -30,7 +30,7 @@ garage:
     metadata_auto_snapshot_interval = "6h"
 
     rpc_bind_addr = "[::]:3901"
-    rpc_secret = "${GARAGE_RPC_SECRET}"
+    rpc_secret_file = "/etc/garage-secrets/rpcSecret"
 
     [kubernetes_discovery]
     namespace = "data"
@@ -49,7 +49,7 @@ garage:
 
     [admin]
     api_bind_addr = "[::]:3903"
-    admin_token = "${GARAGE_ADMIN_TOKEN}"
+    admin_token_file = "/etc/garage-secrets/adminToken"
 
 deployment:
   kind: StatefulSet
