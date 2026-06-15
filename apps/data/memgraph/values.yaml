@@ -41,3 +41,9 @@ service:
   port: 7687       # Bolt
   enableHttpPort: true
   httpPort: 3000   # HTTP API (não é o Lab — é a REST API)
+
+# Desabilitado — namespace data usa PodSecurity baseline que bloqueia containers privilegiados.
+# O sysctl vm.max_map_count é otimização de performance, não requisito funcional para homelab.
+# Se necessário no futuro, alternativa é setar via Talos machineConfig no node.
+sysctlInitContainer:
+  enabled: false
