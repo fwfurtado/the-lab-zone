@@ -13,11 +13,6 @@ engines:
       enabled: false      # evita arrastar etcd/loki/minio do control plane do Mayastor
 
 localpv-provisioner:
-  # NDM (node-disk-manager) só serve pra "device mode"; hostpath não precisa.
-  openebsNDM:
-    enabled: false
-  deviceClass:
-    enabled: false
   # A StorageClass é gerenciada explicitamente em manifests/storageclass.yaml
   # (controlamos o BasePath de forma determinística, sem depender do plumbing do subchart).
   hostpathClass:
@@ -29,3 +24,8 @@ loki:
     enabled: false
 alloy:
   enabled: false
+
+openebs-crds:
+     csi:
+       volumeSnapshots:
+         enabled: false
