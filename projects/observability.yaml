@@ -15,6 +15,9 @@ spec:
       server: https://kubernetes.default.svc
     - namespace: kube-system
       server: https://kubernetes.default.svc
+    # VMAgent e node-exporter precisam de acesso a namespaces do cluster
+    - namespace: "*"
+      server: https://kubernetes.default.svc
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
@@ -22,3 +25,19 @@ spec:
       kind: ClusterRole
     - group: "rbac.authorization.k8s.io"
       kind: ClusterRoleBinding
+    # CRDs do VictoriaMetrics Operator (VMSingle, VMAgent, VMAlert, etc.)
+    - group: "apiextensions.k8s.io"
+      kind: CustomResourceDefinition
+    # Recursos cluster-scoped do VM Operator
+    - group: "operator.victoriametrics.com"
+      kind: "*"
+    # RBAC adicional do stack
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+    - group: "policy"
+      kind: PodSecurityPolicy
+    # MutatingWebhookConfiguration e ValidatingWebhookConfiguration do operator
+    - group: "admissionregistration.k8s.io"
+      kind: MutatingWebhookConfiguration
+    - group: "admissionregistration.k8s.io"
+      kind: ValidatingWebhookConfiguration
