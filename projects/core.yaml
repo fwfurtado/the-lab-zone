@@ -14,6 +14,7 @@ spec:
     - https://1password.github.io/connect-helm-charts
     - https://github.com/kubernetes-sigs/gateway-api
     - https://openebs.github.io/openebs
+    - https://cloudnative-pg.github.io/charts
   destinations:
     - namespace: "*"
       server: https://kubernetes.default.svc
