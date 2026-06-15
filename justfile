@@ -2,6 +2,7 @@ import "infra/prod/justfile"
 
 mod bootstrap
 mod argo
+mod garage
 
 @setup:
     mkdir -p ~/.config/sops/age
