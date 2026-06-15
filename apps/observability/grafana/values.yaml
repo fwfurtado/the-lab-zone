@@ -18,6 +18,10 @@ admin:
   userKey: admin-user
   passwordKey: admin-password
 
+# Deployment strategy para evitar problemas com volume ReadWriteOnce
+deploymentStrategy:
+  type: Recreate
+
 # Não sobrescrever securityContext — o default do chart (uid 472, fsGroup 472)
 # é necessário para que o PVC tenha as permissões corretas no mountPath.
 # Sobrescrever com runAsUser diferente quebra escrita no volume.
