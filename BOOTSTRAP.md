@@ -828,6 +828,268 @@ Três tropeços encadeados ao adicionar o recursor pela Terraform:
   recursor (journal vazio por causa do `--disable-syslog`), rodar em foreground:
   `pdns_recursor --daemon=no --write-pid=no --config-dir=/etc/powerdns`.
 
+# Fase 4 — Fundação de Storage (LocalPV Hostpath)
+
+## Objetivo
+
+Entregar o **tier quente RWO** do cluster: uma StorageClass `openebs-hostpath` cujos
+PVs caem num **disco dedicado por worker** (`/dev/vdb` → `/var/mnt/pv-data`), separado
+do disco de OS/efêmero pra isolamento de IO no NVMe. É a fundação que todo store
+stateful da Fase 6 (Garage, CNPG, Valkey, ClickHouse, Qdrant, Memgraph) vai consumir.
+
+A fase atravessa **dois planos** que não se misturam:
+
+- **Plano do OS (Talos):** anexa o disco (Terraform) e o formata/monta (Talos user
+  volume). Aplicado por `tf-apply` + `talosctl apply-config`, fora do Kubernetes.
+- **Plano do cluster (ArgoCD):** sobe o provisioner OpenEBS e a StorageClass, que
+  adotam o mount já existente como `BasePath`.
+
+A ordem importa e não pode inverter: **disco → user volume → app de storage**.
+
+## Decisões
+
+| Decisão | Escolha | Porquê |
+|---|---|---|
+| Engine de storage | **LocalPV hostpath** | node-local, durabilidade no nível da app; sem replicação |
+| Mayastor (replicated PV) | **descartado** | replicar entre worker-1/2 no mesmo NVMe físico do T630 único é fake-HA; não sobrevive à falha que importa (o host) |
+| Disco de PV | **disco dedicado `virtio1` por worker**, no NVMe, separado do OS | isolamento de IO real pro tier quente (bancos com fsync pesado) |
+| Onde mora o user volume | **plano do OS** (Talos `UserVolumeConfig`), via overlay `worker:` do talhelper | layout de disco é responsabilidade do OS, não do cluster; ArgoCD nunca encosta |
+| Seleção do disco | `match: '!system_disk'` | blinda contra pegar o disco de boot; o único não-system é o de PV (200G) |
+| StorageClass | **gerenciada por nós** (chart `hostpathClass` off), default, `WaitForFirstConsumer` | controle determinístico do `BasePath`; PV nasce no nó onde o pod agenda, pod fica pinado junto do dado |
+| Engines desligados | lvm, zfs, rawfile, mayastor | só hostpath; evita Mayastor (etcd/hugepages) e CRDs inúteis |
+| Logging do Mayastor (loki/alloy/minio) | **desligado** (chaves top-level) | observam um Mayastor que não existe — puro overhead |
+| Backup do disco de PV | `backup = false` no vzdump | DR desse dado é app-level (pgBackRest, snapshot Qdrant → Garage → B2), não snapshot crash-consistent de banco vivo |
+| Tier RWX | **adiado** (democratic-csi → NFS do TrueNAS) | nenhum workload RWX ainda; entra quando o primeiro surgir |
+
+---
+
+## 4.1 — Proxmox: disco de PV dedicado nos workers
+
+Segundo disco (`virtio1` → `/dev/vdb`) emitido condicionalmente só pros nós que têm
+`pv_disk_size` no `var.nodes` — ou seja, só os workers. Os CPs ficam com o boot apenas.
+
+`infra/prod/talos/main.tf`:
+```hcl
+resource "proxmox_virtual_environment_vm" "talos" {
+  for_each  = var.nodes
+  # ... boot disk virtio0 (existente) ...
+
+  dynamic "disk" {
+    for_each = try(each.value.pv_disk_size, null) != null ? [1] : []
+    content {
+      datastore_id = "local-nvme"
+      interface    = "virtio1"
+      size         = each.value.pv_disk_size
+      iothread     = true
+      discard      = "on"
+      backup       = false        # DR app-level, fora do vzdump
+    }
+  }
+}
+```
+
+`infra/prod/talos/variables.tf` — `pv_disk_size = optional(number)` no tipo de
+`var.nodes`; nos tfvars, `pv_disk_size = 200` só em worker-1 e worker-2.
+
+**Exit:** `just talos tf-plan` mostra `0 to add, 2 to change, 0 to destroy` — disco
+anexado in-place nos dois workers, CPs intocados (não aparecem no plano). Após o
+apply, `talosctl -n 10.40.6.21 get disks` mostra `/dev/vdb` de 200G (cru) ao lado do
+`/dev/vda` de boot.
+
+---
+
+## 4.2 — Talos: user volume (formata + monta)
+
+`UserVolumeConfig` aplicado **só nos workers** via overlay `worker:` do talhelper. O
+`talconfig.yaml` não usava `worker:`/`controlPlane:` antes (só `patches:` global + por
+nó); o talhelper suporta esses overlays de role, e `worker.patches` mescla apenas nos
+nós `controlPlane: false`.
+
+`infra/prod/talos/talconfig.yaml` — nova chave de topo:
+```yaml
+worker:
+  patches:
+    - |-
+      apiVersion: v1alpha1
+      kind: UserVolumeConfig
+      name: pv-data
+      provisioning:
+        diskSelector:
+          match: '!system_disk'
+        minSize: 100GiB
+        grow: true
+      filesystem:
+        type: xfs
+```
+
+Aplicar:
+```bash
+talhelper genconfig
+talosctl apply-config -n 10.40.6.21 -f clusterconfig/<cluster>-worker-1.yaml
+talosctl apply-config -n 10.40.6.22 -f clusterconfig/<cluster>-worker-2.yaml
+```
+
+Monitorar (volume de runtime, sem reboot). O user volume vira o recurso com ID
+`u-pv-data` (prefixo `u-`):
+```bash
+talosctl -n 10.40.6.21 get volumestatus --watch   # u-pv-data: waiting → provisioning → ready
+talosctl -n 10.40.6.21 df | grep pv-data           # /var/mnt/pv-data ~200G
+```
+
+**Exit:** `u-pv-data` em `PHASE=ready` e `/var/mnt/pv-data` montado (~200G) nos dois
+workers. O `installDiskSelector` dos workers (`>= 90GB`, acha o boot) e o `!system_disk`
+(acha o disco de PV) não colidem. CPs não recebem o documento.
+
+---
+
+## 4.3 — ArgoCD: whitelist do repo OpenEBS
+
+Sem o repo do chart no AppProject, o ArgoCD recusa a source ("repo not permitted").
+
+`projects/core.yaml`:
+```yaml
+spec:
+  sourceRepos:
+    # ... existentes ...
+    - https://openebs.github.io/openebs
+```
+
+**Exit:** AppProject `core` aceita a source do chart OpenEBS.
+
+---
+
+## 4.4 — OpenEBS LocalPV hostpath (ArgoCD)
+
+App multi-source no padrão dos demais componentes de `apps/core/`. Chart umbrella
+`openebs` **4.5.0**, com **só o engine hostpath** ligado e o stack de logging do
+Mayastor desligado.
+
+```
+apps/core/storage/
+├── app.yaml              # multi-source: chart + ref:values + manifests
+├── values.yaml           # hostpath-only
+└── manifests/
+    ├── namespace.yaml    # openebs ns + PSA privileged (sync-wave -1)
+    └── storageclass.yaml # openebs-hostpath, default, BasePath=/var/mnt/pv-data/openebs
+```
+
+`values.yaml` (estado final, já com as limpezas):
+```yaml
+# Só LocalPV hostpath. Desliga lvm/zfs/mayastor e o logging do Mayastor.
+engines:
+  local:
+    lvm:
+      enabled: false
+    zfs:
+      enabled: false
+  replicated:
+    mayastor:
+      enabled: false
+
+# loki/alloy/minio são chaves TOP-LEVEL (logging do Mayastor) e vêm enabled por
+# default independente do engine — precisam ser desligados explicitamente.
+loki:
+  enabled: false
+alloy:
+  enabled: false
+
+localpv-provisioner:
+  hostpathClass:
+    enabled: false        # SC gerenciada por nós em manifests/
+
+# hostpath não usa VolumeSnapshot; evita disputa de ownership desses CRDs quando
+# democratic-csi/Velero entrarem depois.
+openebs-crds:
+  csi:
+    volumeSnapshots:
+      enabled: false
+
+# só serve pra upgrade v3→v4; em instalação nova é no-op.
+preUpgradeHook:
+  enabled: false
+```
+
+O `namespace.yaml` rotula o ns `openebs` com `pod-security.kubernetes.io/enforce:
+privileged` (os helper pods do provisioner montam hostPath e rodam privilegiados) e
+usa `sync-wave: "-1"` pra nascer antes do chart. A StorageClass aponta `BasePath` pro
+mount do user volume:
+```yaml
+cas.openebs.io/config: |
+  - name: StorageType
+    value: "hostpath"
+  - name: BasePath
+    value: "/var/mnt/pv-data/openebs"
+```
+
+**Exit:**
+```bash
+kubectl -n openebs get pods         # só openebs-localpv-provisioner Running
+kubectl get storageclass            # openebs-hostpath (default)
+```
+Sem pods de mayastor/lvm/zfs/loki/alloy/minio.
+
+---
+
+## 4.5 — Validação ponta a ponta
+
+```bash
+kubectl apply -f test/pv-smoke.yaml
+kubectl get pvc -n default pv-smoke                       # Bound
+kubectl get pv -o wide                                     # NODE onde caiu
+talosctl -n <worker-do-pod> ls /var/mnt/pv-data/openebs    # diretório do PV criado
+kubectl delete -f test/pv-smoke.yaml
+```
+
+**Exit:** PVC `Bound`, e o dado materializado em `/var/mnt/pv-data/openebs/<pvc>` no
+worker — ou seja, no disco dedicado, não no `/var` de boot. Fase 4 fechada.
+
+---
+
+## Incidentes
+
+### 1. Stack de logging do Mayastor (loki + alloy + minio) provisionada sem o engine
+
+- **Sintoma:** após o sync, o namespace `openebs` ganhou pods/recursos de **MinIO,
+  Alloy e Loki**, mesmo com o engine Mayastor desligado.
+- **Causa:** esse trio é o stack de logging do subchart do Mayastor (Loki guarda,
+  Alloy coleta, MinIO é o storage do Loki). No umbrella 4.5.0 os flags `loki:` e
+  `alloy:` são **chaves top-level** com `enabled: true` próprio, **não atrelados** a
+  `engines.replicated.mayastor.enabled`. Desligar o engine mata o data plane do
+  Mayastor (io-engine, etcd), mas não cascateia pros subcharts de logging.
+- **Diagnóstico:** ler os defaults do chart 4.5.0 confirmou que `loki`/`alloy` estão
+  na coluna 0 (top-level), e que `mayastor.loki`/`mayastor.alloy` já vêm `false` (são
+  os do subchart, diferentes dos top-level). O MinIO não é chave de topo — é storage
+  interno do Loki, então cai junto ao desligar o Loki.
+- **Correção:** `loki.enabled: false` + `alloy.enabled: false` no `values.yaml`. Com
+  `prune: true` no app, o ArgoCD removeu os recursos sozinho.
+
+### 2. Chaves vestigiais do localpv-provisioner
+
+- **Sintoma:** `localpv-provisioner.openebsNDM.enabled` e `deviceClass.enabled` no
+  values não surtiam efeito.
+- **Causa:** o `localpv-provisioner` v4 **removeu o device mode e o NDM**; essas
+  chaves não existem mais e o Helm simplesmente as ignora (no-op).
+- **Correção:** removidas do values. Sobra só `hostpathClass.enabled: false`, que é a
+  que importa (desliga a StorageClass default do chart, já que usamos a nossa).
+
+### 3. (Verificação, não falha) Plano do Terraform podia recriar a VM
+
+- **Sintoma potencial:** anexar disco poderia disparar `-/+ replace` e destruir o nó
+  Talos.
+- **Diagnóstico:** o `tf-plan` mostrou `0 to destroy` / `2 to change` (update
+  in-place) — disco anexado a quente (virtio hot-plug), sem reboot dos workers.
+- **Nota:** sempre conferir o plano antes do apply; nesse ponto da fase ainda não há
+  dado no disco de PV, então mesmo um recreate de worker seria recuperável.
+
+---
+
+## Fora de escopo (de propósito)
+
+O tier **RWX** (democratic-csi → NFS do TrueNAS) fica pra quando aparecer o primeiro
+workload que precise dele. A Fase 4 entrega só o tier quente RWO. A próxima fase
+(observabilidade) é o primeiro consumidor real: a VictoriaMetrics vai pedir
+`openebs-hostpath` e validar o tier com um workload de verdade.
+
 ---
 
 ## Apêndice A — Rollback da fase 1
