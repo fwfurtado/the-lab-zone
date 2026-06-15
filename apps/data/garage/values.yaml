@@ -1,14 +1,13 @@
 # Garage v1.3.x — single-node, homelab
-# Fase 6: object storage interno para WAL CNPG, backups ClickHouse,
-#          snapshots Qdrant, e blobs gerais (Langfuse, Forgejo LFS)
 
 garage:
-  # Configuração ignorada quando existingConfigMap está definido.
-  # O ConfigMap/Secret é gerado pelo ESO com os secrets já interpolados.
-  existingConfigMap: garage-secrets   # na verdade é um Secret, mas o chart aceita ambos
-
-  # Necessário para o chart não reclamar de valores ausentes
   replicationMode: "1"
+  dbEngine: "lmdb"
+  compressionLevel: "1"
+  metadataAutoSnapshotInterval: "6h"
+  rpcBindAddr: "[::]:3901"
+  rpcSecret: ""
+
   s3:
     api:
       region: "garage"
@@ -16,6 +15,41 @@ garage:
     web:
       rootDomain: ""
       index: "index.html"
+
+  # garageTomlString sobrescreve o config gerado pelo chart.
+  # Garage suporta substituição de env vars com ${VAR} no toml.
+  # As env vars vêm do Secret garage-secrets via envFrom (extraVolumeMounts não usado).
+  garageTomlString: |
+    metadata_dir = "/mnt/meta"
+    data_dir = "/mnt/data"
+
+    db_engine = "lmdb"
+    block_size = 1048576
+    replication_factor = 1
+    compression_level = 1
+    metadata_auto_snapshot_interval = "6h"
+
+    rpc_bind_addr = "[::]:3901"
+    rpc_secret_file = "/etc/garage-secrets/rpcSecret"
+
+    [kubernetes_discovery]
+    namespace = "data"
+    service_name = "garage"
+    skip_crd = false
+
+    [s3_api]
+    s3_region = "garage"
+    api_bind_addr = "[::]:3900"
+    root_domain = ""
+
+    [s3_web]
+    bind_addr = "[::]:3902"
+    root_domain = ""
+    index = "index.html"
+
+    [admin]
+    api_bind_addr = "[::]:3903"
+    admin_token_file = "/etc/garage-secrets/adminToken"
 
 deployment:
   kind: StatefulSet
@@ -36,10 +70,39 @@ image:
   pullPolicy: IfNotPresent
   tag: ""
 
-# Sem environment, sem extraVolumes — config vem toda do existingConfigMap
-environment: {}
+# envFrom injeta o Secret garage-secrets como env vars no container.
+# Garage expande ${VAR} no toml em runtime.
+# Nota: extraVolumeMounts é um dict no chart do Garage (não lista),
+# mas extraVolumes com projected não é necessário aqui.
 extraVolumes: {}
 extraVolumeMounts: {}
+
+#
+# Usando projected + subPath: subPath ignora fsGroup, mantém permissões do defaultMode.
+extraVolumes:
+  - name: garage-secrets
+    projected:
+      defaultMode: 0600
+      sources:
+        - secret:
+            name: garage-secrets
+            items:
+              - key: GARAGE_RPC_SECRET
+                path: rpcSecret
+              - key: GARAGE_ADMIN_TOKEN
+                path: adminToken
+
+extraVolumeMounts:
+  - name: garage-secrets
+    mountPath: /etc/garage-secrets/rpcSecret
+    subPath: rpcSecret
+    readOnly: true
+  - name: garage-secrets
+    mountPath: /etc/garage-secrets/adminToken
+    subPath: adminToken
+    readOnly: true
+
+environment: {}
 
 service:
   type: ClusterIP
