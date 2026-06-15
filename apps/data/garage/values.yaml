@@ -3,56 +3,19 @@
 #          snapshots Qdrant, e blobs gerais (Langfuse, Forgejo LFS)
 
 garage:
-  dbEngine: "lmdb"
-  replicationMode: "1"        # single-node: sem replicação
-  compressionLevel: "1"       # zstd nível 1
-  metadataAutoSnapshotInterval: "6h"
+  # Configuração ignorada quando existingConfigMap está definido.
+  # O ConfigMap/Secret é gerado pelo ESO com os secrets já interpolados.
+  existingConfigMap: garage-secrets   # na verdade é um Secret, mas o chart aceita ambos
 
-  rpcBindAddr: "[::]:3901"
-  rpcSecret: ""               # vazio = chart gera e armazena num Secret K8s automático
-                              # para single-node não há risco: sem outros nós para autenticar
-
+  # Necessário para o chart não reclamar de valores ausentes
+  replicationMode: "1"
   s3:
     api:
       region: "garage"
-      rootDomain: ""          # path-style: sem DNS wildcard necessário
+      rootDomain: ""
     web:
       rootDomain: ""
       index: "index.html"
-
-  # adminToken injetado via garageTomlString que lê env var
-  # A env var vem do extraVolumes montando o Secret do ESO
-  garageTomlString: |
-    metadata_dir = "/mnt/meta"
-    data_dir = "/mnt/data"
-
-    db_engine = "{{ .Values.garage.dbEngine }}"
-    block_size = {{ .Values.garage.blockSize | default "1048576" }}
-    replication_factor = {{ .Values.garage.replicationMode }}
-    compression_level = {{ .Values.garage.compressionLevel }}
-    metadata_auto_snapshot_interval = "{{ .Values.garage.metadataAutoSnapshotInterval }}"
-
-    rpc_bind_addr = "{{ .Values.garage.rpcBindAddr }}"
-    rpc_secret_file = "/etc/garage-secrets/rpcSecret"
-
-    [kubernetes_discovery]
-    namespace = "{{ .Release.Namespace }}"
-    service_name = "{{ include "garage.fullname" . }}"
-    skip_crd = {{ .Values.garage.kubernetesSkipCrd }}
-
-    [s3_api]
-    s3_region = "{{ .Values.garage.s3.api.region }}"
-    api_bind_addr = "[::]:3900"
-    root_domain = "{{ .Values.garage.s3.api.rootDomain }}"
-
-    [s3_web]
-    bind_addr = "[::]:3902"
-    root_domain = "{{ .Values.garage.s3.web.rootDomain }}"
-    index = "{{ .Values.garage.s3.web.index }}"
-
-    [admin]
-    api_bind_addr = "[::]:3903"
-    admin_token_file = "/etc/garage-secrets/adminToken"
 
 deployment:
   kind: StatefulSet
@@ -73,24 +36,10 @@ image:
   pullPolicy: IfNotPresent
   tag: ""
 
-# Monta o Secret do ESO como arquivos — garage lê via *_file no toml
-# Evita o problema do campo environment que só aceita strings literais
-extraVolumes:
-  - name: garage-secrets
-    secret:
-      secretName: garage-secrets
-      defaultMode: 0600  # Garage recusa iniciar se secret for world-readable
-
-extraVolumeMounts:
-  - name: garage-secrets
-    mountPath: /etc/garage-secrets
-    readOnly: true
-
-# GARAGE_ALLOW_WORLD_READABLE_SECRETS: escape hatch oficial do Garage para ambientes
-# onde o fsGroup do Kubernetes impede permissões 0600 em volumes Secret montados.
-# Ref: https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/
-environment:
-  GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+# Sem environment, sem extraVolumes — config vem toda do existingConfigMap
+environment: {}
+extraVolumes: {}
+extraVolumeMounts: {}
 
 service:
   type: ClusterIP
