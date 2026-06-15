@@ -1090,6 +1090,269 @@ workload que precise dele. A Fase 4 entrega só o tier quente RWO. A próxima fa
 (observabilidade) é o primeiro consumidor real: a VictoriaMetrics vai pedir
 `openebs-hostpath` e validar o tier com um workload de verdade.
 
+# Fase 5 — Observabilidade
+
+**Objetivo:** métricas, logs e alertas. Primeiro consumidor real do tier
+`openebs-hostpath` entregue na Fase 4. A partir desta fase, tudo que
+nasce no cluster já nasce monitorado.
+
+**Critério de saída:** `https://grafana.lab.the-lab.zone` abre com cadeado
+verde mostrando métricas do cluster e logs dos pods. VMAlert avaliando
+regras base do K8s com Alertmanager recebendo.
+
+---
+
+## Decisões de arquitetura
+
+| Decisão | Escolha | Porquê |
+|---|---|---|
+| Métricas | VictoriaMetrics Single | Homelab single-node; HA seria fake-HA no mesmo disco. |
+| Logs | VictoriaLogs | Sem dependência de object storage externo. Loki exige MinIO/Garage que só chega na Fase 6. |
+| Coleta de logs de container | OTel Collector (preset `logsCollection`) | Fluent Bit foi removido como subchart do victoria-logs nas versões recentes do chart. OTel coleta via `filelog` receiver no DaemonSet. |
+| Alertas | VMAlert + Alertmanager integrado ao `victoria-metrics` chart | O chart valida em `helm template` que VMAlert tem notifier — Alertmanager interno resolve isso sem configuração extra. |
+| Traces | Descartados nesta fase | Só viram relevantes quando LiteLLM e Langfuse chegarem na Fase 7. OTel Collector aceita OTLP traces mas descarta via `debug` exporter. VictoriaTraces entra na Fase 7. |
+| OTel Collector | DaemonSet + `otelcol-k8s` | Cada nó tem seu coletor local. `otelcol-k8s` é a distribuição slim recomendada para Kubernetes — não inclui `prometheusremotewrite`, usa `otlphttp` para tudo. |
+| Protocolo de ingestão | OTLP over HTTP para VMSingle e VictoriaLogs | VMSingle expõe `/opentelemetry` nativamente. Consistente com ingestão de logs. Sem dependência de exporter extra. |
+| Grafana | App separado (não embutido no vm-stack) | Controle independente de versão e config. |
+| Secret Grafana | ESO → 1Password vault `the-lab-zone` item `grafana` | Mesma cadeia dos outros componentes. |
+| StorageClass | `openebs-hostpath` para VMSingle, VictoriaLogs e Grafana | Primeiro workload stateful real no tier quente. |
+
+---
+
+## Service names reais (pós-deploy)
+
+Descobertos via `kubectl get svc -n observability`. Usar estes nos exporters:
+
+| Componente | Service | Porta |
+|---|---|---|
+| VMSingle | `vmsingle-victoria-metrics-vmks` | 8428 |
+| VMAgent | `vmagent-victoria-metrics-vmks` | — |
+| VMAlertmanager | `vmalertmanager-victoria-metrics-vmks` | 9093 |
+| VictoriaLogs | `victoria-logs-vls-server` | 9428 |
+
+---
+
+## Estrutura de arquivos
+
+```
+projects/
+└── observability.yaml
+
+apps/observability/
+├── victoria-metrics/
+│   ├── app.yaml              # wave 1, chart victoria-metrics-k8s-stack 0.83.0
+│   ├── values.yaml
+│   └── manifests/
+│       └── namespace.yaml    # wave -1, labels pod-security privileged
+├── victoria-logs/
+│   ├── app.yaml              # wave 1, chart victoria-logs-single 0.13.7
+│   └── values.yaml
+├── grafana/
+│   ├── app.yaml              # wave 2, chart grafana 10.5.15
+│   ├── values.yaml
+│   └── manifests/
+│       ├── grafana-secret.yaml   # ExternalSecret → 1Password
+│       └── http-route.yaml       # HTTPRoute → grafana.lab.the-lab.zone
+└── otel-collector/
+    ├── app.yaml              # wave 2, chart opentelemetry-collector 0.158.1
+    └── values.yaml
+```
+
+> **Nota:** `apps/observability/alertmanager/` não existe como app separado.
+> O Alertmanager está integrado ao chart `victoria-metrics` via `alertmanager.enabled: true`.
+
+---
+
+## Pré-requisito: secret no 1Password
+
+Antes de qualquer push, criar no vault **`the-lab-zone`**:
+
+| Item | Campo | Valor |
+|---|---|---|
+| `grafana` | `username` | `admin` |
+| `grafana` | `password` | senha forte aleatória |
+
+---
+
+## Ordem de aplicação
+
+```bash
+# 1. AppProject primeiro (sem ele os Apps são rejeitados)
+kubectl apply -f projects/observability.yaml
+
+# 2. Push dos apps — ArgoCD sincroniza em ordem de wave:
+# wave -1: namespace.yaml (dentro do app victoria-metrics)
+# wave  1: victoria-metrics, victoria-logs
+# wave  2: grafana, otel-collector
+git add apps/observability/ projects/observability.yaml
+git commit -m "feat(observability): fase 5 — vm stack, vlogs, grafana, otel"
+git push
+```
+
+---
+
+## Validação por componente
+
+### VMSingle — métricas
+
+```bash
+kubectl -n observability port-forward svc/vmsingle-victoria-metrics-vmks 8428:8428 &
+curl -s 'http://localhost:8428/api/v1/query?query=up' | jq '.data.result | length'
+# > 0
+```
+
+### VictoriaLogs — logs
+
+```bash
+kubectl -n observability port-forward svc/victoria-logs-vls-server 9428:9428 &
+curl -s 'http://localhost:9428/select/logsql/query?query=*&limit=5'
+# Linhas de log dos pods do cluster
+```
+
+### OTel Collector — DaemonSet
+
+```bash
+kubectl -n observability get pods -o wide | grep otel
+# Um pod por nó, todos Running
+```
+
+### Grafana
+
+```bash
+kubectl -n observability describe httproute grafana | grep "Accepted"
+# Accepted: True
+```
+
+Abrir `https://grafana.lab.the-lab.zone`:
+- Datasource VictoriaMetrics → Test → OK
+- Datasource VictoriaLogs → Test → OK
+- Dashboard "Kubernetes Cluster" (gnetId 15661) com dados reais
+- Dashboard "Node Exporter Full" (gnetId 1860) com dados reais
+
+---
+
+## Critério de saída da Fase 5 ✅
+
+```bash
+kubectl -n argocd get applications | grep -E "victoria-metrics|victoria-logs|grafana|otel-collector"
+# Todos: Synced / Healthy
+
+kubectl -n observability get pods
+# Todos: Running
+
+kubectl get pvc -n observability
+# vmsingle-..., victoria-logs-vls-server-..., grafana-... → Bound
+```
+
+---
+
+## Incidentes documentados
+
+### 1. CRDs bloqueados pelo AppProject
+
+- **Sintoma:** ArgoCD recusa sync dos charts com `resource ... is not permitted in project`.
+- **Causa:** `clusterResourceWhitelist` no AppProject não incluía `apiextensions.k8s.io/CustomResourceDefinition` nem os CRDs do operator VictoriaMetrics (`operator.victoriametrics.com/*`).
+- **Fix:** expandir `clusterResourceWhitelist` no `projects/observability.yaml`.
+
+---
+
+### 2. node-exporter FailedCreate por PodSecurity
+
+- **Sintoma:** pods do node-exporter ficam em `Pending` / `FailedCreate` com erro de PodSecurity admission.
+- **Causa:** o namespace `observability` com policy `baseline` bloqueia `hostNetwork`, `hostPID` e `hostPath` — que o node-exporter exige.
+- **Fix:** labels no `namespace.yaml`:
+  ```yaml
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+  ```
+
+---
+
+### 3. VMAlert falha no `helm template` sem notifier
+
+- **Sintoma:** `helm template` falha com `Neither notifier, notifiers nor notifierConfigRef is set for vmalert`.
+- **Causa:** o chart `victoria-metrics-k8s-stack 0.83.0` valida em template time que o VMAlert tem ao menos um notifier. Com `alertmanager.enabled: false` o deploy falha completamente.
+- **Fix:** `alertmanager.enabled: true` no `values.yaml`. O Alertmanager interno passa a ser o notifier padrão automaticamente.
+
+---
+
+### 4. VictoriaLogs ficou Headless (sem ClusterIP)
+
+- **Sintoma:** `kubectl get svc victoria-logs-vls-server` mostra `ClusterIP: None`. OTel Collector não consegue resolver o endpoint.
+- **Causa:** o chart `victoria-logs-single` defaulta `clusterIP: None` (Headless StatefulSet). A key `service.clusterIP: ""` na **raiz** do values é ignorada — a key correta é `server.service.clusterIP`.
+- **Fix:** no `values.yaml`:
+  ```yaml
+  server:
+    service:
+      clusterIP: ""   # string vazia → K8s atribui ClusterIP normal
+  ```
+- **Atenção:** mudar `clusterIP` em Service existente é operação imutável. Exige:
+  ```bash
+  kubectl delete svc victoria-logs-vls-server -n observability
+  # ArgoCD recria automaticamente no próximo sync
+  ```
+
+---
+
+### 5. Grafana Deployment OutOfSync após mudança de strategy
+
+- **Sintoma:** ArgoCD em retry loop com `spec.strategy.rollingUpdate: Forbidden: may not be specified when strategy type is 'Recreate'`.
+- **Causa:** Kubernetes não aceita patch em `spec.strategy` quando o Deployment já existe com `type: RollingUpdate`. A mudança de tipo é imutável via patch.
+- **Fix:**
+  ```bash
+  kubectl delete deployment grafana -n observability
+  # No ArgoCD: Terminate o sync em andamento
+  # Sync novamente com prune habilitado
+  ```
+- **Prevenção:** qualquer Deployment com PVC `ReadWriteOnce` deve ter `deploymentStrategy.type: Recreate` + `rollingUpdate: null` **desde o primeiro deploy**. Mudar depois sempre exige delete manual.
+
+---
+
+### 6. Grafana datasource com DNS errado
+
+- **Sintoma:** datasources de VictoriaMetrics e VictoriaLogs falham em Test com "connection refused" ou "no such host".
+- **Causa:** service names gerados pelo Helm com `nameOverride: vmks` são diferentes dos nomes sem override. Os names corretos só ficam conhecidos após o primeiro deploy.
+- **Fix:** service names reais (ver tabela no início deste documento). Atualizar `values.yaml` do Grafana com os FQDNs corretos.
+
+---
+
+### 7. OTel Collector — `image.repository` obrigatório (chart ≥ 0.127.x)
+
+- **Sintoma:** ArgoCD falha com `[ERROR] 'image.repository' must be set`.
+- **Causa:** breaking change — o chart parou de ter default para `image.repository` por suportar múltiplas distribuições.
+- **Fix:** declarar explicitamente no `values.yaml`:
+  ```yaml
+  image:
+    repository: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-k8s
+  command:
+    name: otelcol-k8s
+  ```
+
+---
+
+### 8. OTel Collector — `prometheusremotewrite` não disponível no `otelcol-k8s`
+
+- **Sintoma:** pods em CrashLoopBackOff com `unknown type: "prometheusremotewrite"`.
+- **Causa:** `otelcol-k8s` é uma distribuição slim que não inclui o exporter `prometheusremotewrite`. Os exporters disponíveis são: `otlp`, `otlphttp`, `debug`, `file`, `loadbalancing`, `otelarrow`.
+- **Fix:** trocar para `otlphttp` apontando para o endpoint OTLP nativo do VMSingle:
+  ```yaml
+  exporters:
+    otlphttp/metrics:
+      endpoint: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428/opentelemetry
+  ```
+  O VMSingle aceita ingestão OTLP em `/opentelemetry` nativamente — sem necessidade de RemoteWrite.
+
+---
+
+## Decisões adiadas para fases futuras
+
+| Item | Fase | Motivo |
+|---|---|---|
+| VictoriaTraces | 7 | Sem apps instrumentadas agora. Entra junto com LiteLLM/Langfuse. |
+| Canal de alertas (Slack/PagerDuty) | 9 | Alertmanager configurado mas sem roteamento real. |
+| `opentelemetry-ebpf` / `ebpf-instrumentation` | Opcional | eBPF para auto-instrumentação de apps — só vale quando houver serviços Go/Rust na Fase 7+. Cilium já expõe métricas nativas sem isso. |
 ---
 
 ## Apêndice A — Rollback da fase 1
