@@ -56,8 +56,7 @@ cluster:
     secret:
       name: cnpg-app-user
 
-  superuserSecret:
-    name: cnpg-superuser
+  superuserSecret: cnpg-superuser
 
   # Monitoring via VMAgent annotation — PodMonitor deprecated no CNPG 1.29
   monitoring:
