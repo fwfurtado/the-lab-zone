@@ -1,5 +1,6 @@
 # ClickHouseInstallation — single-node, homelab
-# Passwords via passwordSecretRef (suportado pelo operator 0.25+)
+# Fase 6: backend do Langfuse e analytics
+# Backup via sidecar clickhouse-backup + CronJob diário → Garage S3
 apiVersion: clickhouse.altinity.com/v1
 kind: ClickHouseInstallation
 metadata:
@@ -26,6 +27,12 @@ spec:
       langfuse/networks/ip: "::/0"
       langfuse/profile: default
 
+      # Usuário dedicado para o clickhouse-backup
+      backup/passwordSecretRef:
+        name: clickhouse-credentials
+        key: adminPassword
+      backup/networks/ip: "::/0"
+
     settings:
       timezone: UTC
       compression/case/method: zstd
@@ -49,6 +56,66 @@ spec:
                   memory: 512Mi
                 limits:
                   memory: 2Gi
+
+            # Sidecar clickhouse-backup — expõe API REST na porta 7171
+            - name: clickhouse-backup
+              image: altinity/clickhouse-backup:latest
+              args:
+                - server
+              env:
+                - name: LOG_LEVEL
+                  value: info
+                - name: ALLOW_EMPTY_BACKUPS
+                  value: "true"
+                - name: API_LISTEN
+                  value: "0.0.0.0:7171"
+                # ClickHouse connection
+                - name: CLICKHOUSE_HOST
+                  value: localhost
+                - name: CLICKHOUSE_PORT
+                  value: "9000"
+                - name: CLICKHOUSE_USERNAME
+                  value: backup
+                - name: CLICKHOUSE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: clickhouse-credentials
+                      key: adminPassword
+                # S3 config — Garage
+                - name: S3_BUCKET
+                  value: clickhouse-backup
+                - name: S3_ENDPOINT
+                  value: http://garage.data.svc.cluster.local:3900
+                - name: S3_REGION
+                  value: garage
+                - name: S3_PATH
+                  value: clickhouse
+                - name: S3_FORCE_PATH_STYLE
+                  value: "true"
+                - name: S3_DISABLE_SSL
+                  value: "true"
+                - name: S3_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: clickhouse-backup-credentials
+                      key: S3_ACCESS_KEY
+                - name: S3_SECRET_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: clickhouse-backup-credentials
+                      key: S3_SECRET_KEY
+              ports:
+                - containerPort: 7171
+                  name: backup-api
+              volumeMounts:
+                - name: clickhouse-data
+                  mountPath: /var/lib/clickhouse
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
 
     volumeClaimTemplates:
       - name: clickhouse-data
