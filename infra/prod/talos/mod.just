@@ -11,7 +11,7 @@
     op run --env-file=../../../.env.tpl -- terraform destroy
 
 @gen: gensecret
-    talhelper genconfig > /dev/null  2>&1
+    talhelper genconfig
     talhelper gencommand apply --extra-flags --insecure
     echo "[WARNING] Change the node IP to the actual DHCP IP of the node"
 

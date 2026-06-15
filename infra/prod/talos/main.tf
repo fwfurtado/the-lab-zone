@@ -29,6 +29,19 @@ resource "proxmox_virtual_environment_vm" "talos" {
     discard      = "on"
   }
 
+  # disco de PV — só nasce nos nós que têm pv_disk_size (os workers)
+  dynamic "disk" {
+    for_each = try(each.value.pv_disk_size, null) != null ? [1] : []
+    content {
+      datastore_id = "local-nvme"
+      interface    = "virtio1"        # ← virtio1 → /dev/vdb
+      size         = each.value.pv_disk_size
+      iothread     = true
+      discard      = "on"
+      backup       = false
+    }
+  }
+
   network_device {
     bridge = "vmbr0"                  # ajuste se usar VLAN: vlan_id = 30
   }

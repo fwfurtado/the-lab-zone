@@ -13,6 +13,10 @@ allowSchedulingOnControlPlanes: false
 cniConfig:
   name: none                   # Cilium entra na Fase 2, via bootstrap
 
+worker:
+  patches:
+    - "@patches/workers/user-volume-config.yaml"
+
 patches:
   - |-
     cluster:

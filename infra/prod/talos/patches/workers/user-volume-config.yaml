@@ -1,0 +1,18 @@
+# Talos user volume: seleciona o disco dedicado de PV (o que NÃO é o de boot),
+# formata em xfs e monta em /var/mnt/pv-data. Aplica só nos workers.
+#
+# IMPORTANTE: confirme o disco com `talosctl get disks -n <worker>` antes.
+# `!system_disk` blinda contra pegar o disco de boot. Se você tiver MAIS de um
+# disco não-system, estreite o match (ex.: por tamanho ou serial):
+#   match: '!system_disk && disk.size >= 100u * GiB'
+#   match: '!system_disk && disk.serial == "drive-scsi1"'
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: pv-data
+provisioning:
+  diskSelector:
+    match: '!system_disk'
+  minSize: 100GiB
+  grow: true                 # ocupa o disco inteiro
+filesystem:
+  type: xfs
