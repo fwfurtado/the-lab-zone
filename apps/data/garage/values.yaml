@@ -18,43 +18,13 @@ garage:
       rootDomain: ""
       index: "index.html"
 
-  # Garage expande ${VAR} no toml em runtime
-  garageTomlString: |
-    metadata_dir = "/mnt/meta"
-    data_dir = "/mnt/data"
-
-    db_engine = "lmdb"
-    block_size = 1048576
-    replication_factor = 1
-    compression_level = 1
-    metadata_auto_snapshot_interval = "6h"
-
-    rpc_bind_addr = "[::]:3901"
-    rpc_secret_file = "/etc/garage-secrets/rpcSecret"
-
-    [kubernetes_discovery]
-    namespace = "data"
-    service_name = "garage"
-    skip_crd = false
-
-    [s3_api]
-    s3_region = "garage"
-    api_bind_addr = "[::]:3900"
-    root_domain = ""
-
-    [s3_web]
-    bind_addr = "[::]:3902"
-    root_domain = ""
-    index = "index.html"
-
-    [admin]
-    api_bind_addr = "[::]:3903"
-    admin_token_file = "/etc/garage-secrets/adminToken"
 
 deployment:
   kind: StatefulSet
   replicaCount: 1
   podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: OnDelete
 
 persistence:
   enabled: true
