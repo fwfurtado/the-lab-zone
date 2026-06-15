@@ -1,0 +1,36 @@
+# Qdrant 1.18.2 — single node, homelab
+# Fase 6: vector store para RAG (LightRAG Fase 7) e pipeline de conhecimento
+
+replicaCount: 1
+
+# API key via ExternalSecret — suportado nativamente pelo chart
+apiKey:
+  valueFrom:
+    secretKeyRef:
+      name: qdrant-apikey
+      key: apiKey
+
+persistence:
+  size: 50Gi
+  storageClassName: openebs-hostpath
+  accessModes:
+    - ReadWriteOnce
+
+# Cluster desabilitado — single node
+config:
+  cluster:
+    enabled: false
+  service:
+    enable_tls: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 2Gi
+
+service:
+  type: ClusterIP
+  port: 6333
+  grpcPort: 6334
