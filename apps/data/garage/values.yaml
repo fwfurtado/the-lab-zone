@@ -1,4 +1,6 @@
 # Garage v1.3.x — single-node, homelab
+# Secrets injetados via Strategic Merge Patch no StatefulSet (manifests/sts-patch.yaml)
+# O chart não suporta envFrom nem valueFrom no campo environment.
 
 garage:
   replicationMode: "1"
@@ -16,9 +18,7 @@ garage:
       rootDomain: ""
       index: "index.html"
 
-  # garageTomlString sobrescreve o config gerado pelo chart.
-  # Garage suporta substituição de env vars com ${VAR} no toml.
-  # As env vars vêm do Secret garage-secrets via envFrom (extraVolumeMounts não usado).
+  # Garage expande ${VAR} no toml em runtime
   garageTomlString: |
     metadata_dir = "/mnt/meta"
     data_dir = "/mnt/data"
@@ -30,7 +30,7 @@ garage:
     metadata_auto_snapshot_interval = "6h"
 
     rpc_bind_addr = "[::]:3901"
-    rpc_secret_file = "/etc/garage-secrets/rpcSecret"
+    rpc_secret = "${GARAGE_RPC_SECRET}"
 
     [kubernetes_discovery]
     namespace = "data"
@@ -49,7 +49,7 @@ garage:
 
     [admin]
     api_bind_addr = "[::]:3903"
-    admin_token_file = "/etc/garage-secrets/adminToken"
+    admin_token = "${GARAGE_ADMIN_TOKEN}"
 
 deployment:
   kind: StatefulSet
@@ -70,38 +70,8 @@ image:
   pullPolicy: IfNotPresent
   tag: ""
 
-# envFrom injeta o Secret garage-secrets como env vars no container.
-# Garage expande ${VAR} no toml em runtime.
-# Nota: extraVolumeMounts é um dict no chart do Garage (não lista),
-# mas extraVolumes com projected não é necessário aqui.
 extraVolumes: {}
 extraVolumeMounts: {}
-
-#
-# Usando projected + subPath: subPath ignora fsGroup, mantém permissões do defaultMode.
-extraVolumes:
-  - name: garage-secrets
-    projected:
-      defaultMode: 0600
-      sources:
-        - secret:
-            name: garage-secrets
-            items:
-              - key: GARAGE_RPC_SECRET
-                path: rpcSecret
-              - key: GARAGE_ADMIN_TOKEN
-                path: adminToken
-
-extraVolumeMounts:
-  - name: garage-secrets
-    mountPath: /etc/garage-secrets/rpcSecret
-    subPath: rpcSecret
-    readOnly: true
-  - name: garage-secrets
-    mountPath: /etc/garage-secrets/adminToken
-    subPath: adminToken
-    readOnly: true
-
 environment: {}
 
 service:
