@@ -1,14 +1,14 @@
-# Garage v1.3.x — single-node, homelab
-# Secrets injetados via Strategic Merge Patch no StatefulSet (manifests/sts-patch.yaml)
-# O chart não suporta envFrom nem valueFrom no campo environment.
+# Garage v2.3.0 — single-node, homelab
+# Breaking changes vs v1: replication_mode → replication_factor + consistency_mode
+# allow_world_readable_secrets agora é opção do toml (não só env var)
 
 garage:
-  replicationMode: "1"
+  replicationFactor: 1        # v2: era replicationMode
   dbEngine: "lmdb"
   compressionLevel: "1"
   metadataAutoSnapshotInterval: "6h"
   rpcBindAddr: "[::]:3901"
-  rpcSecret: ""
+  rpcSecret: ""               # chart gera automaticamente
 
   s3:
     api:
@@ -18,6 +18,42 @@ garage:
       rootDomain: ""
       index: "index.html"
 
+  # toml completo com secrets via _file e allow_world_readable_secrets no próprio config
+  garageTomlString: |
+    metadata_dir = "/mnt/meta"
+    data_dir = "/mnt/data"
+
+    db_engine = "lmdb"
+    block_size = "1M"
+    replication_factor = 1
+    compression_level = 1
+    metadata_auto_snapshot_interval = "6h"
+
+    rpc_bind_addr = "[::]:3901"
+    rpc_secret_file = "/etc/garage-secrets/rpcSecret"
+
+    # Permite arquivos de secret com permissão de grupo (fsGroup do K8s)
+    # Sem isso o Garage recusa iniciar quando fsGroup aplica bit de leitura de grupo
+    allow_world_readable_secrets = true
+
+    [kubernetes_discovery]
+    namespace = "data"
+    service_name = "garage"
+    skip_crd = false
+
+    [s3_api]
+    s3_region = "garage"
+    api_bind_addr = "[::]:3900"
+    root_domain = ""
+
+    [s3_web]
+    bind_addr = "[::]:3902"
+    root_domain = ""
+    index = "index.html"
+
+    [admin]
+    api_bind_addr = "[::]:3903"
+    admin_token_file = "/etc/garage-secrets/adminToken"
 
 deployment:
   kind: StatefulSet
@@ -40,10 +76,30 @@ image:
   pullPolicy: IfNotPresent
   tag: ""
 
-extraVolumes: {}
-extraVolumeMounts: {}
-environment:
-  GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
+extraVolumes:
+  - name: garage-secrets
+    projected:
+      defaultMode: 0600
+      sources:
+        - secret:
+            name: garage-secrets
+            items:
+              - key: GARAGE_RPC_SECRET
+                path: rpcSecret
+              - key: GARAGE_ADMIN_TOKEN
+                path: adminToken
+
+extraVolumeMounts:
+  - name: garage-secrets
+    mountPath: /etc/garage-secrets/rpcSecret
+    subPath: rpcSecret
+    readOnly: true
+  - name: garage-secrets
+    mountPath: /etc/garage-secrets/adminToken
+    subPath: adminToken
+    readOnly: true
+
+environment: {}
 
 service:
   type: ClusterIP

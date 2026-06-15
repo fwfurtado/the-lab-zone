@@ -8,19 +8,16 @@ metadata:
 spec:
   project: data
   sources:
-    # Chart: direto do repo Git do Garage (não tem Helm repo público)
     - repoURL: https://git.deuxfleurs.fr/Deuxfleurs/garage.git
       path: script/helm/garage
-      targetRevision: v1.3.0
+      targetRevision: v2.3.0
       helm:
         releaseName: garage
         valueFiles:
           - $values/apps/data/garage/values.yaml
-    # Values: repo GitOps (ref usado pelo valueFiles acima)
     - repoURL: https://github.com/fwfurtado/the-lab-zone.git
       targetRevision: main
       ref: values
-    # Manifests: namespace, ExternalSecret, HTTPRoute
     - repoURL: https://github.com/fwfurtado/the-lab-zone.git
       targetRevision: main
       path: apps/data/garage/manifests
@@ -33,4 +30,4 @@ spec:
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
-      - CreateNamespace=false   # namespace criado via manifests/ com wave -1
+      - CreateNamespace=false
