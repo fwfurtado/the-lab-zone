@@ -130,3 +130,13 @@ readinessProbe:
     port: 3903
   initialDelaySeconds: 5
   periodSeconds: 10
+
+# fsGroup faz o Kubernetes adicionar permissão de grupo nos volumes montados,
+# resultando em 0640 mesmo com defaultMode: 0600.
+# Garage exige exatamente 0600 (rw-------) nos arquivos de secret.
+# Removendo fsGroup resolve — runAsUser/runAsGroup mantidos para não rodar como root.
+podSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: null
+  runAsNonRoot: true
