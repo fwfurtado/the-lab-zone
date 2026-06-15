@@ -79,6 +79,7 @@ extraVolumes:
   - name: garage-secrets
     secret:
       secretName: garage-secrets
+      defaultMode: 0400  # Garage recusa iniciar se secret for world-readable
 
 extraVolumeMounts:
   - name: garage-secrets
