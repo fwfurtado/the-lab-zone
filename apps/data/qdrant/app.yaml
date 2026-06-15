@@ -24,6 +24,14 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: data
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      name: garage
+      namespace: data
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[].apiVersion
+        - .spec.volumeClaimTemplates[].kind
   syncPolicy:
     automated:
       prune: true
