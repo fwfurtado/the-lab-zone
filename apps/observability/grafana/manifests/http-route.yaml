@@ -8,6 +8,8 @@ metadata:
 spec:
   parentRefs:
     - name: main
+      group: gateway.networking.k8s.io
+      kind: Gateway
       namespace: gateway
       sectionName: https-wildcard
   hostnames:
@@ -20,3 +22,5 @@ spec:
       backendRefs:
         - name: grafana
           port: 80
+          group: ''
+          kind: Service
