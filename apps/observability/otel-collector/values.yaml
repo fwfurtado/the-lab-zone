@@ -49,8 +49,8 @@ config:
     # k8sattributes é injetado automaticamente pelo preset kubernetesAttributes
 
   exporters:
-    prometheusremotewrite:
-      endpoint: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428/api/v1/write
+    otlphttp/metrics:
+      endpoint: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428/opentelemetry
       tls:
         insecure: true
 
@@ -68,7 +68,7 @@ config:
       metrics:
         receivers: [otlp]
         processors: [memory_limiter, batch]
-        exporters: [prometheusremotewrite]
+        exporters: [otlphttp/metrics]
       logs:
         receivers: [otlp, filelog]  # filelog injetado pelo preset logsCollection
         processors: [memory_limiter, batch]
