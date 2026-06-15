@@ -72,7 +72,8 @@ image:
 
 extraVolumes: {}
 extraVolumeMounts: {}
-environment: {}
+environment:
+  GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
 
 service:
   type: ClusterIP
