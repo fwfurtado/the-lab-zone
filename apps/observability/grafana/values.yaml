@@ -1,0 +1,90 @@
+# Grafana — chart 10.5.15
+# TLS termina no Gateway (grafana.ini.server.root_url via HTTPS)
+
+grafana.ini:
+  server:
+    root_url: https://grafana.lab.the-lab.zone
+    # Necessário quando TLS termina no Gateway (sem tls no pod)
+    serve_from_sub_path: false
+  auth:
+    disable_login_form: false
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+
+# Admin via ExternalSecret (manifests/grafana-secret.yaml)
+admin:
+  existingSecret: grafana-admin-secret
+  userKey: admin-user
+  passwordKey: admin-password
+
+# Não sobrescrever securityContext — o default do chart (uid 472, fsGroup 472)
+# é necessário para que o PVC tenha as permissões corretas no mountPath.
+# Sobrescrever com runAsUser diferente quebra escrita no volume.
+
+persistence:
+  enabled: true
+  storageClassName: openebs-hostpath
+  size: 5Gi
+  accessModes:
+    - ReadWriteOnce
+
+# Datasources provisionadas automaticamente
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: VictoriaMetrics
+        type: prometheus
+        # Service name gerado pelo victoria-metrics-k8s-stack com nameOverride: vmks
+        url: http://vmks-victoria-metrics-single-server.observability.svc.cluster.local:8428
+        isDefault: true
+        access: proxy
+
+      - name: VictoriaLogs
+        type: victoriametrics-logs-datasource
+        # Service name gerado pelo victoria-logs-single com nameOverride: vls
+        url: http://vls-victoria-logs-single-server.observability.svc.cluster.local:9428
+        access: proxy
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    kubernetes-cluster:
+      gnetId: 15661
+      revision: 1
+      datasource: VictoriaMetrics
+    node-exporter:
+      gnetId: 1860
+      revision: 37
+      datasource: VictoriaMetrics
+
+# Plugin de datasource para VictoriaLogs
+plugins:
+  - victoriametrics-logs-datasource
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+# Service padrão do chart: ClusterIP porta 80 → pod 3000. Não precisa sobrescrever.
+# O HTTPRoute em manifests/http-route.yaml aponta para porta 80.
+
+# rbac necessário para sidecar de dashboards (leitura de ConfigMaps)
+rbac:
+  create: true
+  pspEnabled: false
