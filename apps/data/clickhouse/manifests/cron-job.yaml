@@ -1,11 +1,10 @@
-# CronJob que dispara backup diário via clickhouse-backup API no sidecar
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: clickhouse-backup
   namespace: data
 spec:
-  schedule: "0 3 * * *"   # 03:00 UTC todo dia
+  schedule: "0 3 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
@@ -16,17 +15,31 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: backup
-              image: curlimages/curl:latest
+              image: busybox:stable
               command:
                 - sh
                 - -c
                 - |
                   set -e
+                  SIDECAR="http://chi-clickhouse-default-0-0.data.svc.cluster.local:7171"
                   BACKUP_NAME="backup-$(date +%Y-%m-%dT%H-%M-%S)"
+
                   echo "Creating backup: $BACKUP_NAME"
-                  # Cria backup local via API do sidecar
-                  curl -sf "http://chi-clickhouse-default-0-0.data.svc.cluster.local:7171/backup/create?name=$BACKUP_NAME"
+                  wget -qO- --post-data="" "$SIDECAR/backup/create?name=$BACKUP_NAME"
+
+                  echo "Waiting for backup to complete..."
+                  sleep 30
+
                   echo "Uploading backup: $BACKUP_NAME"
-                  # Upload para o Garage S3
-                  curl -sf "http://chi-clickhouse-default-0-0.data.svc.cluster.local:7171/backup/upload/$BACKUP_NAME"
-                  echo "Backup completed: $BACKUP_NAME"
+                  wget -qO- --post-data="" "$SIDECAR/backup/upload/$BACKUP_NAME"
+
+                  echo "Waiting for upload to complete..."
+                  sleep 30
+
+                  echo "Done"
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
