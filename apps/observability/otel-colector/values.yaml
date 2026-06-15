@@ -1,0 +1,100 @@
+# OTel Collector — DaemonSet no cluster (chart 0.158.1)
+# Fase 5: recebe métricas/logs via OTLP e encaminha para VictoriaMetrics/VictoriaLogs
+# Traces: descartados por enquanto (VictoriaTraces na Fase 7)
+
+mode: daemonset
+
+# image padrão do chart 0.158.1 já usa otelcol-k8s — não precisa sobrescrever
+
+presets:
+  # Adiciona k8s metadata em todos os spans/métricas/logs automaticamente
+  # (k8s.pod.name, k8s.namespace.name, k8s.node.name, etc.)
+  kubernetesAttributes:
+    enabled: true
+    extractAllPodLabels: false
+    extractAllPodAnnotations: false
+  # Coleta logs de todos os containers via filelog receiver
+  logsCollection:
+    enabled: true
+    includeCollectorLogs: false
+    storeCheckpoints: false
+
+config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ${env:MY_POD_IP}:4317
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+    # Removendo jaeger/zipkin/prometheus — não usamos
+    jaeger: null
+    zipkin: null
+    prometheus: null
+
+  processors:
+    batch:
+      timeout: 10s
+      send_batch_size: 1024
+    memory_limiter:
+      check_interval: 5s        # era 1s no values antigo; default do chart é 5s (mais correto)
+      limit_percentage: 75
+      spike_limit_percentage: 15
+    # k8sattributes é injetado automaticamente pelo preset kubernetesAttributes
+
+  exporters:
+    prometheusremotewrite:
+      endpoint: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428/api/v1/write
+      tls:
+        insecure: true
+
+    otlphttp/logs:
+      endpoint: http://victoria-logs-vls-server.observability.svc.cluster.local:9428/insert/opentelemetry
+      tls:
+        insecure: true
+
+    # Traces são aceitos mas descartados (evita erro de receiver sem pipeline)
+    debug:
+      verbosity: basic
+
+  service:
+    pipelines:
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [prometheusremotewrite]
+      logs:
+        receivers: [otlp, filelog]  # filelog injetado pelo preset logsCollection
+        processors: [memory_limiter, batch]
+        exporters: [otlphttp/logs]
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [debug]
+
+# Porta metrics habilitada para o VMAgent scrape o próprio collector
+ports:
+  metrics:
+    enabled: true
+    containerPort: 8888
+    servicePort: 8888
+    protocol: TCP
+  # Desabilita portas que não usamos
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+# GOMEMLIMIT = 80% de limits.memory (feature do chart, altamente recomendado)
+useGOMEMLIMIT: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
