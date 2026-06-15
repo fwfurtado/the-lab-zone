@@ -1,0 +1,97 @@
+# Garage v1.3.x — single-node, homelab
+# Fase 6: object storage interno para WAL CNPG, backups ClickHouse,
+#          snapshots Qdrant, e blobs gerais (Langfuse, Forgejo LFS)
+
+garage:
+  dbEngine: "lmdb"           # mais rápido que sqlite para este workload
+  replicationMode: "1"       # single-node: sem replicação (honesto)
+  compressionLevel: "1"      # zstd nível 1 — bom trade-off velocidade/espaço
+  metadataAutoSnapshotInterval: "6h"
+
+  rpcBindAddr: "[::]:3901"
+
+  # rpcSecret injetado via envFrom do Secret gerado pelo ESO
+  # O chart gera um aleatório se vazio — mas queremos controle via 1Password
+  rpcSecret: ""              # sobrescrito via environment.GARAGE_RPC_SECRET abaixo
+
+  s3:
+    api:
+      region: "garage"
+      # path-style: não usamos virtual-hosted (requer DNS wildcard)
+      rootDomain: ""
+    web:
+      rootDomain: ""
+      index: "index.html"
+
+deployment:
+  kind: StatefulSet
+  replicaCount: 1
+  podManagementPolicy: OrderedReady
+
+persistence:
+  enabled: true
+  meta:
+    storageClass: "openebs-hostpath"
+    size: 5Gi      # lmdb metadata: cresce devagar, 5Gi é muito pra um node
+  data:
+    storageClass: "openebs-hostpath"
+    size: 100Gi    # dados S3: WAL CNPG + backups ClickHouse + snapshots Qdrant
+
+image:
+  repository: dxflrs/amd64_garage
+  pullPolicy: IfNotPresent
+  tag: ""          # usa a tag default do chart (alinhada com v1.3.x)
+
+# rpcSecret e adminToken vindos do ExternalSecret garage-secrets
+environment:
+  GARAGE_RPC_SECRET:
+    secretKeyRef:
+      name: garage-secrets
+      key: rpcSecret
+  GARAGE_ADMIN_TOKEN:
+    secretKeyRef:
+      name: garage-secrets
+      key: adminToken
+
+service:
+  type: ClusterIP
+  s3:
+    api:
+      port: 3900
+    web:
+      port: 3902
+
+# Desabilita ingress clássico — usamos HTTPRoute (Gateway API)
+ingress:
+  s3:
+    api:
+      enabled: false
+    web:
+      enabled: false
+
+monitoring:
+  metrics:
+    enabled: true        # expõe /metrics na porta 3903 (admin)
+    serviceMonitor:
+      enabled: false     # VMAgent faz scrape via annotation, não ServiceMonitor
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3903
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 3903
+  initialDelaySeconds: 5
+  periodSeconds: 10

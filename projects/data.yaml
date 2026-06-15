@@ -1,0 +1,43 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: data
+  namespace: argocd
+spec:
+  description: "Fase 6 — backends stateful: Garage, CNPG, Valkey, ClickHouse, Qdrant, Memgraph"
+
+  sourceRepos:
+    - https://github.com/fwfurtado/the-lab-zone.git
+    - https://git.deuxfleurs.fr/Deuxfleurs/garage.git
+    - https://cloudnative-pg.github.io/charts
+    - https://charts.bitnami.com/bitnami
+    - https://qdrant.github.io/qdrant-helm
+    - https://helm.memgraph.com
+    - https://clickhouse.github.io/helm-charts
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: data
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: "apiextensions.k8s.io"
+      kind: CustomResourceDefinition
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+    - group: "postgresql.cnpg.io"
+      kind: "*"
+    - group: "deuxfleurs.fr"
+      kind: GarageNode
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  roles:
+    - name: admin
+      policies:
+        - p, proj:data:admin, applications, *, data/*, allow
