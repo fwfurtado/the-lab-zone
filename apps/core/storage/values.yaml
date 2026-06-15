@@ -22,3 +22,10 @@ localpv-provisioner:
   # (controlamos o BasePath de forma determinística, sem depender do plumbing do subchart).
   hostpathClass:
     enabled: false
+
+loki:
+  enabled: false
+  minio:
+    enabled: false
+alloy:
+  enabled: false
