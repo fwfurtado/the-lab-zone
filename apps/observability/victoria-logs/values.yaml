@@ -33,10 +33,8 @@ server:
     envflag.prefix: VM_
     loggerFormat: json
 
-service:
-  # Sobrescreve o default Headless (clusterIP: None) para ClusterIP normal,
-  # necessário para que o OTel Collector resolva "vls-victoria-logs-single-server"
-  # sem precisar de endereço de pod específico.
-  clusterIP: ""
-  servicePort: 9428
-  type: ClusterIP
+  service:
+    # Sobrescreve o default Headless (clusterIP: None) para ClusterIP normal,
+    # necessário para que o OTel Collector resolva "vls-victoria-logs-single-server"
+    # sem precisar de endereço de pod específico.
+    clusterIP: ""
