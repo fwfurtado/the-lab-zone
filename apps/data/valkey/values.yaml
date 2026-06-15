@@ -1,0 +1,42 @@
+# Valkey 9.0.1 — standalone, homelab
+# Fase 6: fila de jobs do Langfuse + cache geral
+# noeviction obrigatório — Langfuse usa como queue; evict = perda silenciosa de job
+
+# Sem replica — single-node honesto
+replica:
+  enabled: false
+
+# Autenticação via ACL — password vem do ExternalSecret
+auth:
+  enabled: true
+  usersExistingSecret: valkey-auth
+  aclUsers:
+    default:
+      permissions: "~* &* +@all"
+      passwordKey: password   # chave no Secret valkey-auth
+
+# Configuração crítica: noeviction para uso como fila
+valkeyConfig: |
+  maxmemory-policy noeviction
+  appendonly yes
+  appendfsync everysec
+  save ""
+
+# Persistência — dados da fila não devem sumir com restart
+dataStorage:
+  enabled: true
+  requestedSize: 2Gi
+  className: openebs-hostpath
+  accessModes:
+    - ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+service:
+  type: ClusterIP
+  port: 6379
