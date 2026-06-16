@@ -1,0 +1,66 @@
+image:
+  repository: ghcr.io/berriai/litellm-database
+  tag: "" # segue o appVersion do chart
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+service:
+  type: ClusterIP
+  port: 4000
+
+# master key vem do secret (o chart injeta PROXY_MASTER_KEY)
+masterkeySecretName: litellm-env
+masterkeySecretKey: masterkey
+
+# salt + openrouter + langfuse keys → env (envFrom)
+environmentSecrets:
+  - litellm-env
+
+# DB existente (CNPG) — credenciais via secret dedicado
+db:
+  useExisting: true
+  deployStandalone: false
+  endpoint: cnpg-cluster-rw.data.svc.cluster.local
+  database: litellm
+  secret:
+    name: litellm-db
+    usernameKey: username
+    passwordKey: password
+
+# pod auto-migra (replica única) — sem job/hook
+migrationJob:
+  enabled: false
+
+# /metrics é enterprise → sem ServiceMonitor/scrape
+serviceMonitor:
+  enabled: false
+
+proxyConfigMap:
+  create: true
+proxy_config:
+  model_list:
+    - model_name: kimi-k2.7-code
+      litellm_params:
+        model: openrouter/moonshotai/kimi-k2.7-code
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: qwen3-embedding # alias estável p/ o LightRAG
+      litellm_params:
+        model: openai/qwen/qwen3-embedding-8b # via openai-compat, não openrouter/ (bug #17773)
+        api_base: https://openrouter.ai/api/v1
+        api_key: os.environ/OPENROUTER_API_KEY
+
+  general_settings:
+    master_key: os.environ/PROXY_MASTER_KEY
+
+  litellm_settings:
+    success_callback:
+      - "langfuse"
+    # LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST vêm do litellm-env

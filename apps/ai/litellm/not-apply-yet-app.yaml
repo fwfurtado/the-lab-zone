@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: litellm
+  namespace: argocd
+  annotations: { argocd.argoproj.io/sync-wave: "2" }
+spec:
+  project: ai
+  sources:
+    - repoURL: ghcr.io/berriai # OCI; confirme o ref/versão: helm show chart oci://ghcr.io/berriai/litellm-helm
+      chart: litellm-helm
+      targetRevision: "1.89.1" # confirme a última
+      helm:
+        releaseName: litellm
+        valueFiles:
+          - $values/apps/ai/litellm/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/ai/litellm/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=false
