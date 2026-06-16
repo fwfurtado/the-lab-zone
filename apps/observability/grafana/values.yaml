@@ -1,6 +1,14 @@
 # Grafana — chart 10.5.15
 # TLS termina no Gateway (grafana.ini.server.root_url via HTTPS)
 
+# RollingUpdate conflita com PVC ReadWriteOnce (openebs-hostpath):
+# o novo pod tenta montar o volume antes do antigo liberar.
+# rollingUpdate deve ser null explicitamente — se omitido, o chart injeta
+# rollingUpdate: {} que conflita com type: Recreate e causa sync error.
+deploymentStrategy:
+  type: Recreate
+  rollingUpdate: null
+
 grafana.ini:
   server:
     root_url: https://grafana.lab.the-lab.zone
@@ -17,14 +25,6 @@ admin:
   existingSecret: grafana-admin-secret
   userKey: admin-user
   passwordKey: admin-password
-
-# RollingUpdate conflita com PVC ReadWriteOnce (openebs-hostpath):
-# o novo pod tenta montar o volume antes do antigo liberar.
-# rollingUpdate deve ser null explicitamente — se omitido, o chart injeta
-# rollingUpdate: {} que conflita com type: Recreate e causa sync error.
-deploymentStrategy:
-  type: Recreate
-  rollingUpdate: null
 
 # Não sobrescrever securityContext — o default do chart (uid 472, fsGroup 472)
 # é necessário para que o PVC tenha as permissões corretas no mountPath.
@@ -74,6 +74,19 @@ dashboards:
     node-exporter:
       gnetId: 1860
       revision: 37
+      datasource: VictoriaMetrics
+    # Fase 6 — data layer
+    cloudnative-pg:
+      gnetId: 20417
+      revision: 1
+      datasource: VictoriaMetrics
+    clickhouse:
+      gnetId: 14192
+      revision: 3
+      datasource: VictoriaMetrics
+    qdrant:
+      gnetId: 24603
+      revision: 1
       datasource: VictoriaMetrics
 
 # Plugin de datasource para VictoriaLogs
