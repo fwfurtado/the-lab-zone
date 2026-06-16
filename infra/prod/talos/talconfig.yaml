@@ -13,6 +13,9 @@ allowSchedulingOnControlPlanes: false
 cniConfig:
   name: none                   # Cilium entra na Fase 2, via bootstrap
 
+controlPlane:
+  patches:
+    - "@patches/control-planes/bind-address.yaml"
 worker:
   patches:
     - "@patches/workers/user-volume-config.yaml"
