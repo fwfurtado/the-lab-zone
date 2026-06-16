@@ -36,6 +36,7 @@ cluster:
       inherit: true
       connectionLimit: -1
       login: true
+      superuser: false
       passwordSecret:
         name: cnpg-role-langfuse
 
