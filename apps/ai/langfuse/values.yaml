@@ -39,29 +39,6 @@ langfuse:
       value: "false"
     - name: CLICKHOUSE_DB
       value: default
-    # S3 / Garage (uso os env canônicos; mais estáveis que as subchaves do chart)
-    - name: LANGFUSE_S3_EVENT_UPLOAD_ENABLED
-      value: "true"
-    - name: LANGFUSE_S3_EVENT_UPLOAD_BUCKET
-      value: langfuse
-    - name: LANGFUSE_S3_EVENT_UPLOAD_REGION
-      value: garage
-    - name: LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT
-      value: http://garage.data.svc.cluster.local:3900
-    - name: LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE
-      value: "true"
-    - name: LANGFUSE_S3_EVENT_UPLOAD_PREFIX
-      value: events/
-    - name: LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: langfuse-secrets
-          key: s3AccessKeyId
-    - name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: langfuse-secrets
-          key: s3SecretAccessKey
 
 postgresql:
   deploy: false
@@ -92,3 +69,23 @@ redis:
 
 s3:
   deploy: false
+  # config de conexão top-level — vale pra todos os tipos de upload
+  bucket: langfuse
+  region: garage
+  endpoint: http://garage.data.svc.cluster.local:3900
+  forcePathStyle: true                     # obrigatório pro Garage (path-style)
+  accessKeyId:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: s3AccessKeyId
+  secretAccessKey:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: s3SecretAccessKey
+  # cada tipo herda bucket/region/endpoint do top-level; só sobrescrevo o prefix
+  eventUpload:
+    prefix: events/
+  batchExport:
+    prefix: exports/
+  mediaUpload:
+    prefix: media/
