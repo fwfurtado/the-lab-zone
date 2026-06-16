@@ -24,6 +24,11 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - '.webhooks[]?.clientConfig.caBundle'
   syncPolicy:
     automated:
       prune: true

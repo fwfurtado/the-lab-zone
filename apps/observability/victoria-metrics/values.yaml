@@ -106,6 +106,10 @@ victoria-metrics-operator:
   operator:
     args:
       metricsAddr: ":8080"
+  admissionWebhooks:
+    enabled: true
+    certManager:
+      enabled: true        # cria Issuer (selfSigned) + Certificate e usa cainjector
 
 # kube-controller-manager e kube-scheduler: defaultRules desabilitados.
 # VMServiceScrapes customizados com insecureSkipVerify em manifests/vmservicescrapes-control-plane.yaml
