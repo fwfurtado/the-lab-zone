@@ -104,8 +104,8 @@ defaultDashboards:
 # VM Operator — habilita endpoint de métricas na porta 8080
 victoria-metrics-operator:
   operator:
-    extraArgs:
-      - --metrics-bind-address=:8080
+    args:
+      metricsAddr: ":8080"
 
 # kube-controller-manager e kube-scheduler: defaultRules desabilitados.
 # VMServiceScrapes customizados com insecureSkipVerify em manifests/vmservicescrapes-control-plane.yaml
