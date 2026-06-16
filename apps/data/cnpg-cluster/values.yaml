@@ -39,6 +39,12 @@ cluster:
       superuser: false
       passwordSecret:
         name: cnpg-role-langfuse
+    - name: litellm
+      ensure: present
+      login: true
+      superuser: false
+      passwordSecret:
+        name: cnpg-role-litellm
 
   # WAL archiving para Garage via barman-object-store
   backup:
