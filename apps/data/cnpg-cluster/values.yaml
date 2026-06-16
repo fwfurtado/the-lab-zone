@@ -33,6 +33,8 @@ cluster:
   roles:
     - name: langfuse
       ensure: present
+      inherit: true
+      connectionLimit: -1
       login: true
       passwordSecret:
         name: cnpg-role-langfuse
