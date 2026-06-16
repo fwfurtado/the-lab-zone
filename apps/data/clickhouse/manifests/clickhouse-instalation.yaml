@@ -56,6 +56,10 @@ spec:
   templates:
     podTemplates:
       - name: clickhouse-pod
+        metadata:
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "9363"
         spec:
           containers:
             - name: clickhouse
