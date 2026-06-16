@@ -111,3 +111,12 @@ resources:
 rbac:
   create: true
   pspEnabled: false
+
+# Sidecar para auto-provisioning de dashboards via ConfigMaps
+# Qualquer ConfigMap com label grafana_dashboard: "1" é importado automaticamente
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    labelValue: "1"
+    searchNamespace: ALL   # busca em todos os namespaces
