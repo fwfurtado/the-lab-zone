@@ -12,5 +12,5 @@ spec:
       app.kubernetes.io/name: memgraph
       app.kubernetes.io/instance: memgraph
   podMetricsEndpoints:
-    - port: "9091"
+    - port: http
       path: /metrics

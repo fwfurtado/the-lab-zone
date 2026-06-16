@@ -12,5 +12,5 @@ spec:
       clickhouse.altinity.com/chi: clickhouse
       clickhouse.altinity.com/app: chop
   podMetricsEndpoints:
-    - port: "9363"
+    - port: metrics
       path: /metrics

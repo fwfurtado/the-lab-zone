@@ -75,6 +75,9 @@ spec:
                     secretKeyRef:
                       name: clickhouse-credentials
                       key: langfusePasswordSha256
+              ports:
+                - containerPort: 9363
+                  name: metrics
               resources:
                 requests:
                   cpu: 200m

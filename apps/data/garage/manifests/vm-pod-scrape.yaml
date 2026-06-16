@@ -12,5 +12,5 @@ spec:
       app.kubernetes.io/name: garage
       app.kubernetes.io/instance: garage
   podMetricsEndpoints:
-    - port: "3903"
+    - port: admin
       path: /metrics
