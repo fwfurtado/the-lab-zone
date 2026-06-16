@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: ai
+  namespace: argocd
+spec:
+  description: "Fase 7 — stack de AI"
+  sourceRepos:
+    - https://github.com/fwfurtado/the-lab-zone.git
+    - https://langfuse.github.io/langfuse-k8s
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: ai
+    - server: https://kubernetes.default.svc
+      namespace: observability     # p/ VMScrapes futuros de apps ai
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
