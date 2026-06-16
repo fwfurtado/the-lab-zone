@@ -30,13 +30,12 @@ cluster:
       wal_buffers: "16MB"
 
   # Roles gerenciados pelo ExternalSecret
-  managed:
-    roles:
-      - name: langfuse
-        ensure: present
-        login: true
-        passwordSecret:
-          name: cnpg-role-langfuse
+  roles:
+    - name: langfuse
+      ensure: present
+      login: true
+      passwordSecret:
+        name: cnpg-role-langfuse
 
   # WAL archiving para Garage via barman-object-store
   backup:
