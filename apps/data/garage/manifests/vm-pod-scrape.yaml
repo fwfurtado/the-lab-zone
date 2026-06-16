@@ -10,6 +10,7 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: garage
+      app.kubernetes.io/instance: garage
   podMetricsEndpoints:
     - port: "3903"
       path: /metrics
