@@ -88,6 +88,10 @@ dashboards:
       gnetId: 24603
       revision: 1
       datasource: VictoriaMetrics
+    valkey:
+      gnetId: 763
+      revision: 5
+      datasource: VictoriaMetrics
 
 # Plugin de datasource para VictoriaLogs
 plugins:

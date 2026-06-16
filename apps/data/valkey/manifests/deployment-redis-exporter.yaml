@@ -1,0 +1,57 @@
+# redis_exporter como Deployment separado
+# Exporta métricas do Valkey para o VMAgent via /metrics na porta 9121
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey-exporter
+  namespace: data
+  labels:
+    app: valkey-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: valkey-exporter
+  template:
+    metadata:
+      labels:
+        app: valkey-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+    spec:
+      containers:
+        - name: redis-exporter
+          image: oliver006/redis_exporter:latest
+          env:
+            - name: REDIS_ADDR
+              value: "redis://valkey.data.svc.cluster.local:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-auth
+                  key: password
+          ports:
+            - containerPort: 9121
+              name: metrics
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey-exporter
+  namespace: data
+  labels:
+    app: valkey-exporter
+spec:
+  selector:
+    app: valkey-exporter
+  ports:
+    - name: metrics
+      port: 9121
+      targetPort: 9121
