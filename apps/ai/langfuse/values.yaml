@@ -20,18 +20,18 @@ langfuse:
     replicas: 1
     resources:
       requests:
-        cpu: 100m
-        memory: 512Mi
-      limits:
+        cpu: 250m
         memory: 1Gi
+      limits:
+        memory: 2Gi
   worker:
     replicas: 1
     resources:
       requests:
-        cpu: 100m
-        memory: 512Mi
+        cpu: 250m
+        memory: 1Gi
       limits:
-        memory: 1536Mi
+        memory: 2Gi
 
   additionalEnv:
     # ClickHouse single-node — SEM cluster (não há Keeper → ON CLUSTER trava)
