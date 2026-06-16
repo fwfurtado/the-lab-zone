@@ -6,6 +6,10 @@ ipam:
 
 kubeProxyReplacement: true
 
+# MTU do overlay: underlay é 1500, VXLAN come 50 → pods em 1450.
+# O auto-detect não estava descontando o overhead do túnel; forçamos explícito.
+MTU: 1450
+
 # Talos expõe a API do K8s localmente em cada nó via KubePrism (porta 7445).
 # O Cilium usa isso e fica imune à queda do VIP — sem dependência circular.
 k8sServiceHost: localhost
