@@ -1355,6 +1355,394 @@ kubectl get pvc -n observability
 | `opentelemetry-ebpf` / `ebpf-instrumentation` | Opcional | eBPF para auto-instrumentação de apps — só vale quando houver serviços Go/Rust na Fase 7+. Cilium já expõe métricas nativas sem isso. |
 ---
 
+# Fase 6 — Plataforma de Dados
+
+**Objetivo:** provisionar todos os backends stateful vazios e validados antes de
+qualquer app de negócio. Falha de store nunca se confunde com falha de app nas
+fases seguintes.
+
+**Critério de saída:** 6 stores rodando, PVCs bound, smoke tests de
+escrita/leitura passando, backups configurados, métricas chegando no Grafana.
+
+---
+
+## Decisões de arquitetura
+
+| Decisão | Escolha | Porquê |
+|---|---|---|
+| Object storage | Garage v2.3.0 | S3-compatible, Rust, single-node honesto, sem dependências externas |
+| PostgreSQL | CNPG 1.29 + PG18 | Operator maduro, WAL→Garage via barman, PITR real |
+| Cache/fila | Valkey 9.0.2 | Redis-compatible, licença limpa, `noeviction` para queue do Langfuse |
+| Analytics/eventos | ClickHouse 24.3 via Altinity operator | Backend nativo do Langfuse, reutilizado na Fase 8 |
+| Vector store | Qdrant 1.18 | LightRAG (Fase 7), pipeline RAG |
+| Graph store | Memgraph 3.10 + Lab UI | LightRAG híbrido (grafo + vetor) |
+| Backup ClickHouse | Sidecar `clickhouse-backup` + CronJob | API REST na porta 7171, upload assíncrono para Garage |
+| Backup Qdrant | CronJob (curlimages + rclone) | Snapshot via API REST → upload via rclone |
+| Métricas | VMPodScrape por app | Cada app dono do seu scrape, sem orchestrador extra |
+| Dashboard Garage | ConfigMap com label `grafana_dashboard: "1"` | Auto-provisioning via sidecar Grafana |
+
+---
+
+## AppProject `data`
+
+Arquivo: `projects/data.yaml`
+
+Operators vão para o AppProject `core` (mesmo namespace que os demais operators):
+- `cnpg-operator` → `apps/core/cnpg-operator/`
+- `clickhouse-operator` → `apps/core/clickhouse-operator/`
+
+Workloads de dados vão para o AppProject `data`, namespace `data`:
+- Garage, CNPG cluster, Valkey, ClickHouse, Qdrant, Memgraph
+
+O AppProject `data` tem `observability` como destination adicional para os
+`VMPodScrape` de cada app.
+
+---
+
+## Estrutura de arquivos
+
+```
+projects/
+└── data.yaml
+
+infra/prod/garage/
+├── main.tf          # buckets S3 via provider AWS com endpoint Garage
+├── variables.tf
+└── outputs.tf
+
+apps/core/
+├── cnpg-operator/app.yaml          # wave 5
+└── clickhouse-operator/
+    ├── app.yaml                    # wave 6
+    └── values.yaml                 # WATCH_NAMESPACES=data
+
+apps/data/
+├── garage/
+│   ├── app.yaml                    # wave 1
+│   ├── values.yaml
+│   └── manifests/
+│       ├── namespace.yaml          # wave -1
+│       ├── externalsecret.yaml     # rpcSecret + adminToken
+│       ├── httproute.yaml          # s3.lab.the-lab.zone
+│       ├── vmpodscrape.yaml        # porta admin (3903)
+│       └── grafana-dashboard.yaml  # dashboard Garage S3
+├── cnpg-cluster/
+│   ├── app.yaml                    # wave 2
+│   ├── values.yaml
+│   └── manifests/
+│       ├── externalsecret.yaml     # app user, superuser, garage-cnpg
+│       └── vmpodscrape.yaml
+├── valkey/
+│   ├── app.yaml                    # wave 2
+│   ├── values.yaml
+│   └── manifests/
+│       ├── externalsecret.yaml
+│       ├── redis-exporter.yaml     # Deployment + Service redis_exporter
+│       └── vmpodscrape.yaml        # scrape do redis_exporter
+├── clickhouse/
+│   ├── app.yaml                    # wave 2
+│   └── manifests/
+│       ├── chi.yaml                # ClickHouseInstallation
+│       ├── externalsecret.yaml     # admin + langfuse passwords
+│       ├── externalsecret-backup.yaml
+│       ├── cronjob-backup.yaml     # 03:00 UTC via API sidecar
+│       ├── vmpodscrape.yaml        # porta metrics (9363)
+│       └── grafana-dashboard.yaml  # (futuro)
+├── qdrant/
+│   ├── app.yaml                    # wave 2
+│   ├── values.yaml
+│   └── manifests/
+│       ├── externalsecret.yaml     # apiKey
+│       ├── externalsecret-backup.yaml
+│       ├── cronjob-backup.yaml     # 03:00 UTC via API + rclone
+│       └── vmpodscrape.yaml
+└── memgraph/
+    ├── app.yaml                    # wave 2
+    ├── values.yaml
+    └── manifests/
+        └── externalsecret.yaml     # username + password
+
+apps/data/memgraph-lab/
+├── app.yaml                        # wave 3
+├── values.yaml
+└── manifests/
+    └── httproute.yaml              # memgraph.lab.the-lab.zone
+```
+
+---
+
+## Pré-requisitos: 1Password
+
+Criar no vault `the-lab-zone` antes de qualquer push:
+
+| Item | Campos |
+|---|---|
+| `garage` | `rpcSecret` (64 chars hex: `openssl rand -hex 32`), `adminToken` |
+| `cnpg` | `appUsername`, `appPassword`, `superuserUsername`, `superuserPassword` |
+| `valkey` | `password` |
+| `clickhouse` | `adminPassword` (plaintext), `langfusePassword` (plaintext) |
+| `qdrant` | `apiKey` |
+| `memgraph` | `username`, `password` |
+| `garage-cnpg` | `accessKeyId`, `secretKey` (key com acesso ao bucket `cnpg-wal`) |
+| `garage-clickhouse` | `accessKeyId`, `secretKey` (key com acesso ao bucket `clickhouse-backup`) |
+| `garage-qdrant` | `accessKeyId`, `secretKey` (key com acesso ao bucket `qdrant-snapshots`) |
+
+---
+
+## Ordem de deploy
+
+```bash
+# 1. AppProject data
+kubectl apply -f projects/data.yaml
+
+# 2. Operators no core (se ainda não deployados)
+# ArgoCD synca cnpg-operator (wave 5) e clickhouse-operator (wave 6)
+
+# 3. Terraform: buckets no Garage
+just garage init-layout --id=<NODE_ID>   # aplicar layout antes dos buckets
+just buckets tf-init
+just buckets tf-plan
+just buckets tf-apply
+
+# 4. Aliases globais dos buckets (Terraform cria com alias local apenas)
+just garage alias-buckets
+
+# 5. Keys por serviço e permissões nos buckets
+just garage generate-key --keyname=cnpg
+just garage make-owner-of-bucket --keyid=<ID> --bucket=cnpg-wal
+
+just garage generate-key --keyname=clickhouse
+just garage make-owner-of-bucket --keyid=<ID> --bucket=clickhouse-backup
+
+just garage generate-key --keyname=qdrant
+just garage make-owner-of-bucket --keyid=<ID> --bucket=qdrant-snapshots
+
+# 6. Push dos apps — ArgoCD synca em ordem de wave
+git add apps/ projects/
+git commit -m "feat(data): fase 6 — garage, cnpg, valkey, clickhouse, qdrant, memgraph"
+git push
+```
+
+---
+
+## Validações por componente
+
+### Garage
+
+```bash
+just garage status
+# Deve mostrar nó com role dc1, capacity 100G
+
+# Smoke test S3
+kubectl exec -n data garage-0 -- /garage bucket list
+# Deve listar: cnpg-wal, clickhouse-backup, qdrant-snapshots, velero, langfuse
+```
+
+### CNPG
+
+```bash
+kubectl get cluster -n data
+# STATUS: Cluster in healthy state
+
+kubectl exec -n data \
+  $(kubectl get pod -n data -l cnpg.io/cluster=cnpg-cluster -o name | head -1) \
+  -- psql -U postgres -c "SELECT version();"
+```
+
+### Valkey
+
+```bash
+kubectl exec -n data \
+  $(kubectl get pod -n data -l app.kubernetes.io/name=valkey -o name) \
+  -- valkey-cli -a <password> ping
+# PONG
+```
+
+### ClickHouse
+
+```bash
+kubectl exec -n data chi-clickhouse-default-0-0-0 -c clickhouse -- \
+  clickhouse-client --user admin \
+  --password "$(kubectl get secret clickhouse-credentials -n data \
+    -o jsonpath='{.data.adminPassword}' | base64 -d)" \
+  --query "SELECT 1"
+# 1
+
+# Teste backup manual
+kubectl create job -n data clickhouse-backup-test \
+  --from=cronjob/clickhouse-backup
+kubectl logs -n data -l job-name=clickhouse-backup-test -f
+```
+
+### Qdrant
+
+```bash
+kubectl port-forward -n data svc/qdrant 6333:6333 &
+curl -s -H "api-key: <apiKey>" http://localhost:6333/collections
+# {"result":{"collections":[]},"status":"ok"}
+```
+
+### Memgraph
+
+Acessa `https://memgraph.lab.the-lab.zone`:
+- Host: `memgraph`, Port: `7687`
+- Usuário e senha do 1Password item `memgraph`
+- Query: `RETURN 1;`
+
+---
+
+## Observabilidade
+
+### VMPodScrapes ativos
+
+Cada app tem seu `VMPodScrape` em `manifests/vmpodscrape.yaml` no namespace
+`observability`. Após deploy, verificar em `http://vmagent:8429/targets`:
+
+| Job | Estado esperado |
+|---|---|
+| `podScrape/observability/cnpg-cluster` | UP |
+| `podScrape/observability/clickhouse` | UP (porta `metrics` 9363) |
+| `podScrape/observability/qdrant` | UP |
+| `podScrape/observability/valkey-exporter` | UP |
+| `podScrape/observability/garage` | UP (porta `admin` 3903) |
+
+### Grafana dashboards
+
+| Dashboard | Origem | gnetId/ConfigMap |
+|---|---|---|
+| CloudNativePG | Grafana.com | `20417` |
+| ClickHouse | Grafana.com | `14192` |
+| Qdrant | Grafana.com | `24603` |
+| Valkey/Redis | Grafana.com | `763` |
+| Garage S3 | ConfigMap custom | `grafana-dashboard-garage` no namespace `data` |
+
+O sidecar `grafana-sc-dashboard` (habilitado no values do Grafana via
+`sidecar.dashboards.enabled: true`) importa automaticamente qualquer ConfigMap
+com label `grafana_dashboard: "1"` em qualquer namespace.
+
+---
+
+## Incidentes documentados
+
+### 1. Garage — campo `environment` do chart não aceita objetos
+
+- **Sintoma:** `ComparisonError: .spec.template.spec.containers[name="garage"].env: expected list, got &{map[...]}`
+- **Causa:** o campo `environment` do chart Garage v2 só aceita dict de strings literais. Tentar passar `secretKeyRef` como valor quebra o template.
+- **Fix:** usar `GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"` como string literal. Secrets montados via `extraVolumes` projected com `defaultMode: 0600` e `subPath`.
+
+### 2. Garage — fsGroup do Kubernetes impede permissão 0600
+
+- **Sintoma:** `File /etc/garage-secrets/rpcSecret is world-readable! (mode: 0100640, expected 0600)`
+- **Causa:** o chart do Garage tem `fsGroup: 1000` hardcodado no podSecurityContext. O Kubernetes aplica o fsGroup nos volumes montados, adicionando bit de leitura de grupo mesmo com `defaultMode: 0600`.
+- **Fix:** `GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"` no campo `environment` do chart. O Garage documenta essa env var para ambientes container onde o fsGroup é inevitável.
+
+### 3. Garage — buckets criados com alias local apenas
+
+- **Sintoma:** `GetBucketInfo returned NoSuchBucket` ao tentar dar permissão via nome do bucket.
+- **Causa:** o provider AWS cria buckets no Garage com alias local (vinculado à key de criação). O comando `garage bucket allow <nome>` requer alias global.
+- **Fix:** após `just buckets tf-apply`, rodar `just garage alias-buckets` que adiciona alias global para cada bucket via `garage bucket alias --global <ID> <nome>`.
+
+### 4. Garage — region na assinatura AWS4
+
+- **Sintoma:** `authorization header malformed, unexpected scope: '20260615/us-east-1/s3/aws4_request', expected: '20260615/garage/s3/aws4_request'`
+- **Causa:** o provider AWS valida a region como string AWS válida mas o Garage exige `garage` no scope da assinatura.
+- **Fix:** `skip_region_validation = true` + `region = "garage"` no provider. Para rclone: `region = garage` no config.
+
+### 5. ClickHouse operator — `watchNamespaces` via env var
+
+- **Sintoma:** CHI criado no namespace `data` não é processado pelo operator. Logs param em "workers started" sem processar eventos.
+- **Causa:** o Altinity operator por default só monitora o namespace onde está instalado. `watch.namespaces.include: []` no ConfigMap significa "nenhum namespace adicional", não "todos".
+- **Fix:** `WATCH_NAMESPACES=data` via env var no values do operator:
+  ```yaml
+  operator:
+    env:
+      - name: WATCH_NAMESPACES
+        value: "data"
+  ```
+
+### 6. ClickHouse — `passwordSecretRef` não relê Secret após criação
+
+- **Sintoma:** após atualizar senha no 1Password e forçar reconcile, o hash no `chop-generated-users.xml` permanece o antigo.
+- **Causa:** o Altinity operator cacheia o valor do Secret no momento da criação do CHI e não observa mudanças posteriores no Secret referenciado.
+- **Fix:** usar `from_env` no XML de usuários via `configuration.files` no CHI spec. As env vars são injetadas via `valueFrom.secretKeyRef` no container do ClickHouse e o Garage expande `<password_sha256_hex from_env="VAR"/>` em runtime. O ExternalSecret gera os hashes SHA256 via template ESO.
+
+### 7. ClickHouse — senha default ao invés da configurada
+
+- **Sintoma:** autenticação falha com a senha do 1Password mas funciona com `default`.
+- **Causa:** o `passwordSecretRef` estava usando o hash SHA256 como valor, não a senha plaintext. O ClickHouse faz SHA256 do valor recebido — SHA256(SHA256) resulta em hash diferente.
+- **Fix:** garantir que o 1Password armazena a senha em **plaintext**. O ExternalSecret usa template ESO para calcular `sha256sum` do valor e gerar `adminPasswordSha256` e `langfusePasswordSha256` como campos separados.
+
+### 8. ClickHouse — porta 9363 não exposta por padrão
+
+- **Sintoma:** VMPodScrape com `port: "9363"` resulta em `connection refused`.
+- **Causa:** o ClickHouse tem suporte nativo a Prometheus mas o endpoint não está habilitado por padrão. Precisa do bloco `<prometheus>` no config XML.
+- **Fix:** adicionar via `configuration.files` no CHI:
+  ```xml
+  <clickhouse>
+    <prometheus>
+      <endpoint>/metrics</endpoint>
+      <port>9363</port>
+      <metrics>true</metrics>
+      <events>true</events>
+      <asynchronous_metrics>true</asynchronous_metrics>
+    </prometheus>
+  </clickhouse>
+  ```
+
+### 9. Memgraph — métricas requerem Enterprise License
+
+- **Sintoma:** VMPodScrape retorna 400 com `Memgraph must have an Enterprise License for providing metrics!`
+- **Causa:** a endpoint `/metrics` do Memgraph só está disponível na versão Enterprise.
+- **Fix:** remover o VMPodScrape do Memgraph. Sem dashboard de métricas para o Memgraph na versão community.
+
+### 10. VMPodScrape — VM Operator não processa após TLS mismatch
+
+- **Sintoma:** VMPodScrapes criados ficam sem STATUS após restart do operator.
+- **Causa:** o VM Operator estava com `tls: private key does not match public key` — cert-manager rotacionou o certificado do webhook mas o operator não recarregou corretamente.
+- **Fix:** `kubectl rollout restart deployment -l app.kubernetes.io/name=victoria-metrics-operator -n observability`. Após reiniciar, os VMPodScrapes foram processados e ficaram `operational`.
+
+### 11. VMPodScrape — selectors incorretos
+
+- **Sintoma:** `podScrape/observability/clickhouse 0/0 up` — sem endpoints descobertos.
+- **Causa:** labels usados nos selectors não batiam com os labels reais dos pods. O ClickHouse operator gera pods com labels próprios (`clickhouse.altinity.com/*`).
+- **Fix:** verificar labels reais com `kubectl get pods -n data --show-labels` e ajustar os `matchLabels` nos VMPodScrapes. Garage usa `port: admin`, Memgraph usa `port: http`.
+
+### 12. Grafana dashboard — datasource variável não resolvida via ConfigMap
+
+- **Sintoma:** dashboard importado via ConfigMap mostra dropdown "Datasource" vazio.
+- **Causa:** o mecanismo `__inputs` é para import manual. Ao provisionar via ConfigMap, a variável `${DS_VICTORIAMETRICS}` não é resolvida automaticamente.
+- **Fix:** substituir `${DS_VICTORIAMETRICS}` pelo UID real do datasource (`P4169E866C3094E38`) diretamente no JSON do dashboard.
+
+---
+
+## Decisões adiadas
+
+| Item | Fase | Motivo |
+|---|---|---|
+| VictoriaTraces | 7 | Sem apps instrumentadas. Entra com LiteLLM/Langfuse. |
+| Valkey metrics (redis_exporter) | ✅ Feito | Deployment separado com `oliver006/redis_exporter` |
+| Memgraph metrics | — | Requer Enterprise License |
+| Redpanda/Debezium | 8 | CDC só se virar necessidade real |
+| ClickHouse Fase 8 | 8 | Mesma instância reutilizada para analytics |
+| kube-controller-manager/scheduler metrics | Infra | Requer mudança no Talos machine config (`bind-address: 0.0.0.0`) |
+
+---
+
+## Justfiles criados nesta fase
+
+```
+just garage status
+just garage init-layout --id=<NODE_ID>
+just garage generate-key --keyname=<name>
+just garage make-owner-of-bucket --keyid=<id> --bucket=<name>
+just garage set-global-alias
+
+just buckets tf-init
+just buckets tf-plan
+just buckets tf-apply
+just buckets tf-destroy
+```
+
 ## Apêndice A — Rollback da fase 1
 
 `just talos tf-destroy` remove as 5 VMs e a ISO. Estado externo criado e que
