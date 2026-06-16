@@ -1355,6 +1355,56 @@ kubectl get pvc -n observability
 | `opentelemetry-ebpf` / `ebpf-instrumentation` | Opcional | eBPF para auto-instrumentação de apps — só vale quando houver serviços Go/Rust na Fase 7+. Cilium já expõe métricas nativas sem isso. |
 ---
 
+## Incidentes pós-fase — targets DOWN no VMAgent
+ 
+### kube-controller-manager e kube-scheduler não acessíveis
+ 
+- **Sintoma:** targets DOWN com `connection refused` na porta 10257/10259.
+- **Causa:** no Talos os componentes do control plane fazem bind apenas em `127.0.0.1` por padrão — não acessíveis externamente.
+- **Fix:** adicionar no `talconfig.yaml` via `controlPlane.patches`:
+```yaml
+  controlPlane:
+    patches:
+      - |-
+        cluster:
+          controllerManager:
+            extraArgs:
+              bind-address: 0.0.0.0
+          scheduler:
+            extraArgs:
+              bind-address: 0.0.0.0
+```
+  Regenerar configs com `talhelper genconfig` e aplicar nos nós control plane com `talosctl apply-config`. Não requer reboot.
+ 
+### kube-controller-manager e kube-scheduler — TLS inválido após bind-address
+ 
+- **Sintoma:** após configurar `bind-address: 0.0.0.0`, targets passam a `connection refused` para TLS error: `certificate is valid for localhost, not <NODE_IP>`.
+- **Causa:** o certificado TLS desses componentes só tem `localhost` como SAN — não inclui o IP do nó. O VMServiceScrape gerado pelo chart usa `serverName: kubernetes` que também falha.
+- **Fix:** desabilitar os VMServiceScrapes gerados pelo chart e criar VMServiceScrapes customizados com `insecureSkipVerify: true` em `manifests/vmservicescrapes-control-plane.yaml`:
+```yaml
+  # values.yaml
+  kubeControllerManager:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+```
+```yaml
+  # manifests/vmservicescrapes-control-plane.yaml
+  apiVersion: operator.victoriametrics.com/v1beta1
+  kind: VMServiceScrape
+  metadata:
+    name: kube-controller-manager
+    namespace: observability
+  spec:
+    endpoints:
+      - port: http-metrics
+        scheme: https
+        tlsConfig:
+          insecureSkipVerify: true
+```
+
+---
+
 # Fase 6 — Plataforma de Dados
 
 **Objetivo:** provisionar todos os backends stateful vazios e validados antes de
