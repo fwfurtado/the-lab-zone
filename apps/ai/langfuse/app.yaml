@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: langfuse
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: ai
+  sources:
+    - repoURL: https://langfuse.github.io/langfuse-k8s
+      chart: langfuse
+      targetRevision: "1.5.35"      # confirme a última 1.x: helm search repo langfuse/langfuse
+      helm:
+        releaseName: langfuse       # obrigatório ser "langfuse"
+        valueFiles:
+          - $values/apps/ai/langfuse/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/ai/langfuse/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=false

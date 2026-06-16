@@ -1,0 +1,95 @@
+langfuse:
+  telemetryEnabled: false
+  salt:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: salt
+  nextauth:
+    url: https://langfuse.lab.the-lab.zone
+    secret:
+      secretKeyRef:
+        name: langfuse-secrets
+        key: nextauthSecret
+  encryptionKey:
+    secretKeyRef:
+      name: langfuse-secrets
+      key: encryptionKey
+
+  web:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+  worker:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1536Mi
+
+  additionalEnv:
+    # ClickHouse single-node — SEM cluster (não há Keeper → ON CLUSTER trava)
+    - name: CLICKHOUSE_CLUSTER_ENABLED
+      value: "false"
+    - name: CLICKHOUSE_DB
+      value: default
+    # S3 / Garage (uso os env canônicos; mais estáveis que as subchaves do chart)
+    - name: LANGFUSE_S3_EVENT_UPLOAD_ENABLED
+      value: "true"
+    - name: LANGFUSE_S3_EVENT_UPLOAD_BUCKET
+      value: langfuse
+    - name: LANGFUSE_S3_EVENT_UPLOAD_REGION
+      value: garage
+    - name: LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT
+      value: http://garage.data.svc.cluster.local:3900
+    - name: LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE
+      value: "true"
+    - name: LANGFUSE_S3_EVENT_UPLOAD_PREFIX
+      value: events/
+    - name: LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-secrets
+          key: s3AccessKeyId
+    - name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-secrets
+          key: s3SecretAccessKey
+
+postgresql:
+  deploy: false
+  host: cnpg-cluster-rw.data.svc.cluster.local
+  port: 5432
+  auth:
+    username: langfuse
+    database: langfuse
+    existingSecret: langfuse-secrets
+    secretKeys:
+      userPasswordKey: pgPassword
+
+clickhouse:
+  deploy: false
+  host: clickhouse-clickhouse.data.svc.cluster.local
+  auth:
+    username: langfuse
+    existingSecret: langfuse-secrets
+    secretKeys:
+      userPasswordKey: chPassword
+
+redis:
+  deploy: false
+  host: valkey.data.svc.cluster.local
+  port: 6379
+  auth:
+    existingSecret: langfuse-secrets
+    secretKeys:
+      userPasswordKey: redisPassword
+
+s3:
+  deploy: false
