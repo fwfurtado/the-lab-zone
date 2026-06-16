@@ -8,186 +8,531 @@ metadata:
 data:
   garage-dashboard.json: |
     {
-      "__inputs": [
-        {
-          "name": "DS_VICTORIAMETRICS",
-          "label": "VictoriaMetrics",
-          "type": "datasource",
-          "pluginId": "prometheus"
-        }
-      ],
       "title": "Garage S3",
       "uid": "garage-s3",
       "schemaVersion": 38,
       "version": 1,
       "refresh": "30s",
-      "time": { "from": "now-1h", "to": "now" },
+      "time": {
+        "from": "now-1h",
+        "to": "now"
+      },
       "panels": [
         {
           "id": 1,
           "title": "Cluster Health",
           "type": "stat",
-          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 4,
+            "h": 4
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
           "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
             "colorMode": "background",
             "graphMode": "none"
           },
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                { "type": "value", "options": { "1": { "text": "Healthy", "color": "green" }, "0": { "text": "Unhealthy", "color": "red" } } }
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "Healthy",
+                      "color": "green"
+                    },
+                    "0": {
+                      "text": "Unhealthy",
+                      "color": "red"
+                    }
+                  }
+                }
               ],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
             }
           },
-          "targets": [{ "expr": "cluster_healthy{job=~\".*garage.*\"}", "legendFormat": "Healthy" }]
+          "targets": [
+            {
+              "expr": "cluster_healthy{job=~\".*garage.*\"}",
+              "legendFormat": "Healthy"
+            }
+          ]
         },
         {
           "id": 2,
           "title": "Cluster Available",
           "type": "stat",
-          "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
+          "gridPos": {
+            "x": 4,
+            "y": 0,
+            "w": 4,
+            "h": 4
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
           "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
             "colorMode": "background",
             "graphMode": "none"
           },
           "fieldConfig": {
             "defaults": {
               "mappings": [
-                { "type": "value", "options": { "1": { "text": "Available", "color": "green" }, "0": { "text": "Unavailable", "color": "red" } } }
+                {
+                  "type": "value",
+                  "options": {
+                    "1": {
+                      "text": "Available",
+                      "color": "green"
+                    },
+                    "0": {
+                      "text": "Unavailable",
+                      "color": "red"
+                    }
+                  }
+                }
               ],
-              "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
             }
           },
-          "targets": [{ "expr": "cluster_available{job=~\".*garage.*\"}", "legendFormat": "Available" }]
+          "targets": [
+            {
+              "expr": "cluster_available{job=~\".*garage.*\"}",
+              "legendFormat": "Available"
+            }
+          ]
         },
         {
           "id": 3,
           "title": "Connected Nodes",
           "type": "stat",
-          "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
-          "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } } },
-          "targets": [{ "expr": "cluster_connected_nodes{job=~\".*garage.*\"}", "legendFormat": "Connected" }]
+          "gridPos": {
+            "x": 8,
+            "y": 0,
+            "w": 4,
+            "h": 4
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "cluster_connected_nodes{job=~\".*garage.*\"}",
+              "legendFormat": "Connected"
+            }
+          ]
         },
         {
           "id": 4,
           "title": "Partitions OK",
           "type": "stat",
-          "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
-          "fieldConfig": { "defaults": { "unit": "short" } },
+          "gridPos": {
+            "x": 12,
+            "y": 0,
+            "w": 4,
+            "h": 4
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            }
+          },
           "targets": [
-            { "expr": "cluster_partitions_all_ok{job=~\".*garage.*\"}", "legendFormat": "All OK" },
-            { "expr": "cluster_partitions{job=~\".*garage.*\"}", "legendFormat": "Total" }
+            {
+              "expr": "cluster_partitions_all_ok{job=~\".*garage.*\"}",
+              "legendFormat": "All OK"
+            },
+            {
+              "expr": "cluster_partitions{job=~\".*garage.*\"}",
+              "legendFormat": "Total"
+            }
           ]
         },
         {
           "id": 5,
           "title": "Disk Available",
           "type": "stat",
-          "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
-          "fieldConfig": { "defaults": { "unit": "bytes", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 10000000000 }, { "color": "green", "value": 50000000000 }] } } },
-          "targets": [{ "expr": "garage_local_disk_avail{job=~\".*garage.*\",volume=\"data\"}", "legendFormat": "Available" }]
+          "gridPos": {
+            "x": 16,
+            "y": 0,
+            "w": 4,
+            "h": 4
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 10000000000
+                  },
+                  {
+                    "color": "green",
+                    "value": 50000000000
+                  }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "garage_local_disk_avail{job=~\".*garage.*\",volume=\"data\"}",
+              "legendFormat": "Available"
+            }
+          ]
         },
         {
           "id": 6,
           "title": "Garage Version",
           "type": "stat",
-          "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "none", "graphMode": "none", "textMode": "name" },
-          "fieldConfig": { "defaults": {} },
-          "targets": [{ "expr": "garage_build_info{job=~\".*garage.*\"}", "legendFormat": "{{version}}" }]
+          "gridPos": {
+            "x": 20,
+            "y": 0,
+            "w": 4,
+            "h": 4
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "none",
+            "graphMode": "none",
+            "textMode": "name"
+          },
+          "fieldConfig": {
+            "defaults": {}
+          },
+          "targets": [
+            {
+              "expr": "garage_build_info{job=~\".*garage.*\"}",
+              "legendFormat": "{{version}}"
+            }
+          ]
         },
         {
           "id": 7,
           "title": "S3 Request Rate",
           "type": "timeseries",
-          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "lineWidth": 1 } } },
+          "gridPos": {
+            "x": 0,
+            "y": 4,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 1
+              }
+            }
+          },
           "targets": [
-            { "expr": "sum(rate(api_s3_request_counter{job=~\".*garage.*\"}[5m])) by (api_endpoint)", "legendFormat": "{{api_endpoint}}" }
+            {
+              "expr": "sum(rate(api_s3_request_counter{job=~\".*garage.*\"}[5m])) by (api_endpoint)",
+              "legendFormat": "{{api_endpoint}}"
+            }
           ]
         },
         {
           "id": 8,
           "title": "S3 Error Rate",
           "type": "timeseries",
-          "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "fieldConfig": { "defaults": { "unit": "reqps", "color": { "fixedColor": "red", "mode": "fixed" }, "custom": { "lineWidth": 1 } } },
+          "gridPos": {
+            "x": 12,
+            "y": 4,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "color": {
+                "fixedColor": "red",
+                "mode": "fixed"
+              },
+              "custom": {
+                "lineWidth": 1
+              }
+            }
+          },
           "targets": [
-            { "expr": "sum(rate(api_s3_error_counter{job=~\".*garage.*\"}[5m])) by (api_endpoint, status_code)", "legendFormat": "{{api_endpoint}} ({{status_code}})" }
+            {
+              "expr": "sum(rate(api_s3_error_counter{job=~\".*garage.*\"}[5m])) by (api_endpoint, status_code)",
+              "legendFormat": "{{api_endpoint}} ({{status_code}})"
+            }
           ]
         },
         {
           "id": 9,
           "title": "S3 Request Latency (p50/p95/p99)",
           "type": "timeseries",
-          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 1 } } },
+          "gridPos": {
+            "x": 0,
+            "y": 12,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 1
+              }
+            }
+          },
           "targets": [
-            { "expr": "histogram_quantile(0.50, sum(rate(api_s3_request_duration_bucket{job=~\".*garage.*\"}[5m])) by (le))", "legendFormat": "p50" },
-            { "expr": "histogram_quantile(0.95, sum(rate(api_s3_request_duration_bucket{job=~\".*garage.*\"}[5m])) by (le))", "legendFormat": "p95" },
-            { "expr": "histogram_quantile(0.99, sum(rate(api_s3_request_duration_bucket{job=~\".*garage.*\"}[5m])) by (le))", "legendFormat": "p99" }
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(api_s3_request_duration_bucket{job=~\".*garage.*\"}[5m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(api_s3_request_duration_bucket{job=~\".*garage.*\"}[5m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(api_s3_request_duration_bucket{job=~\".*garage.*\"}[5m])) by (le))",
+              "legendFormat": "p99"
+            }
           ]
         },
         {
           "id": 10,
           "title": "Disk Usage",
           "type": "timeseries",
-          "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 1 } } },
+          "gridPos": {
+            "x": 12,
+            "y": 12,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "lineWidth": 1
+              }
+            }
+          },
           "targets": [
-            { "expr": "garage_local_disk_total{job=~\".*garage.*\",volume=\"data\"}", "legendFormat": "Total" },
-            { "expr": "garage_local_disk_avail{job=~\".*garage.*\",volume=\"data\"}", "legendFormat": "Available" },
-            { "expr": "garage_local_disk_total{job=~\".*garage.*\",volume=\"data\"} - garage_local_disk_avail{job=~\".*garage.*\",volume=\"data\"}", "legendFormat": "Used" }
+            {
+              "expr": "garage_local_disk_total{job=~\".*garage.*\",volume=\"data\"}",
+              "legendFormat": "Total"
+            },
+            {
+              "expr": "garage_local_disk_avail{job=~\".*garage.*\",volume=\"data\"}",
+              "legendFormat": "Available"
+            },
+            {
+              "expr": "garage_local_disk_total{job=~\".*garage.*\",volume=\"data\"} - garage_local_disk_avail{job=~\".*garage.*\",volume=\"data\"}",
+              "legendFormat": "Used"
+            }
           ]
         },
         {
           "id": 11,
           "title": "Table Sizes",
           "type": "bargauge",
-          "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "horizontal", "displayMode": "gradient" },
-          "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } } },
-          "targets": [{ "expr": "table_size{job=~\".*garage.*\"} > 0", "legendFormat": "{{table_name}}" }]
+          "gridPos": {
+            "x": 0,
+            "y": 20,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "orientation": "horizontal",
+            "displayMode": "gradient"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "table_size{job=~\".*garage.*\"} > 0",
+              "legendFormat": "{{table_name}}"
+            }
+          ]
         },
         {
           "id": 12,
           "title": "Block Resync Queue",
           "type": "timeseries",
-          "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "${DS_VICTORIAMETRICS}" },
-          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 1 } } },
+          "gridPos": {
+            "x": 12,
+            "y": 20,
+            "w": 12,
+            "h": 8
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "P4169E866C3094E38"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "lineWidth": 1
+              }
+            }
+          },
           "targets": [
-            { "expr": "block_resync_queue_length{job=~\".*garage.*\"}", "legendFormat": "Resync Queue" },
-            { "expr": "block_resync_errored_blocks{job=~\".*garage.*\"}", "legendFormat": "Errored Blocks" },
-            { "expr": "block_rc_size{job=~\".*garage.*\"}", "legendFormat": "RC Size" }
+            {
+              "expr": "block_resync_queue_length{job=~\".*garage.*\"}",
+              "legendFormat": "Resync Queue"
+            },
+            {
+              "expr": "block_resync_errored_blocks{job=~\".*garage.*\"}",
+              "legendFormat": "Errored Blocks"
+            },
+            {
+              "expr": "block_rc_size{job=~\".*garage.*\"}",
+              "legendFormat": "RC Size"
+            }
           ]
         }
       ],
       "templating": {
-        "list": [
-          {
-            "name": "DS_VICTORIAMETRICS",
-            "type": "datasource",
-            "pluginId": "prometheus",
-            "label": "Datasource"
-          }
-        ]
+        "list": []
       }
     }
