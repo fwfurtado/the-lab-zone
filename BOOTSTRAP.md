@@ -1403,6 +1403,71 @@ kubectl get pvc -n observability
           insecureSkipVerify: true
 ```
 
+### MTU do overlay Cilium: resposta grande de scrape sendo black-holed cross-node
+ 
+- **Sintoma:** target `serviceScrape/observability/victoria-metrics-victoria-metrics-operator` DOWN com `cannot perform request ... context deadline exceeded (Client.Timeout exceeded while awaiting headers)`, `duration 10001ms`, `never scraped`, 0 samples. Selectors corretos e endpoint descoberto (o target aparece, só não coleta). De um pod no worker-1, `curl` cross-node no `/health` (porta 8081) respondia instantâneo, mas o `/metrics` (8080) conectava (`connect=0.001`) e morria com `0 bytes received`.
+- **Causa:** Cilium em `Tunnel [vxlan]` não descontou os ~50 bytes de overhead do encapsulamento. O auto-detect pegou o MTU 1500 do `ens18` e repassou inteiro pro overlay — `cilium_host`, `cilium_vxlan` e **todos** os `lxc*` ficaram em 1500. Pod emite frame de 1500 → encapsulado vira ~1550 → estoura os 1500 do underlay (1GbE onboard, sem jumbo) → dropado. Pacote pequeno (`/health`, 2 bytes) passa; resposta grande (`/metrics`) morre. **Afeta todo tráfego cross-node com payload grande, não só o VM.**
+- **Diagnóstico:**
+  - Endpoint pequeno vs grande, do mesmo nó, direto no pod IP — o `/health` passa, o `/metrics` trava no `ttfb`:
+```bash
+    curl -sv --max-time 15 -o /dev/null -w 'connect=%{time_connect} ttfb=%{time_starttransfer}\n' \
+      http://<pod-ip>:8080/metrics
+```
+  - Underlay nó-a-nó **está limpo** em 1500 (descarta rede física), via netshoot `hostNetwork` no `kube-system` (o `default` recusa `hostNetwork` por PodSecurity baseline):
+```bash
+    kubectl -n kube-system run dbg-host --rm -it --restart=Never \
+      --overrides='{"spec":{"hostNetwork":true,"nodeName":"worker-1"}}' \
+      --image=nicolaka/netshoot -- ping -M do -s 1472 10.40.6.22   # passa (1472+28=1500)
+```
+  - O agente do Cilium roda em `hostNetwork`, então `ip -d link` lá dentro mostra as interfaces do nó — `cilium_host`/`cilium_vxlan`/`lxc*` todos em `mtu 1500` = overhead não descontado:
+```bash
+    kubectl -n kube-system exec ds/cilium -- ip link show | grep -E 'lxc.*mtu'
+```
+- **Fix:** `MTU: 1450` explícito (chave top-level) em `apps/core/cilium/values.yaml`. Neste cluster o Cilium usa esse valor direto como MTU de pod (não subtrai outro overhead), então pods ficam em 1450, encapsulado bate 1500 e cabe. Após o sync (`rollOutCiliumPods: true` rola o DaemonSet sozinho), **recriar os pods existentes** — o veth só pega o MTU novo ao recriar:
+```bash
+  kubectl -n observability rollout restart deploy/victoria-metrics-victoria-metrics-operator
+  kubectl -n observability rollout restart deploy/vmagent-victoria-metrics-vmks
+  # confere: cilium_host deve cair pra 1450
+  kubectl -n kube-system exec ds/cilium -- ip -d link show cilium_host | grep -oE 'mtu [0-9]+'
+```
+- **Lição:** Cilium VXLAN sobre underlay 1500 sem jumbo exige `MTU` explícito quando o auto-detect não desconta o overhead. Assinatura clássica: "pequeno passa, grande trava", `awaiting headers` com TCP conectando. É cluster-wide — provavelmente explica timeouts intermitentes não relacionados ao VM. Subir o MTU no underlay (jumbo end-to-end) seria a alternativa, mas exige NIC + switch coerentes.
+---
+ 
+### Webhook cert do VM Operator em churn sob ArgoCD (`bad certificate` + `FailedMount`)
+ 
+- **Sintoma:** bursts intermitentes (~a cada sync) de `http: TLS handshake error from <IP>: remote error: tls: bad certificate` nos logs do operator, vindos de IPs nos CIDRs de pod dos três control-planes (`10.245.0.x`/`1.x`/`2.x`), cada burst seguido de `certwatcher Updated current TLS certificate`. Em paralelo, eventos `MountVolume.SetUp failed for volume "cert" : secret "victoria-metrics-victoria-metrics-operator-validation" not found` no pod do operator, com restarts.
+- **Causa:** o cert do webhook era **Helm-generated**, que usa a função `lookup` do Helm pra reaproveitar o cert já existente no secret. O ArgoCD renderiza com `helm template` e **não respeita `lookup`** — a cada sync gera cert + caBundle novos. Com `prune: true`, o secret é recriado, abrindo uma janela em que ele não existe → `FailedMount` → restart do operator → reabre a janela de `bad certificate`. Loop auto-sustentado. Os `bad certificate` são os **três apiservers** (hostNetwork, mascarados pro IP de `cilium_host` do seu nó — daí aparecerem como IP de pod-CIDR) rejeitando o cert servido enquanto o `caBundle` no `ValidatingWebhookConfiguration` está dessincronizado.
+- **Diagnóstico:**
+  - bursts sempre seguidos de `Updated current TLS certificate` = cert em rotação contínua.
+  - `argocd app get victoria-metrics` mostrando o `Secret ...-validation` com status `Pruned`.
+  - `Serving metrics server bindAddress=:8080 secure=false` no log confirma que as métricas são HTTP puro — descarta confusão com o problema de MTU acima.
+- **Fix:** migrar o cert pro cert-manager (já rodando no cluster). Em `apps/observability/victoria-metrics/values.yaml`, sob `victoria-metrics-operator`:
+```yaml
+  admissionWebhooks:
+    enabled: true
+    certManager:
+      enabled: true   # cria Issuer (selfSigned) + Certificate; cainjector mantém o caBundle
+```
+  E em `apps/observability/victoria-metrics/app.yaml`, ignorar o `caBundle` que o cainjector injeta (senão o app fica piscando OutOfSync):
+```yaml
+  spec:
+    ignoreDifferences:
+      - group: admissionregistration.k8s.io
+        kind: ValidatingWebhookConfiguration
+        jqPathExpressions:
+          - '.webhooks[]?.clientConfig.caBundle'
+```
+- **Validação:**
+```bash
+  kubectl -n observability get certificate            # validation + root-ca → READY True
+  kubectl -n observability get secret victoria-metrics-victoria-metrics-operator-validation \
+    -o jsonpath='{.metadata.labels}'                  # só controller.cert-manager.io/fao
+  kubectl -n observability logs deploy/victoria-metrics-victoria-metrics-operator \
+    --since=3m | grep -c 'bad certificate'            # 0
+```
+  O secret ficar **sem** o label `app.kubernetes.io/instance` é o que garante que o ArgoCD não o reivindica nem pruna — é o cert-manager o dono, fora do desired-state do app.
+- **Lição:** documentado pela própria VictoriaMetrics — k8s-stack via ArgoCD **sem** cert-manager churna o cert do webhook porque o `lookup` do Helm não é respeitado. Com cert-manager no cluster, `certManager.enabled: true` é a escolha certa e elimina o loop. Isso dá o fix **permanente** pro restart-paliativo registrado no Incidente 10 da Fase 6.
+
 ---
 
 # Fase 6 — Plataforma de Dados
