@@ -100,3 +100,25 @@ defaultRules:
 defaultDashboards:
   annotations:
     argocd.argoproj.io/sync-options: ServerSideApply=true
+
+# kube-controller-manager e kube-scheduler expõem métricas com cert válido apenas
+# para localhost — após configurar bind-address: 0.0.0.0 no Talos, o scrape funciona
+# mas o TLS falha na verificação. insecureSkipVerify: true é seguro aqui pois
+# o tráfego é interno ao cluster e não passa por redes externas.
+kubeControllerManager:
+  spec:
+    jobLabel: app.kubernetes.io/component
+    endpoints:
+      - port: http-metrics
+        scheme: https
+        tlsConfig:
+          insecureSkipVerify: true
+
+kubeScheduler:
+  spec:
+    jobLabel: app.kubernetes.io/component
+    endpoints:
+      - port: http-metrics
+        scheme: https
+        tlsConfig:
+          insecureSkipVerify: true
