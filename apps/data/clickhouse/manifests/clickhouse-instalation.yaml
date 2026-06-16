@@ -21,6 +21,17 @@ spec:
       backup/networks/ip: "::/0"
 
     files:
+      # Habilita endpoint Prometheus na porta 9363
+      "config.d/prometheus.xml": |
+        <clickhouse>
+          <prometheus>
+            <endpoint>/metrics</endpoint>
+            <port>9363</port>
+            <metrics>true</metrics>
+            <events>true</events>
+            <asynchronous_metrics>true</asynchronous_metrics>
+          </prometheus>
+        </clickhouse>
       # Arquivo de usuários com hashes SHA256 vindos do Secret via volumeMount
       # O operator monta files/ como /etc/clickhouse-server/config.d/
       "users.d/custom-users.xml": |
@@ -46,19 +57,6 @@ spec:
     settings:
       timezone: UTC
       compression/case/method: zstd
-
-    # Habilita endpoint Prometheus na porta 9363
-    files:
-      "config.d/prometheus.xml": |
-        <clickhouse>
-          <prometheus>
-            <endpoint>/metrics</endpoint>
-            <port>9363</port>
-            <metrics>true</metrics>
-            <events>true</events>
-            <asynchronous_metrics>true</asynchronous_metrics>
-          </prometheus>
-        </clickhouse>
 
     clusters:
       - name: default
