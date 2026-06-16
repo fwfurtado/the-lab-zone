@@ -37,6 +37,8 @@ langfuse:
     # ClickHouse single-node — SEM cluster (não há Keeper → ON CLUSTER trava)
     - name: CLICKHOUSE_CLUSTER_ENABLED
       value: "false"
+    - name: AUTH_DISABLE_SIGNUP
+      value: "true"
 
 postgresql:
   deploy: false
