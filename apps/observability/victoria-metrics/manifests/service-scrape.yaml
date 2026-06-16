@@ -1,0 +1,45 @@
+# VMServiceScrapes customizados para kube-controller-manager e kube-scheduler
+# Os defaults do chart usam serverName: kubernetes que falha com TLS dos componentes
+# do Talos. insecureSkipVerify é seguro aqui — tráfego interno ao cluster.
+
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: kube-controller-manager
+  namespace: observability
+spec:
+  jobLabel: app.kubernetes.io/component
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: kube-controller-manager
+      app.kubernetes.io/instance: victoria-metrics
+  endpoints:
+    - port: http-metrics
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: kube-scheduler
+  namespace: observability
+spec:
+  jobLabel: app.kubernetes.io/component
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: kube-scheduler
+      app.kubernetes.io/instance: victoria-metrics
+  endpoints:
+    - port: http-metrics
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
