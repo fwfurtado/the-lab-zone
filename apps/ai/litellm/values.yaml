@@ -57,6 +57,53 @@ proxy_config:
         api_base: https://openrouter.ai/api/v1
         api_key: os.environ/OPENROUTER_API_KEY
 
+    # --- gratuitos (:free — rate limit por dia, ver nota) ---
+    - model_name: qwen3-coder-free
+      litellm_params:
+        model: openrouter/qwen/qwen3-coder:free
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: qwen3-next-80b-free
+      litellm_params:
+        model: openrouter/qwen/qwen3-next-80b-a3b-instruct:free
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: gemma-4-26b-free
+      litellm_params:
+        model: openrouter/google/gemma-4-26b-a4b-it:free
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: gpt-oss-120b-free
+      litellm_params:
+        model: openrouter/openai/gpt-oss-120b:free
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    # --- pagos ---
+    - model_name: minimax-m3
+      litellm_params:
+        model: openrouter/minimax/minimax-m3
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: deepseek-v4-pro
+      litellm_params:
+        model: openrouter/deepseek/deepseek-v4-pro
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: deepseek-v4-flash
+      litellm_params:
+        model: openrouter/deepseek/deepseek-v4-flash
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: qwen3-coder
+      litellm_params:
+        model: openrouter/qwen/qwen3-coder
+        api_key: os.environ/OPENROUTER_API_KEY
+
+    - model_name: qwen3-coder-next
+      litellm_params:
+        model: openrouter/qwen/qwen3-coder-next
+        api_key: os.environ/OPENROUTER_API_KEY
+
   general_settings:
     master_key: os.environ/PROXY_MASTER_KEY
 
