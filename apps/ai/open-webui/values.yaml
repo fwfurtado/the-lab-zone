@@ -70,7 +70,9 @@ route:
   hostnames:
     - chat.lab.the-lab.zone
   parentRefs:
-    - name: main
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: main
       namespace: gateway
       sectionName: https-wildcard
   matches:
