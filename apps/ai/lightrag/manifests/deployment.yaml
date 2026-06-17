@@ -1,0 +1,150 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lightrag
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: lightrag
+spec:
+  replicas: 1
+  # PVC RWO -> Recreate evita dois pods disputando o mesmo volume no rollout.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lightrag
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lightrag
+    spec:
+      # Se o package no ghcr estiver privado, descomente e crie o secret:
+      #   kubectl -n ai create secret docker-registry ghcr-pull \
+      #     --docker-server=ghcr.io --docker-username=fwfurtado \
+      #     --docker-password=$GHCR_PAT
+      # imagePullSecrets:
+      #   - name: ghcr-pull
+      containers:
+        - name: lightrag
+          # Troque pela tag que voce buildar/empurrar (NAO use :latest).
+          image: ofwfurtado/lightrag:observability
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9621
+          envFrom:
+            # Puxa POSTGRES_PASSWORD, LLM/EMBEDDING_BINDING_API_KEY,
+            # LIGHTRAG_API_KEY, TOKEN_SECRET, AUTH_ACCOUNTS,
+            # LANGFUSE_PUBLIC_KEY/SECRET_KEY (chaves = nomes das env vars).
+            - secretRef:
+                name: lightrag-env
+          env:
+            # --- Server ---
+            - name: HOST
+              value: "0.0.0.0"
+            - name: PORT
+              value: "9621"
+            # Workspace e IMUTAVEL apos a 1a ingestao. Isola dados se um dia
+            # subir uma 2a instancia compartilhando os mesmos storages.
+            - name: WORKSPACE
+              value: "lab"
+            # Idioma de nomes de entidade/resumo na extracao. Afeta so ingestoes
+            # NOVAS (nao e re-index global). Termos tecnicos EN sobrevivem.
+            - name: SUMMARY_LANGUAGE
+              value: "Portuguese"
+
+            # --- Storage backends (IMUTAVEL apos o 1o upload) ---
+            - name: LIGHTRAG_KV_STORAGE
+              value: "PGKVStorage"
+            - name: LIGHTRAG_DOC_STATUS_STORAGE
+              value: "PGDocStatusStorage"
+            - name: LIGHTRAG_VECTOR_STORAGE
+              value: "QdrantVectorDBStorage"
+            - name: LIGHTRAG_GRAPH_STORAGE
+              value: "MemgraphStorage"
+
+            # --- CNPG (KV + DocStatus) ---
+            - name: POSTGRES_HOST
+              value: "cnpg-cluster-rw.data.svc.cluster.local"
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: "lightrag"
+            - name: POSTGRES_DATABASE
+              value: "lightrag"
+            - name: POSTGRES_MAX_CONNECTIONS
+              value: "25"
+            # POSTGRES_PASSWORD vem do envFrom (lightrag-env).
+
+            # --- Qdrant (vetor, 4096 dim) ---
+            - name: QDRANT_URL
+              value: "http://qdrant.data.svc.cluster.local:6333"
+
+            # --- Memgraph (grafo) ---
+            - name: MEMGRAPH_URI
+              value: "bolt://memgraph.data.svc.cluster.local:7687"
+            - name: MEMGRAPH_DATABASE
+              value: "memgraph"
+            # Memgraph community senha via ESO
+            - name: MEMGRAPH_USERNAME
+              value: "lightrag"
+
+            # --- LLM (extracao/query) via LiteLLM ---
+            - name: LLM_BINDING
+              value: "openai"
+            - name: LLM_BINDING_HOST
+              value: "http://litellm.ai.svc.cluster.local:4000/v1"
+            - name: LLM_MODEL
+              value: "deepseek-v4-flash-paid"
+            # LLM_BINDING_API_KEY vem do envFrom.
+
+            # --- Embedding via LiteLLM (alias estavel na migracao p/ Ollama) ---
+            - name: EMBEDDING_BINDING
+              value: "openai"
+            - name: EMBEDDING_BINDING_HOST
+              value: "http://litellm.ai.svc.cluster.local:4000/v1"
+            - name: EMBEDDING_MODEL
+              value: "qwen3-embedding"
+            # IMUTAVEL apos o 1o upload:
+            - name: EMBEDDING_DIM
+              value: "4096"
+            # EMBEDDING_BINDING_API_KEY vem do envFrom.
+
+            # --- Langfuse (project rag) ---
+            - name: LANGFUSE_HOST
+              value: "http://langfuse-web.ai.svc.cluster.local:3000"
+            - name: LANGFUSE_ENABLE_TRACE
+              value: "true"
+            # LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY vem do envFrom.
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              # LLM e offloaded pro LiteLLM; memoria escala com volume de docs +
+              # tamanho do KG. 2Gi e confortavel pra comecar.
+              cpu: "2"
+              memory: 2Gi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lightrag-data
