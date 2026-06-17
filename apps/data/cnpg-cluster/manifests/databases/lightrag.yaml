@@ -1,11 +1,11 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
-  name: litellm
+  name: lightrag
   namespace: data
 spec:
-  name: litellm
-  owner: litellm
+  name: lightrag
+  owner: lightrag
   databaseReclaimPolicy: retain
   cluster:
     name: cnpg-cluster
@@ -13,7 +13,7 @@ spec:
 apiVersion: external-secrets.io/v1
 kind: ExternalSecret
 metadata:
-  name: cnpg-role-litellm
+  name: cnpg-role-lightrag
   namespace: data
 spec:
   refreshInterval: 1h
@@ -21,17 +21,17 @@ spec:
     name: onepassword
     kind: ClusterSecretStore
   target:
-    name: cnpg-role-litellm
+    name: cnpg-role-lightrag
     template:
       engineVersion: v2
       type: kubernetes.io/basic-auth
       data:
-        username: "litellm"
-        password: "{{ .password }}"
+        username: "lightrag"
+        password: "{{ .pgPassword }}"
   data:
-    - secretKey: password
+    - secretKey: pgPassword
       remoteRef:
-        key: litellm
+        key: lightrag
         property: pgPassword
         conversionStrategy: Default
         decodingStrategy: None

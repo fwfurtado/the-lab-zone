@@ -55,7 +55,14 @@ cluster:
       superuser: false
       passwordSecret:
         name: cnpg-role-openwebui
-
+    - name: lightrag
+      ensure: present
+      inherit: true
+      connectionLimit: -1
+      login: true
+      superuser: false
+      passwordSecret:
+        name: cnpg-role-lightrag
   # WAL archiving para Garage via barman-object-store
   backup:
     barmanObjectStore:
