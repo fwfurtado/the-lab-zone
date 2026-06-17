@@ -41,6 +41,8 @@ cluster:
         name: cnpg-role-langfuse
     - name: litellm
       ensure: present
+      inherit: true
+      connectionLimit: -1
       login: true
       superuser: false
       passwordSecret:
