@@ -1,0 +1,83 @@
+ollama:
+  enabled: false
+pipelines:
+  enabled: false
+redis:
+  enabled: false
+websocket:
+  enabled: false
+tika:
+  enabled: false
+
+image:
+  repository: ghcr.io/open-webui/open-webui
+  tag: ""
+
+workload:
+  replicaCount: 1
+  strategy:
+    type: Recreate            # PVC RWO — evita deadlock no rolling update
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+service:
+  type: ClusterIP
+  port: 80
+  containerPort: 8080
+
+persistence:
+  enabled: true
+  size: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClass: openebs-hostpath
+  provider: local
+
+# conexão única OpenAI-compatible → LiteLLM
+enableOpenaiApi: true
+openaiBaseApiUrl: "http://litellm.ai.svc.cluster.local:4000/v1"
+openaiApiKeyExistingSecret: open-webui-env
+openaiApiKeyExistingSecretKey: LITELLM_VIRTUAL_KEY
+
+databaseUrl: ""               # vem por DATABASE_URL no extraEnvVars
+
+extraEnvVars:
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: open-webui-env
+        key: DATABASE_URL
+  - name: WEBUI_SECRET_KEY
+    valueFrom:
+      secretKeyRef:
+        name: open-webui-env
+        key: WEBUI_SECRET_KEY
+  - name: ENABLE_OLLAMA_API
+    value: "false"
+  - name: ENABLE_FORWARD_USER_INFO_HEADERS
+    value: "true"
+  - name: WEBUI_URL
+    value: "https://chat.lab.the-lab.zone"
+
+route:
+  enabled: true
+  apiVersion: gateway.networking.k8s.io/v1
+  kind: HTTPRoute
+  hostnames:
+    - chat.lab.the-lab.zone
+  parentRefs:
+    - name: main
+      namespace: gateway
+      sectionName: https-wildcard
+  matches:
+    - path:
+        type: PathPrefix
+        value: /
+
+sso:
+  enabled: false # auth nativa até o Authentik (Fase 9)

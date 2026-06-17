@@ -108,6 +108,7 @@ proxy_config:
 
   general_settings:
     master_key: os.environ/PROXY_MASTER_KEY
+    user_header_name: X-OpenWebUI-User-Id
 
   litellm_settings:
     success_callback:
