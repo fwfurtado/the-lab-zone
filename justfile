@@ -3,6 +3,7 @@ import "infra/prod/justfile"
 mod bootstrap
 mod argo
 mod garage
+mod litellm
 
 @setup:
     mkdir -p ~/.config/sops/age
