@@ -3,7 +3,8 @@ kind: Application
 metadata:
   name: litellm
   namespace: argocd
-  annotations: { argocd.argoproj.io/sync-wave: "2" }
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   project: ai
   sources:
