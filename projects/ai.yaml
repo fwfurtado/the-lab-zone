@@ -8,7 +8,7 @@ spec:
   sourceRepos:
     - https://github.com/fwfurtado/the-lab-zone.git
     - https://langfuse.github.io/langfuse-k8s
-    - oci://ghcr.io/berriai
+    - ghcr.io/berriai
   destinations:
     - server: https://kubernetes.default.svc
       namespace: ai

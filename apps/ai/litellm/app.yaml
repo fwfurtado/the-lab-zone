@@ -8,7 +8,7 @@ metadata:
 spec:
   project: ai
   sources:
-    - repoURL: oci://ghcr.io/berriai # OCI
+    - repoURL: ghcr.io/berriai # OCI
       chart: litellm-helm
       targetRevision: "1.89.1"
       helm:
