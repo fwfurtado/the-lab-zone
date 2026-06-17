@@ -58,8 +58,6 @@ extraEnvVars:
       secretKeyRef:
         name: open-webui-env
         key: WEBUI_SECRET_KEY
-  - name: ENABLE_OLLAMA_API
-    value: "false"
   - name: ENABLE_FORWARD_USER_INFO_HEADERS
     value: "true"
   - name: WEBUI_URL
