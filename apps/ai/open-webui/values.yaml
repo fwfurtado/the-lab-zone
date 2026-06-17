@@ -1,5 +1,21 @@
 pipelines:
   enabled: true
+  extraEnvVars:
+    - name: PIPELINES_URLS
+      value: "https://raw.githubusercontent.com/open-webui/pipelines/main/examples/filters/langfuse_filter_pipeline.py"
+    - name: LANGFUSE_PUBLIC_KEY
+      valueFrom:
+        secretKeyRef:
+          name: open-webui-pipelines-env
+          key: LANGFUSE_PUBLIC_KEY
+    - name: LANGFUSE_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: open-webui-pipelines-env
+          key: LANGFUSE_SECRET_KEY
+    - name: LANGFUSE_HOST
+      value: "http://langfuse-web.ai.svc.cluster.local:3000"
+
 ollama:
   enabled: false
 redis:
