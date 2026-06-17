@@ -42,8 +42,8 @@ persistence:
 # conexão única OpenAI-compatible → LiteLLM
 enableOpenaiApi: true
 openaiBaseApiUrl: "http://litellm.ai.svc.cluster.local:4000/v1"
-openaiApiKeyExistingSecret: open-webui-env
-openaiApiKeyExistingSecretKey: LITELLM_VIRTUAL_KEY
+openaiApiKeysExistingSecret: open-webui-env
+openaiApiKeysExistingSecretKey: OPENAI_API_KEYS
 
 databaseUrl: ""               # vem por DATABASE_URL no extraEnvVars
 
@@ -62,6 +62,8 @@ extraEnvVars:
     value: "true"
   - name: WEBUI_URL
     value: "https://chat.lab.the-lab.zone"
+  - name: ENABLE_PERSISTENT_CONFIG
+    value: "false"
 
 route:
   enabled: true
