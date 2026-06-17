@@ -1,6 +1,6 @@
-ollama:
-  enabled: false
 pipelines:
+  enabled: true
+ollama:
   enabled: false
 redis:
   enabled: false
@@ -15,8 +15,6 @@ image:
 
 workload:
   replicaCount: 1
-  strategy:
-    type: Recreate            # PVC RWO — evita deadlock no rolling update
 
 resources:
   requests:
