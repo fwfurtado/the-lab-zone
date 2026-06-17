@@ -46,7 +46,7 @@ proxyConfigMap:
   create: true
 proxy_config:
   model_list:
-    - model_name: kimi-k2.7-code
+    - model_name: kimi-k2.7-code-paid
       litellm_params:
         model: openrouter/moonshotai/kimi-k2.7-code
         api_key: os.environ/OPENROUTER_API_KEY
@@ -58,48 +58,50 @@ proxy_config:
         api_key: os.environ/OPENROUTER_API_KEY
 
     # --- gratuitos (:free — rate limit por dia, ver nota) ---
-    - model_name: qwen3-coder-free
+    - model_name: qwen3-coder
       litellm_params:
         model: openrouter/qwen/qwen3-coder:free
         api_key: os.environ/OPENROUTER_API_KEY
 
-    - model_name: qwen3-next-80b-free
+    - model_name: qwen3-next-80b
       litellm_params:
         model: openrouter/qwen/qwen3-next-80b-a3b-instruct:free
         api_key: os.environ/OPENROUTER_API_KEY
 
-    - model_name: gemma-4-26b-free
+    - model_name: gemma-4-26b
       litellm_params:
         model: openrouter/google/gemma-4-26b-a4b-it:free
         api_key: os.environ/OPENROUTER_API_KEY
 
-    - model_name: gpt-oss-120b-free
+    - model_name: gpt-oss-120b
       litellm_params:
         model: openrouter/openai/gpt-oss-120b:free
         api_key: os.environ/OPENROUTER_API_KEY
 
     # --- pagos ---
-    - model_name: minimax-m3
+    - model_name: minimax-m3-paid
       litellm_params:
         model: openrouter/minimax/minimax-m3
         api_key: os.environ/OPENROUTER_API_KEY
 
-    - model_name: deepseek-v4-pro
+    - model_name: deepseek-v4-pro-paid
       litellm_params:
         model: openrouter/deepseek/deepseek-v4-pro
         api_key: os.environ/OPENROUTER_API_KEY
 
-    - model_name: deepseek-v4-flash
+    - model_name: deepseek-v4-flash-paid
       litellm_params:
         model: openrouter/deepseek/deepseek-v4-flash
         api_key: os.environ/OPENROUTER_API_KEY
 
-    - model_name: qwen3-coder
+    - model_name: qwen3-coder-paid
       litellm_params:
         model: openrouter/qwen/qwen3-coder
         api_key: os.environ/OPENROUTER_API_KEY
+      model_info:
+        hidden: true
 
-    - model_name: qwen3-coder-next
+    - model_name: qwen3-coder-next-paid
       litellm_params:
         model: openrouter/qwen/qwen3-coder-next
         api_key: os.environ/OPENROUTER_API_KEY
@@ -110,4 +112,14 @@ proxy_config:
   litellm_settings:
     success_callback:
       - "langfuse"
+    num_retries: 2
+    fallbacks:
+      - "qwen3-coder":
+          - "qwen3-coder-paid"
+      - "gpt-oss-120b":
+          - "deepseek-v4-flash-paid"
+      - "qwen3-next-80b":
+          - "deepseek-v4-flash-paid"
+      - "gemma-4-26b":
+          - "deepseek-v4-flash-paid"
     # LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST vêm do litellm-env
