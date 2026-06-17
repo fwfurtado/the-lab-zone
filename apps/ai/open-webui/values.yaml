@@ -14,7 +14,10 @@ image:
   tag: ""
 
 workload:
+  kind: Deployment
   replicaCount: 1
+  strategy:
+    type: Recreate
 
 resources:
   requests:
