@@ -114,12 +114,7 @@ proxy_config:
       - "langfuse"
     num_retries: 2
     fallbacks:
-      - "qwen3-coder":
-          - "qwen3-coder-paid"
-      - "gpt-oss-120b":
-          - "deepseek-v4-flash-paid"
-      - "qwen3-next-80b":
-          - "deepseek-v4-flash-paid"
-      - "gemma-4-26b":
-          - "deepseek-v4-flash-paid"
-    # LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST vêm do litellm-env
+      - { "qwen3-coder": ["qwen3-coder-paid"] }
+      - { "gpt-oss-120b": ["deepseek-v4-flash-paid"] }
+      - { "qwen3-next-80b": ["deepseek-v4-flash-paid"] }
+      - { "gemma-4-26b": ["deepseek-v4-flash-paid"] }
