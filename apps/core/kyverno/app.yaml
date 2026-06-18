@@ -1,0 +1,65 @@
+# Kyverno — engine de policy (admission + background controllers).
+# Multi-source:
+#   1) chart Helm oficial (kyverno/kyverno), values vindos do git via $values
+#   2) ref `values` -> aponta pro repo pra resolver o $values acima
+#   3) path manifests -> renderiza a(s) ClusterPolicy(ies); fica no MESMO app que o
+#      chart pra garantir a ordem CRD/controllers -> policy via sync-wave (a policy
+#      tem wave alta e so aplica depois do Kyverno estar Healthy).
+#
+# Notas ArgoCD + chart do Kyverno:
+#   - ServerSideApply=true: os CRDs do Kyverno sao grandes e estouram o limite da
+#     annotation last-applied do kubectl (client-side). SSA resolve e tambem evita
+#     briga nas aggregated ClusterRoles (campos gerenciados pelo agregador do k8s).
+#   - Namespace dedicado `kyverno` (requisito do Kyverno: nao co-locar com outras apps).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"   # bem cedo: e dependencia de quem usa policies
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: core
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  sources:
+    # 1) chart oficial; values resolvidos do repo via $values
+    - repoURL: https://kyverno.github.io/kyverno/
+      chart: kyverno
+      targetRevision: 3.8.1
+      helm:
+        releaseName: kyverno
+        valueFiles:
+          - $values/apps/core/kyverno/values.yaml
+    # 2) ref pro repo (resolve o $values acima) — sem path, so referencia
+    - repoURL: https://github.com/fwfurtado/the-lab-zone
+      targetRevision: main
+      ref: values
+    # 3) manifests proprios (a ClusterPolicy) renderizados deste path
+    - repoURL: https://github.com/fwfurtado/the-lab-zone
+      targetRevision: main
+      path: apps/core/kyverno/manifests
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+  # As aggregated ClusterRoles do Kyverno tem `.rules` populadas dinamicamente pelo
+  # agregador do k8s. Com SSA normalmente nem aparece drift, mas se aparecer
+  # OutOfSync nelas, este ignore resolve.
+  ignoreDifferences:
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+      jqPathExpressions:
+        - '.rules'

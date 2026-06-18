@@ -1,0 +1,22 @@
+# Kyverno — perfil homelab (single-replica; HA nao necessario).
+# Os defaults do chart ja sobem 1 replica por controller, entao aqui so enxugamos
+# o que nao usamos. Tuning fino de recursos: ver o values reference do chart em
+# https://artifacthub.io/packages/helm/kyverno/kyverno?modal=values
+#
+# Controllers do Kyverno:
+#   - admissionController  (obrigatorio) -> faz a mutacao na admissao (nossa policy depende dele)
+#   - backgroundController (gera/atualiza policy reports; necessario p/ mutateExisting)
+#   - reportsController    (PolicyReports — visibilidade do que foi mutado/validado)
+#   - cleanupController    (CleanupPolicy/TTL de recursos) -> NAO usamos
+
+# Nao usamos CleanupPolicy -> desliga p/ economizar recursos
+cleanupController:
+  enabled: false
+
+# PolicyReports sao uteis pra auditar a policy (ver quais Services foram mutados).
+# Se quiser enxugar ainda mais no inicio, da pra desligar os dois abaixo —
+# a MUTACAO continua funcionando so com o admissionController:
+# backgroundController:
+#   enabled: false
+# reportsController:
+#   enabled: false
