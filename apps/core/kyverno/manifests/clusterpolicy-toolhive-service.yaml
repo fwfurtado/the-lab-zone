@@ -1,0 +1,58 @@
+# Forca sessionAffinity: None no Service de BACKEND dos MCPServers do ToolHive.
+#
+# PORQUE: o proxy do ToolHive cria o Service de backend (mcp-<nome>, ClusterIP) com
+# sessionAffinity: ClientIP. Em Cilium, quando o pod de backend troca de IP, o pin
+# de afinidade do proxy aponta pra um pod morto -> EHOSTUNREACH ("no route to host").
+# O patch manual e revertido toda vez que o proxy recria o Service. Esta policy muta
+# na admissao, pegando inclusive as recriacoes.
+#
+# SEM LOOP, por construcao:
+#   - O Service de backend e criado em runtime pelo proxy (nao esta no git) -> ArgoCD
+#     nao faz diff dele -> sem Argo<->Kyverno.
+#   - O proxy nao observa/reconcilia esse Service continuamente -> Kyverno muta uma vez
+#     e nada re-afirma ClientIP ate uma recriacao (rara).
+#   - Guard 1 (precondition ClientIP): so atua quando esta ClientIP -> idempotente.
+#   - Guard 2 (exclui app=mcpserver): deixa o Service do PROXY de fora (esse sim e
+#     gerenciado/observado pelo controller-runtime do operator), evitando qualquer
+#     briga operator<->Kyverno. So o backend (app=<basename>) entra.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: toolhive-backend-svc-session-affinity-none
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"   # depois do Kyverno estar Healthy (chart em waves menores)
+    policies.kyverno.io/title: Force sessionAffinity None on ToolHive backend Services
+    policies.kyverno.io/category: ToolHive
+    policies.kyverno.io/subject: Service
+    policies.kyverno.io/description: >-
+      Forca sessionAffinity None nos Services de backend dos MCPServers do ToolHive
+      (mcp-<nome>) no namespace ai, contornando o default ClientIP que quebra o
+      roteamento proxy->backend em Cilium. Exclui o Service do proxy (app=mcpserver)
+      e so atua quando ja esta ClientIP.
+spec:
+  rules:
+    - name: backend-svc-session-affinity-none
+      match:
+        any:
+          - resources:
+              kinds:
+                - Service
+              namespaces:
+                - ai
+              selector:
+                matchLabels:
+                  toolhive: "true"
+      preconditions:
+        all:
+          # Guard 1: so quando esta ClientIP (idempotente; nao re-muta quando ja e None)
+          - key: "{{ request.object.spec.sessionAffinity || '' }}"
+            operator: Equals
+            value: ClientIP
+          # Guard 2: exclui o Service do proxy (app=mcpserver); so o backend entra
+          - key: "{{ request.object.metadata.labels.app || '' }}"
+            operator: NotEquals
+            value: mcpserver
+      mutate:
+        patchStrategicMerge:
+          spec:
+            sessionAffinity: None
