@@ -17,6 +17,7 @@ spec:
     - https://cloudnative-pg.github.io/charts
     - https://helm.altinity.com
     - ghcr.io/stacklok/toolhive
+    - https://kyverno.github.io/kyverno/
   destinations:
     - namespace: "*"
       server: https://kubernetes.default.svc
