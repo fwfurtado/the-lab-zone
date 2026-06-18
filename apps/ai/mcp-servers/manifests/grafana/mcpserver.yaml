@@ -18,7 +18,7 @@ spec:
   env:
     # Aponta pro teu Grafana in-cluster (CONFIRME o nome/porta do service)
     - name: GRAFANA_URL
-      value: "http://grafana.observability.svc.cluster.local:3000"
+      value: "http://grafana.observability.svc.cluster.local"
     # Se tiver multiplas orgs: - name: GRAFANA_ORG_ID  value: "1"
   secrets:
     - name: grafana-token
