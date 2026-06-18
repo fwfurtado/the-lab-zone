@@ -9,14 +9,14 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: ai
+  project: core
   sources:
     - repoURL: ghcr.io/stacklok/toolhive # OCI
       chart: toolhive-operator-crds
       targetRevision: 0.30.0
     - repoURL: https://github.com/fwfurtado/the-lab-zone.git
       targetRevision: main
-      path: apps/ai/toolhive/manifests
+      path: apps/core/toolhive/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: toolhive-system
@@ -39,7 +39,7 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  project: ai
+  project: core
   source:
     repoURL: ghcr.io/stacklok/toolhive
     chart: toolhive-operator
