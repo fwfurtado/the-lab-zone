@@ -1,0 +1,59 @@
+# app-crds.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: toolhive-operator-crds
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: ai
+  source:
+    repoURL: ghcr.io/stacklok/toolhive # OCI
+    chart: toolhive-operator-crds
+    targetRevision: 0.30.0
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: toolhive-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+---
+# app-operator.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: toolhive-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1" # depois das CRDs
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: ai
+  source:
+    repoURL: ghcr.io/stacklok/toolhive
+    chart: toolhive-operator
+    targetRevision: 0.30.0
+    helm:
+      # namespace mode (least-privilege), se preferir:
+      valuesObject:
+        operator:
+          rbac:
+            scope: namespace
+            allowedNamespaces: [ai, toolhive-system]
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: toolhive-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
