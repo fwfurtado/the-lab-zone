@@ -128,7 +128,7 @@ nodes:
       - name: nvidia_modeset
     machineFiles:
       - op: create
-        path: /etc/cri/conf.d/20-nvidia.part
+        path: /var/cri/conf.d/20-nvidia.part
         permissions: 0o644
         content: |
           [plugins]

@@ -1,16 +1,18 @@
-# mcp-searxng (ihor-sokoliuk) — busca web + leitura de URL.
+# mcp-searxng (ihor-sokoliuk 0.8.0) — busca web + leitura de URL.
 #
-# CORRECAO vs sessao anterior: o mcp-searxng (v0.8.0, jun/2026) SUPORTA modo HTTP
-# nativo via MCP_HTTP_PORT (endpoints /mcp + /health) — confirmado no README e no
-# Docker Hub atuais. A conclusao anterior de "stdio-only" valia pra uma versao bem
-# antiga (~0.5.0). Entao rodamos streamable-http NATIVO (multi-cliente), consistente
-# com grafana/kubernetes, em vez de stdio+proxyMode (que serializava chamadas).
+# POR QUE STDIO (e nao HTTP nativo): o bridge TEM modo HTTP (MCP_HTTP_PORT), mas
+# BINDA em 127.0.0.1 e NAO expoe env de host. O CONFIGURATION.md oficial so lista
+# MCP_HTTP_PORT na secao HTTP Transport — nao existe MCP_HTTP_HOST (isso e do fork
+# OvertliDS/mcp-searxng-enhanced). Como o proxy do ToolHive roda em POD SEPARADO e
+# chega pelo Service -> pod, ele nunca alcanca o 127.0.0.1 do backend (connection
+# refused). Logo, HTTP nativo so funcionaria colado no cliente (mesma maquina).
 #
-# Cria Service de backend ClusterIP (default ClientIP) -> a Kyverno policy ja corrige
-# pra None automaticamente na admissao (primeiro teste real da policy num Service novo).
+# Solucao: STDIO + proxyMode streamable-http (igual github/fastcrw). O proxy anexa no
+# stdin/stdout do pod (sem bind de rede) e expoe streamable-http pros clientes.
+# Single-session (chamadas serializam) — OK pra uso solo. Como e stdio, nao depende de
+# Service de backend acessivel -> imune a Cilium/Kyverno.
 #
-# Consome o engine SearXNG via SEARXNG_URL (API JSON -> exige `json` em search.formats,
-# ja habilitado no ConfigMap searxng-settings).
+# Consome o engine via SEARXNG_URL (-> searxng-engine, API JSON ja habilitada).
 apiVersion: toolhive.stacklok.dev/v1beta1
 kind: MCPServer
 metadata:
@@ -20,14 +22,12 @@ metadata:
     argocd.argoproj.io/sync-wave: "1"   # depois do engine SearXNG (wave 0)
 spec:
   image: docker.io/isokoliuk/mcp-searxng:1.7.0
-  transport: streamable-http
-  mcpPort: 8080          # porta que o mcp-searxng escuta (= MCP_HTTP_PORT)
+  transport: stdio
+  proxyMode: streamable-http      # so vale com transport: stdio — expoe HTTP no proxy
   proxyPort: 8080
   env:
     - name: SEARXNG_URL
       value: "http://searxng-engine.ai.svc.cluster.local:8080"
-    - name: MCP_HTTP_PORT
-      value: "8080"      # liga o modo HTTP (streamable-http) do mcp-searxng
   permissionProfile:
     type: builtin
     name: network        # alcanca o engine SearXNG + faz fetch nas URLs (tool web_url_read)
