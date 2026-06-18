@@ -4,16 +4,19 @@
 # >>> VERIFICAR na tag pinada: o subcomando `http` e o flag de porta.
 #     Doc upstream mostra: `github-mcp-server http --port <porta>` (endpoint /mcp).
 #     Se der problema, o fallback documentado e transport: stdio (remove args/mcpPort).
-apiVersion: toolhive.stacklok.dev/v1beta1
+apiVersion: toolhive.stacklok.dev/v1alpha1
 kind: MCPServer
 metadata:
   name: github
   namespace: ai
 spec:
-  image: ghcr.io/github/github-mcp-server:v1.4.0
+  image: ghcr.io/github/github-mcp-server:v0.31.0   # pina/atualiza a versao
   transport: streamable-http
   mcpPort: 8080
   proxyPort: 8080
+  # ToolHive default e ClientIP; em Cilium isso quebra o roteamento do ClusterIP
+  # (EHOSTUNREACH same-node). None alinha com os services que funcionam no cluster.
+  sessionAffinity: None
   args:
     - http
     - --port
@@ -33,5 +36,9 @@ spec:
     type: builtin
     name: network   # precisa alcancar api.github.com
   resources:
-    limits: { cpu: "250m", memory: "128Mi" }
-    requests: { cpu: "25m", memory: "32Mi" }
+    limits:
+      cpu: "250m"
+      memory: "128Mi"
+    requests:
+      cpu: "25m"
+      memory: "32Mi"
