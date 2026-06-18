@@ -1,11 +1,17 @@
-# Engine SearXNG (metabusca). NAO e um MCPServer — e um workload normal que o
-# mcp-searxng consome via SEARXNG_URL. O initContainer copia o settings.yml do
-# ConfigMap pra um emptyDir e substitui o placeholder do secret_key pelo valor do
-# ESO (ConfigMap e read-only, por isso o copy+sed num emptyDir gravavel).
+# Engine SearXNG (metabusca). NAO e um MCPServer — workload normal que o mcp-searxng
+# consome via SEARXNG_URL.
+#
+# NOME `searxng-engine` (NAO `searxng`) DE PROPOSITO: o MCPServer se chama `searxng`, e
+# o ToolHive cria um Deployment com o nome do MCPServer (`searxng`) pro proxy. Se o
+# engine tambem fosse `searxng`, os dois Deployments colidiriam (mesmo nome/ns) e o
+# proxy do MCP nao subiria. Por isso o engine fica `searxng-engine`.
+#
+# O initContainer copia o settings.yml do ConfigMap pra um emptyDir e injeta o
+# secret_key do ESO (ConfigMap e read-only).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: searxng
+  name: searxng-engine
   namespace: ai
   annotations:
     argocd.argoproj.io/sync-wave: "0"
@@ -13,15 +19,14 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: searxng
+      app: searxng-engine
   template:
     metadata:
       labels:
-        app: searxng
+        app: searxng-engine
     spec:
-      # O k8s injeta SEARXNG_PORT=tcp://<clusterIP>:8080 (service link) por causa do
-      # Service chamado `searxng`, colidindo com a var de config SEARXNG_PORT do proprio
-      # SearXNG -> granian recebe `--port tcp://...` e quebra. Desliga os service links.
+      # Desliga service links (boa pratica; o rename ja tira a colisao SEARXNG_PORT,
+      # mas mantemos por seguranca contra qualquer outra var <NOME>_PORT/_HOST).
       enableServiceLinks: false
       initContainers:
         - name: render-settings
@@ -52,8 +57,6 @@ spec:
           image: docker.io/searxng/searxng:2026.6.8-f3fab143b
           ports:
             - containerPort: 8080
-          # A imagem atual (Granian) ja bind em :::8080 por default (GRANIAN_HOST/PORT).
-          # Se num cluster IPv4-only o bind :: nao pegar, force: env GRANIAN_HOST=0.0.0.0
           volumeMounts:
             - name: settings
               mountPath: /etc/searxng
@@ -74,11 +77,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: searxng
+  name: searxng-engine
   namespace: ai
 spec:
   selector:
-    app: searxng
+    app: searxng-engine
   ports:
     - name: http
       port: 8080

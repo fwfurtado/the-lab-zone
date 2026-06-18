@@ -25,7 +25,7 @@ spec:
   proxyPort: 8080
   env:
     - name: SEARXNG_URL
-      value: "http://searxng.ai.svc.cluster.local:8080"
+      value: "http://searxng-engine.ai.svc.cluster.local:8080"
     - name: MCP_HTTP_PORT
       value: "8080"      # liga o modo HTTP (streamable-http) do mcp-searxng
   permissionProfile:
