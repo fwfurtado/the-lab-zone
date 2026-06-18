@@ -10,10 +10,13 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: ai
-  source:
-    repoURL: ghcr.io/stacklok/toolhive # OCI
-    chart: toolhive-operator-crds
-    targetRevision: 0.30.0
+  sources:
+    - repoURL: ghcr.io/stacklok/toolhive # OCI
+      chart: toolhive-operator-crds
+      targetRevision: 0.30.0
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/ai/toolhive/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: toolhive-system
@@ -22,7 +25,7 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
+      - CreateNamespace=false
       - ServerSideApply=true
 ---
 # app-operator.yaml
@@ -56,4 +59,4 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true
+      - CreateNamespace=false
