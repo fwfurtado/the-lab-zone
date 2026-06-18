@@ -1,0 +1,40 @@
+# mcp-searxng (ihor-sokoliuk) — busca web + leitura de URL.
+#
+# CORRECAO vs sessao anterior: o mcp-searxng (v0.8.0, jun/2026) SUPORTA modo HTTP
+# nativo via MCP_HTTP_PORT (endpoints /mcp + /health) — confirmado no README e no
+# Docker Hub atuais. A conclusao anterior de "stdio-only" valia pra uma versao bem
+# antiga (~0.5.0). Entao rodamos streamable-http NATIVO (multi-cliente), consistente
+# com grafana/kubernetes, em vez de stdio+proxyMode (que serializava chamadas).
+#
+# Cria Service de backend ClusterIP (default ClientIP) -> a Kyverno policy ja corrige
+# pra None automaticamente na admissao (primeiro teste real da policy num Service novo).
+#
+# Consome o engine SearXNG via SEARXNG_URL (API JSON -> exige `json` em search.formats,
+# ja habilitado no ConfigMap searxng-settings).
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: searxng
+  namespace: ai
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"   # depois do engine SearXNG (wave 0)
+spec:
+  image: docker.io/isokoliuk/mcp-searxng:1.7.0
+  transport: streamable-http
+  mcpPort: 8080          # porta que o mcp-searxng escuta (= MCP_HTTP_PORT)
+  proxyPort: 8080
+  env:
+    - name: SEARXNG_URL
+      value: "http://searxng.ai.svc.cluster.local:8080"
+    - name: MCP_HTTP_PORT
+      value: "8080"      # liga o modo HTTP (streamable-http) do mcp-searxng
+  permissionProfile:
+    type: builtin
+    name: network        # alcanca o engine SearXNG + faz fetch nas URLs (tool web_url_read)
+  resources:
+    limits:
+      cpu: "250m"
+      memory: "128Mi"
+    requests:
+      cpu: "25m"
+      memory: "32Mi"

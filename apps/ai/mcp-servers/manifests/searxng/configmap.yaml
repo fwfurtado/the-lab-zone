@@ -1,0 +1,22 @@
+# Template do settings.yml do SearXNG. O secret_key fica como placeholder e e
+# injetado em runtime pelo initContainer (a partir do ESO), pra nao vazar no git.
+# `use_default_settings: true` herda os defaults do upstream e so sobrescreve o abaixo.
+# O importante pro bridge MCP: search.formats inclui `json` (senao o mcp-searxng toma 403).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: searxng-settings
+  namespace: ai
+data:
+  settings.yml: |
+    use_default_settings: true
+    server:
+      secret_key: "__SEARXNG_SECRET__"
+      limiter: false          # uso interno (so o bridge MCP chama); sem bot-limiter
+      image_proxy: false
+    search:
+      formats:
+        - html
+        - json                # <- necessario pro mcp-searxng
+    ui:
+      static_use_hash: true
