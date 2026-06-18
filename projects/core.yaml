@@ -16,6 +16,7 @@ spec:
     - https://openebs.github.io/openebs
     - https://cloudnative-pg.github.io/charts
     - https://helm.altinity.com
+    - ghcr.io/stacklok/toolhive
   destinations:
     - namespace: "*"
       server: https://kubernetes.default.svc

@@ -10,7 +10,6 @@ spec:
     - https://langfuse.github.io/langfuse-k8s
     - ghcr.io/berriai
     - https://helm.openwebui.com
-    - ghcr.io/stacklok/toolhive
   destinations:
     - server: https://kubernetes.default.svc
       namespace: ai
