@@ -1,0 +1,37 @@
+# GitHub MCP. O guia oficial da Stacklok usa transport: stdio (single-client).
+# Aqui uso streamable-http (multi-cliente) via o subcomando `http` do binario,
+# que e suportado a partir das versoes recentes do github-mcp-server.
+# >>> VERIFICAR na tag pinada: o subcomando `http` e o flag de porta.
+#     Doc upstream mostra: `github-mcp-server http --port <porta>` (endpoint /mcp).
+#     Se der problema, o fallback documentado e transport: stdio (remove args/mcpPort).
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: github
+  namespace: ai
+spec:
+  image: ghcr.io/github/github-mcp-server:v1.4.0
+  transport: streamable-http
+  mcpPort: 8080
+  proxyPort: 8080
+  args:
+    - http
+    - --port
+    - "8080"
+  env:
+    # Escopa as toolsets pra reduzir tokens e superficie (ajuste ao seu uso):
+    - name: GITHUB_TOOLSETS
+      value: "repos,issues,pull_requests,actions"
+    # Pra so-leitura, descomente (o controle real e o scope do PAT):
+    # - name: GITHUB_READ_ONLY
+    #   value: "1"
+  secrets:
+    - name: github-token
+      key: token
+      targetEnvName: GITHUB_PERSONAL_ACCESS_TOKEN
+  permissionProfile:
+    type: builtin
+    name: network   # precisa alcancar api.github.com
+  resources:
+    limits: { cpu: "250m", memory: "128Mi" }
+    requests: { cpu: "25m", memory: "32Mi" }
