@@ -1,0 +1,22 @@
+# RBAC cluster-scoped do MCP de Kubernetes — vive no projeto `core`.
+# Este arquivo e sincronizado pela app toolhive-operator-crds (cujo git source
+# aponta pra apps/core/toolhive/manifests). Se preferir desacoplar, mova pra
+# uma Application dedicada em apps/core/.
+#
+# Liga a SA `kubernetes-mcp` (no namespace ai) a ClusterRole BUILT-IN `view`:
+# read-only cluster-wide na maioria dos recursos namespaced, e — importante —
+# `view` NAO inclui secrets (feature de seguranca: o LLM nao le segredos).
+# Limitacao: `view` nao cobre alguns recursos cluster-scoped (nodes, PVs). Se
+# quiser que o MCP leia nodes etc., adicione uma ClusterRole extra read-only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-mcp-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view          # ClusterRole nativa do Kubernetes (read-only, sem secrets)
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-mcp
+    namespace: ai
