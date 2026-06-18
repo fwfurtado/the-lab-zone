@@ -1,40 +1,30 @@
-# GitHub MCP. O guia oficial da Stacklok usa transport: stdio (single-client).
-# Aqui uso streamable-http (multi-cliente) via o subcomando `http` do binario,
-# que e suportado a partir das versoes recentes do github-mcp-server.
-# >>> VERIFICAR na tag pinada: o subcomando `http` e o flag de porta.
-#     Doc upstream mostra: `github-mcp-server http --port <porta>` (endpoint /mcp).
-#     Se der problema, o fallback documentado e transport: stdio (remove args/mcpPort).
-apiVersion: toolhive.stacklok.dev/v1alpha1
+# GitHub MCP. O modo `http` do github-mcp-server v1.4.0 exige OAuth do cliente no
+# /mcp (registra "OAuth protected resource endpoints") -> o proxy do ToolHive
+# conecta sem token e leva Unauthorized. Solucao (guia oficial Stacklok): rodar em
+# STDIO + proxyMode streamable-http. O backend usa o env PAT (sem OAuth de cliente),
+# e o proxy expoe streamable-http. Bonus: stdio se anexa ao stdin/stdout do pod, sem
+# ClusterIP de backend -> o problema de sessionAffinity/Cilium nao se aplica aqui.
+apiVersion: toolhive.stacklok.dev/v1beta1
 kind: MCPServer
 metadata:
   name: github
   namespace: ai
 spec:
-  image: ghcr.io/github/github-mcp-server:v0.31.0   # pina/atualiza a versao
-  transport: streamable-http
-  mcpPort: 8080
+  image: ghcr.io/github/github-mcp-server:v1.4.0
+  transport: stdio
+  proxyMode: streamable-http   # clientes falam streamable-http no proxy; backend stdio
   proxyPort: 8080
-  # ToolHive default e ClientIP; em Cilium isso quebra o roteamento do ClusterIP
-  # (EHOSTUNREACH same-node). None alinha com os services que funcionam no cluster.
-  sessionAffinity: None
-  args:
-    - http
-    - --port
-    - "8080"
   env:
-    # Escopa as toolsets pra reduzir tokens e superficie (ajuste ao seu uso):
     - name: GITHUB_TOOLSETS
       value: "repos,issues,pull_requests,actions"
-    # Pra so-leitura, descomente (o controle real e o scope do PAT):
-    # - name: GITHUB_READ_ONLY
-    #   value: "1"
+    # so-leitura (opcional): - name: GITHUB_READ_ONLY  value: "1"
   secrets:
     - name: github-token
       key: token
       targetEnvName: GITHUB_PERSONAL_ACCESS_TOKEN
   permissionProfile:
     type: builtin
-    name: network   # precisa alcancar api.github.com
+    name: network
   resources:
     limits:
       cpu: "250m"
