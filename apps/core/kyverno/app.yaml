@@ -17,6 +17,10 @@ metadata:
   name: kyverno
   namespace: argocd
   annotations:
+    # Wave 1: DEPOIS do CNI (Cilium=0) e ANTES dos workloads que a policy cobre
+    # (ai/mcp-servers=5), pra policy estar viva quando os Services do ToolHive nascerem.
+    # NUNCA antes do CNI: o Kyverno precisa de rede pra subir e seus webhooks
+    # interceptam a API — pos-lo antes do Cilium inverte a dependencia (risco de deadlock).
     argocd.argoproj.io/sync-wave: "1"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -55,9 +59,9 @@ spec:
         duration: 10s
         factor: 2
         maxDuration: 3m
-  # As aggregated ClusterRoles do Kyverno tem `.rules` populadas dinamicamente pelo
-  # agregador do k8s. Com SSA normalmente nem aparece drift, mas se aparecer
-  # OutOfSync nelas, este ignore resolve.
+  # 1) aggregated ClusterRoles: .rules e populado dinamicamente pelo agregador do k8s.
+  # 2) CRDs: o chart renderiza metadata.annotations/labels como {} (mapas vazios), que
+  #    o k8s descarta no live -> OutOfSync eterno. Ignora esses paths nos CRDs.
   ignoreDifferences:
     - group: rbac.authorization.k8s.io
       kind: ClusterRole
