@@ -1,0 +1,28 @@
+# apps/ai/mcp-servers/app.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mcp-servers
+  namespace: argocd
+  annotations:
+    # Depois que o operator/CRDs do toolhive (no core) ja estao Healthy.
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: ai
+  source:
+    repoURL: https://github.com/fwfurtado/the-lab-zone.git
+    targetRevision: main
+    path: apps/ai/mcp-servers/manifests
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

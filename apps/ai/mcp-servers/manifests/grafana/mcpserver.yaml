@@ -1,0 +1,36 @@
+# Grafana MCP — streamable-http. Manifesto baseado no guia oficial da Stacklok.
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: grafana
+  namespace: ai
+spec:
+  image: docker.io/grafana/mcp-grafana:0.11.4   # pina a versao atual
+  transport: streamable-http
+  mcpPort: 8000
+  proxyPort: 8080
+  args:
+    - --transport
+    - streamable-http
+    # opcional, least-privilege: desabilita escrita / categorias que nao usa
+    # - --disable-write
+    # - --disable-oncall
+  env:
+    # Aponta pro teu Grafana in-cluster (CONFIRME o nome/porta do service)
+    - name: GRAFANA_URL
+      value: "http://grafana.observability.svc.cluster.local:3000"
+    # Se tiver multiplas orgs: - name: GRAFANA_ORG_ID  value: "1"
+  secrets:
+    - name: grafana-token
+      key: token
+      targetEnvName: GRAFANA_SERVICE_ACCOUNT_TOKEN
+  permissionProfile:
+    type: builtin
+    name: network   # precisa alcancar o service do Grafana
+  resources:
+    limits:
+      cpu: "250m"
+      memory: "128Mi"
+    requests:
+      cpu: "25m"
+      memory: "32Mi"
