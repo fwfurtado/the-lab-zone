@@ -1,0 +1,37 @@
+# Kubernetes MCP — READ-ONLY, in-cluster com a SA dedicada `kubernetes-mcp`.
+# A SA ganha read-only via ClusterRoleBinding -> ClusterRole/view (no core):
+#   apps/core/toolhive/manifests/kubernetes-mcp-rbac.yaml
+#
+# Imagem: containers/kubernetes-mcp-server (Go nativo, auto-detecta in-cluster,
+# streamable-http via --port). Flags confirmados via --help (v0.0.62).
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: kubernetes
+  namespace: ai
+spec:
+  image: ghcr.io/containers/kubernetes-mcp-server:v0.0.62
+  transport: streamable-http
+  mcpPort: 8080      # casa com --port abaixo
+  proxyPort: 8080
+  # Campo nativo v1beta1: usa a SA ja existente (com a ClusterRole/view amarrada no core).
+  serviceAccount: kubernetes-mcp
+  args:
+    - --port            # OBRIGATORIO p/ HTTP: sem isso a imagem sobe em STDIO
+    - "8080"
+    - --read-only       # defesa app-level: so expoe tools readOnly
+    - --stateless       # recomendado p/ deploy em container / LB / multi-cliente
+    - --disable-multi-cluster   # voce tem 1 cluster: enxuga tools e contexto
+    - --cluster-provider        # explicito (auto-detect tb pegaria in-cluster num pod)
+    - in-cluster
+    # opcional: --toolsets core,config (default). Adicione helm se for usar.
+  permissionProfile:
+    type: builtin
+    name: network    # precisa alcancar o API server do cluster
+  resources:
+    limits:
+      cpu: "250m"
+      memory: "128Mi"
+    requests:
+      cpu: "25m"
+      memory: "32Mi"
