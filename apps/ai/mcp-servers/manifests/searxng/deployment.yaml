@@ -19,6 +19,10 @@ spec:
       labels:
         app: searxng
     spec:
+      # O k8s injeta SEARXNG_PORT=tcp://<clusterIP>:8080 (service link) por causa do
+      # Service chamado `searxng`, colidindo com a var de config SEARXNG_PORT do proprio
+      # SearXNG -> granian recebe `--port tcp://...` e quebra. Desliga os service links.
+      enableServiceLinks: false
       initContainers:
         - name: render-settings
           image: busybox:1.36

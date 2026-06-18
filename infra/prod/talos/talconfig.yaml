@@ -110,3 +110,40 @@ nodes:
         routes:
           - network: 0.0.0.0/0
             gateway: 10.40.0.1
+
+  - hostname: worker-3-gpu
+    ipAddress: 10.40.6.23
+    controlPlane: false
+    talosImageURL: factory.talos.dev/installer/6698d6f136c5bb37ca8bb8482c9084305084da0a5ead1f4dcae760796f8ab3a2
+    installDiskSelector:
+      size: "<= 600GB"                    # pega o WD Blue 500GB; exclui o WD Black 2TB
+    nodeLabels:
+      nvidia.com/gpu.present: "true"
+    nodeTaints:
+      nvidia.com/gpu: "present:NoSchedule" # ver ressalva NodeRestriction
+    kernelModules:
+      - name: nvidia
+      - name: nvidia_uvm
+      - name: nvidia_drm
+      - name: nvidia_modeset
+    machineFiles:
+      - op: create
+        path: /etc/cri/conf.d/20-nvidia.part
+        permissions: 0o644
+        content: |
+          [plugins]
+            [plugins."io.containerd.cri.v1.runtime"]
+              [plugins."io.containerd.cri.v1.runtime".containerd]
+                [plugins."io.containerd.cri.v1.runtime".containerd.runtimes]
+                  [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia]
+                    runtime_type = "io.containerd.runc.v2"
+                    [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.nvidia.options]
+                      BinaryName = "/usr/bin/nvidia-container-runtime"
+    networkInterfaces:
+      - deviceSelector:
+          hardwareAddr: "bc:fc:e7:68:77:e0"
+        addresses:
+          - 10.40.6.23/21
+        routes:
+          - network: 0.0.0.0/0
+            gateway: 10.40.0.1
