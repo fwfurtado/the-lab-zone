@@ -1,0 +1,36 @@
+# fastCRW como substituto do fetch (Rust, single-binary).
+#
+# REALIDADE (confirmada via config.default.toml + --help): o fastCRW self-hosted
+# NAO tem MCP-over-HTTP nativo. crw-server = REST Firecrawl (porta 3000, sem MCP);
+# crw-mcp = STDIO. Entao rodamos o crw-mcp embedded (stdio) e deixamos o PROXY do
+# ToolHive expor streamable-http pros clientes (proxyMode).
+#
+# RESSALVA: o backend stdio e single-session. Clientes conectam via streamable-http
+# no proxy, mas chamadas concorrentes serializam. OK pra uso solo/baixa concorrencia.
+# Se precisar de multi-cliente real, ver "Opcao B" (firecrawl-mcp http -> crw REST).
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: fastcrw
+  namespace: ai
+spec:
+  image: ghcr.io/us/crw:0.16.0
+  transport: stdio
+  proxyMode: streamable-http      # so vale com transport: stdio — expoe HTTP no proxy
+  proxyPort: 8080
+  permissionProfile:
+    type: builtin
+    name: network                 # egress pra raspar a web
+  podTemplateSpec:
+    spec:
+      containers:
+        - name: mcp
+          command:
+            - "crw-mcp"           # embedded (self-contained), stdio
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+    requests:
+      cpu: "50m"
+      memory: "32Mi"
