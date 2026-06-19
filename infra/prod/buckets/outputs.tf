@@ -6,5 +6,6 @@ output "buckets" {
     qdrant_snapshots  = aws_s3_bucket.qdrant_snapshots.bucket
     velero            = aws_s3_bucket.velero.bucket
     langfuse          = aws_s3_bucket.langfuse.bucket
+    argo_workflows    = aws_s3_bucket.argo_workflows.bucket
   }
 }

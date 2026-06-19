@@ -19,3 +19,7 @@ resource "aws_s3_bucket" "velero" {
 resource "aws_s3_bucket" "langfuse" {
   bucket = "langfuse"
 }
+
+resource "aws_s3_bucket" "argo_workflows" {
+  bucket = "argo-workflows"
+}
