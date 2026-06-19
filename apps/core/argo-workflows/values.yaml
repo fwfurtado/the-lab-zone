@@ -11,6 +11,10 @@ controller:
   workflowNamespaces:
     - data
 
+  metricsConfig:
+    enabled: true
+    secure: false
+
 server:
   # auth-mode server: igual ao "admin local" do ArgoCD. SSO (Authentik) entra na Fase 9.
   authModes:
