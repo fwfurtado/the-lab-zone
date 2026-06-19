@@ -1,19 +1,27 @@
-# Diz pro VM operator/VMAgent raspar o Service do DCGM.
+# Diz pro VMAgent raspar o Service do DCGM.
 #
-# >>> ATENCAO: descoberta cross-namespace <<<
-# Isto esta no kube-system (junto do Service). Pro VMAgent enxergar, ele precisa observar
-# scrapes fora do ns dele — i.e. `selectAllByDefault: true` no VMAgent, OU
-# serviceScrapeNamespaceSelector vazio/incluindo kube-system. Se teu VMAgent for escopado
-# so na observability, a alternativa e mover ESTE objeto p/ a observability e usar
-# `namespaceSelector: {matchNames: [kube-system]}` apontando pro Service de la.
+# >>> DISCOVERY CROSS-NAMESPACE <<<
+# O VMAgent do victoria-metrics-k8s-stack descobre VMServiceScrapes no namespace DELE
+# (observability) — e nao no kube-system. Por isso este objeto vive na observability e
+# usa namespaceSelector p/ apontar pro Service do DCGM la no kube-system.
+#
+# GitOps: continua nesta mesma Application (dcgm-exporter). A destination da App e
+# kube-system, mas o AppProject `core` permite destinations em namespace "*", entao o
+# ArgoCD aplica este objeto na observability via o metadata.namespace explicito.
+#
+# (Se um dia o teu VMAgent tiver selectAllByDefault: true, este objeto funciona igual —
+#  o namespaceSelector so torna o alvo explicito.)
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: dcgm-exporter
-  namespace: kube-system
+  namespace: observability
   labels:
     app.kubernetes.io/name: dcgm-exporter
 spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
   selector:
     matchLabels:
       app.kubernetes.io/name: dcgm-exporter
