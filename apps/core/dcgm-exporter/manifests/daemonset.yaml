@@ -38,7 +38,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: dcgm-exporter
-          image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.3-4.8.2-ubuntu22.04 # PINAR por digest apos 1o deploy
+          image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.3-4.8.2-distroless # PINAR por digest apos 1o deploy
           env:
             - name: DCGM_EXPORTER_LISTEN
               value: ":9400"
