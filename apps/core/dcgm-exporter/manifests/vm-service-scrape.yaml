@@ -1,0 +1,23 @@
+# Diz pro VM operator/VMAgent raspar o Service do DCGM.
+#
+# >>> ATENCAO: descoberta cross-namespace <<<
+# Isto esta no kube-system (junto do Service). Pro VMAgent enxergar, ele precisa observar
+# scrapes fora do ns dele — i.e. `selectAllByDefault: true` no VMAgent, OU
+# serviceScrapeNamespaceSelector vazio/incluindo kube-system. Se teu VMAgent for escopado
+# so na observability, a alternativa e mover ESTE objeto p/ a observability e usar
+# `namespaceSelector: {matchNames: [kube-system]}` apontando pro Service de la.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: dcgm-exporter
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: dcgm-exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dcgm-exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

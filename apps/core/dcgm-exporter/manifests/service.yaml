@@ -1,0 +1,16 @@
+# ClusterIP p/ o VMServiceScrape descobrir os endpoints (1 por no GPU).
+apiVersion: v1
+kind: Service
+metadata:
+  name: dcgm-exporter
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: dcgm-exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: dcgm-exporter
+  ports:
+    - name: metrics
+      port: 9400
+      targetPort: metrics
