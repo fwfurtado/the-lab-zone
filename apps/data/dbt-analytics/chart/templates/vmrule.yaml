@@ -1,0 +1,21 @@
+# Alerta quando o analytics-elt termina em Failed/Error. Depende da VM raspar o controller
+# do Argo (VMPodScrape em apps/core/argo-workflows) — sem isso a métrica não existe na VM.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: analytics-elt
+  namespace: {{ .Release.Namespace }}
+spec:
+  groups:
+    - name: analytics-elt
+      rules:
+        - alert: AnalyticsEltFailed
+          # janela > intervalo do cron (6h) pra um único fracasso ser pego antes de envelhecer
+          expr: increase(analytics_elt_runs_total{status=~"Failed|Error"}[12h]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: analytics-elt
+          annotations:
+            summary: "ELT analytics falhou"
+            description: "O workflow analytics-elt terminou em {{`{{ $labels.status }}`}} nas últimas 12h."

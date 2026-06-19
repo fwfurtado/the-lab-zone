@@ -1,0 +1,23 @@
+# Raspa as métricas do workflow-controller do Argo (porta 9090, /metrics) — inclui as
+# métricas customizadas dos workflows (analytics_elt_*). Mora no app core do argo-workflows
+# porque o controller é componente cluster-wide, não do data plane.
+#
+# VMPodScrape (não VMServiceScrape) pra não depender de um Service de métricas que o chart
+# pode não criar. Raspa o pod direto.
+#
+# CONFIRMAR antes de aplicar:
+#   kubectl -n argo-workflows get pod -l app.kubernetes.io/component=workflow-controller \
+#     -o jsonpath='{.items[0].spec.containers[0].ports}'
+#   -> confirma o nome da porta (espero `metrics` / 9090) e os labels do pod.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: argo-workflows-controller
+  namespace: argo-workflows
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: workflow-controller   # CONFIRMAR
+  podMetricsEndpoints:
+    - port: metrics        # CONFIRMAR (se a porta não tiver nome, troca por: targetPort: 9090)
+      path: /metrics

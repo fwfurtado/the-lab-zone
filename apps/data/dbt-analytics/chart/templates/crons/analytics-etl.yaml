@@ -1,0 +1,18 @@
+# Agenda o analytics-elt. CronWorkflow tem nome fixo -> GitOps (ArgoCD gerencia; ele mesmo
+# gera os Workflows com sufixo). workflowTemplateRef herda o spec INTEIRO do analytics-elt
+# (volumes, metrics, serviceAccount) — por isso o problema do volume não reaparece aqui.
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: analytics-elt
+  namespace: {{ .Release.Namespace }}
+spec:
+  schedule: {{ .Values.dbt.schedule | quote }}     # se Argo >= 3.6, pode usar `schedules: [...]`
+  timezone: {{ .Values.dbt.timezone | quote }}
+  concurrencyPolicy: Forbid          # não sobrepõe runs
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5           # mantém os falhos por perto pra debug
+  workflowSpec:
+    workflowTemplateRef:
+      name: analytics-elt

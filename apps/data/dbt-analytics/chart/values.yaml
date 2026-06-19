@@ -16,6 +16,8 @@ dbt:
     repo: https://github.com/fwfurtado/the-lab-zone.git
     revision: main          # pode pinar num SHA pra reprodutibilidade total
     credsSecret: ""         # repo público -> vazio. Privado -> nome do secret (username+token)
+  schedule: "0 */6 * * *"   # a cada 6h
+  timezone: "Etc/UTC"       # convenção do lab; marts são diários, fuso não muda agregação
 
 
 clickhouse:

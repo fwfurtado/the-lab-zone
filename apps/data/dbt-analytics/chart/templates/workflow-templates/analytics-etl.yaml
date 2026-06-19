@@ -13,6 +13,20 @@ spec:
     - name: migrations
       configMap:
         name: {{ .Values.migrations.configMapName }}
+  metrics:
+    prometheus:
+      - name: analytics_elt_duration_seconds
+        help: "Duração da última execução do ELT analytics"
+        gauge:
+          value: "{{`{{workflow.duration}}`}}"
+      - name: analytics_elt_runs_total
+        help: "Execuções do ELT por status final"
+        labels:
+          - key: status
+            value: "{{`{{workflow.status}}`}}"
+        counter:
+          value: "1"
+        when: "{{`{{workflow.status}}`}} != Running"
   arguments:
     parameters:
       - name: revision
