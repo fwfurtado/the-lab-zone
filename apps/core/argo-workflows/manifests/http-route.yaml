@@ -22,3 +22,4 @@ spec:
           kind: Service
           name: argo-workflows-server   # service do chart: <release>-server
           port: 2746
+          weight: 1
