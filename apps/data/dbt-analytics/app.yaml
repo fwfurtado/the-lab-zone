@@ -1,0 +1,32 @@
+# Fase 8 — app do data plane analítico. Projeto `data`, ns `data`.
+# source.path -> chart local (PRIMEIRO chart próprio do repo). ArgoCD renderiza via helm template.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dbt-analytics
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"   # depois do argo-workflows (core, wave 4)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: data
+  source:
+    repoURL: https://github.com/fwfurtado/the-lab-zone.git
+    targetRevision: main
+    path: apps/data/dbt-analytics/chart
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

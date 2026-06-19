@@ -1,0 +1,6 @@
+apiVersion: v2
+name: dbt-analytics
+description: Fase 8 — data plane analítico (migrations goose via ConfigMap + WorkflowTemplate)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

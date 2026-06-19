@@ -28,3 +28,7 @@
 [arg("bucket", long="bucket")]
 @make-owner-of-bucket keyid bucket:
     kubectl exec -n data garage-0 -c garage -- /garage bucket allow {{bucket}} --read --write --owner --key {{keyid}}
+
+
+@list-buckets:
+    kubectl exec -n data garage-0 -c garage -- /garage bucket list

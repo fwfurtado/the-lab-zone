@@ -1,0 +1,25 @@
+# Valores do chart dbt-analytics.
+serviceAccountName: argo-workflow
+
+# imagem do ensure-db (cria o database via HTTP). Pinar por digest.
+curlImage: curlimages/curl:8.20.0
+
+goose:
+  # imagem GENÉRICA goose-runner. Pinar por digest após o 1o build.
+  image: ofwfurtado/goose-runner:0.1.0
+
+clickhouse:
+  host: clickhouse-clickhouse.data.svc.cluster.local   # CONFIRMAR: kubectl get svc -n data
+  httpPort: 8123
+  nativePort: 9000
+  database: analytics
+  adminSecret:
+    name: clickhouse-credentials   # secret admin da Fase 6
+    key: adminPassword
+  analyticsSecret:
+    name: clickhouse-analytics     # ESO -> 1Password
+    key: password
+
+migrations:
+  configMapName: clickhouse-migrations
+  mountPath: /migrations

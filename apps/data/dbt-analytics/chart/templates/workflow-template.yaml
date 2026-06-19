@@ -1,0 +1,72 @@
+# WorkflowTemplate reusável. 2 steps: ensure-db (cria o database) -> goose-up (migra).
+# A DAG do ETL (Etapa 4/5) referencia o template `goose-up`/`main` como passo 1.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: clickhouse-migrate
+  namespace: {{ .Release.Namespace }}
+spec:
+  entrypoint: main
+  serviceAccountName: {{ .Values.serviceAccountName }}
+  volumes:
+    - name: migrations
+      configMap:
+        name: {{ .Values.migrations.configMapName }}
+  templates:
+    - name: main
+      steps:
+        - - name: ensure-db
+            template: ensure-db
+        - - name: goose-up
+            template: goose-up
+
+    # cria o database (idempotente) via HTTP — fora do goose (chicken-egg da version table)
+    - name: ensure-db
+      container:
+        image: {{ .Values.curlImage }}
+        command: [sh, -c]
+        args:
+          - >
+            curl -fsS "http://{{ .Values.clickhouse.host }}:{{ .Values.clickhouse.httpPort }}/"
+            -H "X-ClickHouse-User: admin"
+            -H "X-ClickHouse-Key: ${ADMIN_PW}"
+            --data-binary "CREATE DATABASE IF NOT EXISTS {{ .Values.clickhouse.database }}"
+        env:
+          - name: ADMIN_PW
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.clickhouse.adminSecret.name }}
+                key: {{ .Values.clickhouse.adminSecret.key }}
+
+    # roda as migrations. Imagem GENÉRICA: o DSN (com encoding da senha) é montado aqui.
+    - name: goose-up
+      container:
+        image: {{ .Values.goose.image }}
+        command: [bash, -c]
+        args:
+          - |
+            set -euo pipefail
+            PWENC="$(printf '%s' "$ADMIN_PW" | jq -sRr @uri)"
+            export GOOSE_DRIVER=clickhouse
+            export GOOSE_DBSTRING="clickhouse://admin:${PWENC}@{{ .Values.clickhouse.host }}:{{ .Values.clickhouse.nativePort }}/{{ .Values.clickhouse.database }}"
+            export GOOSE_MIGRATION_DIR={{ .Values.migrations.mountPath }}
+            # ANALYTICS_PASSWORD fica no env -> o envsub da migration o substitui.
+            goose up
+            goose status
+        env:
+          - name: ADMIN_PW
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.clickhouse.adminSecret.name }}
+                key: {{ .Values.clickhouse.adminSecret.key }}
+          - name: ANALYTICS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.clickhouse.analyticsSecret.name }}
+                key: {{ .Values.clickhouse.analyticsSecret.key }}
+        volumeMounts:
+          - name: migrations
+            mountPath: {{ .Values.migrations.mountPath }}
+        resources:
+          requests: { cpu: 50m, memory: 128Mi }
+          limits: { cpu: 500m, memory: 256Mi }
