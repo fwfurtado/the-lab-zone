@@ -1,0 +1,81 @@
+# DaemonSet do DCGM exporter. Roda 1 pod por no GPU.
+#
+# >>> POR QUE nodeSelector + toleration EXPLICITOS (e nao so a RuntimeClass) <<<
+# A RuntimeClass `nvidia` tem um bloco `scheduling` que injeta nodeSelector+toleration,
+# MAS isso ocorre na ADMISSAO do pod. O DaemonSet controller decide em quais nos criar
+# pod lendo o TEMPLATE (antes da admissao). Se o template nao tiver nodeSelector, o
+# controller cria pod em TODOS os nos; ai a admissao injeta o nodeSelector e os pods dos
+# nos sem GPU ficam Unschedulable/Pending eternos. Por isso o nodeSelector+toleration
+# vao explicitos aqui — a injecao da RuntimeClass por cima e idempotente (mesma chave/
+# valor -> merge sem conflito).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dcgm-exporter
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: dcgm-exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dcgm-exporter
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dcgm-exporter
+    spec:
+      serviceAccountName: dcgm-exporter
+      priorityClassName: system-node-critical
+      runtimeClassName: nvidia # injeta o nvidia-container-runtime -> /dev/nvidia*
+      # explicitos p/ o DS controller mirar so o no GPU (ver comentario do topo):
+      nodeSelector:
+        nvidia.com/gpu.present: "true"
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: dcgm-exporter
+          image: nvcr.io/nvidia/k8s/dcgm-exporter:4.5.3-4.8.2-ubuntu22.04 # PINAR por digest apos 1o deploy
+          env:
+            - name: DCGM_EXPORTER_LISTEN
+              value: ":9400"
+            - name: DCGM_EXPORTER_KUBERNETES # mapeia metrica -> pod via pod-resources
+              value: "true"
+          ports:
+            - name: metrics
+              containerPort: 9400
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0 # DCGM profiling exige root + SYS_ADMIN
+            capabilities:
+              add: ["SYS_ADMIN"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          livenessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            tcpSocket:
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          volumeMounts:
+            - name: pod-gpu-resources
+              mountPath: /var/lib/kubelet/pod-resources
+              readOnly: true
+      volumes:
+        # socket do kubelet p/ o PodMapper casar GPU<->pod. No Talos o kubelet vive em
+        # /var/lib/kubelet (confirmado no `talosctl get volumestatus`).
+        - name: pod-gpu-resources
+          hostPath:
+            path: /var/lib/kubelet/pod-resources

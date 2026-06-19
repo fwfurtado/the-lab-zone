@@ -1,0 +1,42 @@
+# DCGM exporter — metricas da GPU (util, mem, temp, power, clocks, XID/health) p/ o
+# VictoriaMetrics. DaemonSet que roda SO no(s) no(s) GPU. Manifestos raw (sem Helm):
+# o conjunto e pequeno e queremos controle total do nodeSelector/toleration/runtimeClass.
+#
+# Namespace kube-system DE PROPOSITO: o Talos isenta o kube-system do PodSecurity por
+# padrao (exemptions.namespaces), e o DCGM precisa de CAP SYS_ADMIN + runAsUser 0 p/ ler
+# o profiling da placa. Em ns com PSS baseline/restricted (ex: ai) o pod seria recusado.
+#
+# Wave 2: depois do device plugin (wave 1) e da RuntimeClass nvidia (wave -1, vem da app
+# nvidia-device-plugin). Apps reconciliam independente -> se o DCGM sincronizar antes da
+# RuntimeClass existir, o pod falha admissao e o DS controller re-tenta ate ela aparecer
+# (self-heal). Sem drama, so transitorio.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dcgm-exporter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: core
+  source:
+    repoURL: https://github.com/fwfurtado/the-lab-zone
+    targetRevision: main
+    path: apps/core/dcgm-exporter/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false # kube-system ja existe
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
