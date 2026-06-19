@@ -3,37 +3,49 @@ locals {
 
   forgejo_script = [
     "set -euo pipefail",
+    "trap 'echo \"[forgejo-provision] FALHOU -> $BASH_COMMAND (linha $LINENO)\" >&2' ERR",
     "cloud-init status --wait || true",
     "export DEBIAN_FRONTEND=noninteractive",
 
-    # ── Docker ────────────────────────────────────────────────────────────
+    # ── [1/5] Docker ──────────────────────────────────────────────────────
+    "echo '==> [1/5] apt + docker'",
     "apt-get update -qq",
     "apt-get install -y -qq ca-certificates curl",
     "curl -fsSL https://get.docker.com | sh",
     "systemctl enable --now docker",
 
-    # ── Layout ────────────────────────────────────────────────────────────
+    # ── [2/5] TLS via lego v5 (DNS-01 Cloudflare) ────────────────────────
+    "echo '==> [2/5] TLS via lego (DNS-01)'",
     "mkdir -p /etc/lego /srv/forgejo/data/tls",
-
-    # ── TLS via lego (DNS-01 Cloudflare) ─────────────────────────────────
     "cat > /etc/lego/cloudflare.env <<'EOF'",
     "CF_DNS_API_TOKEN=${var.cloudflare_dns_api_token}",
     "EOF",
     "chmod 600 /etc/lego/cloudflare.env",
-    "docker run --rm --env-file /etc/lego/cloudflare.env -v /etc/lego:/etc/lego ${var.lego_image} --accept-tos --email ${var.acme_email} --dns cloudflare --domains ${local.forgejo_fqdn} --path /etc/lego run",
-    "install -m 0644 /etc/lego/certificates/${local.forgejo_fqdn}.crt /srv/forgejo/data/tls/forgejo.crt",
-    "install -m 0640 /etc/lego/certificates/${local.forgejo_fqdn}.key /srv/forgejo/data/tls/forgejo.key",
-    # container roda como uid/gid 1000 (git) e precisa LER cert/chave:
+    "if [ ! -f /etc/lego/certificates/${local.forgejo_fqdn}.crt ]; then docker run --rm --env-file /etc/lego/cloudflare.env -v /etc/lego:/etc/lego ${var.lego_image} run --accept-tos --email ${var.acme_email} --dns cloudflare --dns.resolvers ${var.acme_propagation_resolver} --domains ${local.forgejo_fqdn} --path /etc/lego; fi",
+    # deploy do cert (container roda uid/gid 1000 e precisa LER):
+    "cat > /usr/local/bin/forgejo-cert-deploy.sh <<'EOF'",
+    "#!/bin/sh",
+    "set -e",
+    "CRT=$(find /etc/lego -type f -name '${local.forgejo_fqdn}.crt' | head -1)",
+    "KEY=$(find /etc/lego -type f -name '${local.forgejo_fqdn}.key' | head -1)",
+    "test -n \"$CRT\" && test -n \"$KEY\"",
+    "install -m 0644 \"$CRT\" /srv/forgejo/data/tls/forgejo.crt",
+    "install -m 0640 \"$KEY\" /srv/forgejo/data/tls/forgejo.key",
     "chown -R 1000:1000 /srv/forgejo/data/tls",
+    "EOF",
+    "chmod +x /usr/local/bin/forgejo-cert-deploy.sh",
+    "/usr/local/bin/forgejo-cert-deploy.sh",
 
-    # ── Segredos do Forgejo (env_file) ───────────────────────────────────
+    # ── [3/5] Segredos do Forgejo (env_file) ─────────────────────────────
+    "echo '==> [3/5] .env'",
     "cat > /srv/forgejo/.env <<'EOF'",
     "FORGEJO__security__SECRET_KEY=${var.forgejo_secret_key}",
     "FORGEJO__security__INTERNAL_TOKEN=${var.forgejo_internal_token}",
     "EOF",
     "chmod 600 /srv/forgejo/.env",
 
-    # ── docker-compose (SQLite, TLS proprio, sem reverse proxy) ──────────
+    # ── [4/5] docker-compose (SQLite, TLS proprio, sem reverse proxy) ────
+    "echo '==> [4/5] docker compose up'",
     "cat > /srv/forgejo/docker-compose.yml <<'EOF'",
     "services:",
     "  forgejo:",
@@ -66,7 +78,8 @@ locals {
     "EOF",
     "cd /srv/forgejo && docker compose up -d",
 
-    # ── Renovação automática ──────────────────────────────────────────────
+    # ── [5/5] Renovação automática ───────────────────────────────────────
+    "echo '==> [5/5] timer de renovacao'",
     "cat > /etc/systemd/system/lego-renew.service <<'EOF'",
     "[Unit]",
     "Description=Renova TLS via lego (DNS-01) e recarrega o Forgejo",
@@ -74,10 +87,8 @@ locals {
     "Requires=docker.service",
     "[Service]",
     "Type=oneshot",
-    "ExecStart=/usr/bin/docker run --rm --env-file /etc/lego/cloudflare.env -v /etc/lego:/etc/lego ${var.lego_image} --accept-tos --email ${var.acme_email} --dns cloudflare --domains ${local.forgejo_fqdn} --path /etc/lego renew --days 30",
-    "ExecStartPost=/usr/bin/install -m 0644 /etc/lego/certificates/${local.forgejo_fqdn}.crt /srv/forgejo/data/tls/forgejo.crt",
-    "ExecStartPost=/usr/bin/install -m 0640 /etc/lego/certificates/${local.forgejo_fqdn}.key /srv/forgejo/data/tls/forgejo.key",
-    "ExecStartPost=/bin/chown -R 1000:1000 /srv/forgejo/data/tls",
+    "ExecStart=/usr/bin/docker run --rm --env-file /etc/lego/cloudflare.env -v /etc/lego:/etc/lego ${var.lego_image} renew --days 30 --accept-tos --email ${var.acme_email} --dns cloudflare --dns.resolvers ${var.acme_propagation_resolver} --domains ${local.forgejo_fqdn} --path /etc/lego",
+    "ExecStartPost=/usr/local/bin/forgejo-cert-deploy.sh",
     "ExecStartPost=/bin/sh -c 'cd /srv/forgejo && docker compose restart'",
     "EOF",
     "cat > /etc/systemd/system/lego-renew.timer <<'EOF'",
@@ -92,5 +103,6 @@ locals {
     "EOF",
     "systemctl daemon-reload",
     "systemctl enable --now lego-renew.timer",
+    "echo '==> forgejo provisionado'",
   ]
 }

@@ -90,5 +90,11 @@ variable "acme_email" {
 
 variable "lego_image" {
   type    = string
-  default = "goacme/lego:latest"
+  default = "goacme/lego:v5.2.2"
+}
+
+variable "acme_propagation_resolver" {
+  type        = string
+  default     = "1.1.1.1:53"
+  description = "Resolver PÚBLICO p/ o self-check do DNS-01. Split-horizon: a vista interna (PowerDNS) não tem o _acme-challenge, que vive na Cloudflare."
 }
