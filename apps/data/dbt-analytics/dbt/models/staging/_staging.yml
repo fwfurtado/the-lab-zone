@@ -17,6 +17,7 @@ models:
       - name: provided_model_name
         description: "Nome do modelo como o Langfuse logou (alias OU cru). Join key do model_dim."
 
+seeds:
   - name: model_dim
     description: "Seed: normalização de provided_model_name -> canônico/provider/is_local/tier."
     columns:
