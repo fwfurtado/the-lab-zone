@@ -1,4 +1,4 @@
-variable "proxmox_endpoint"  { type = string }
+variable "proxmox_endpoint" { type = string }
 variable "proxmox_api_token" {
   type      = string
   sensitive = true
@@ -8,13 +8,13 @@ variable "pdns_api_key" {
   sensitive = true
 }
 
-variable "dns_ip"      {
+variable "dns_ip" {
   type        = string
   default     = "10.40.1.53"
   description = "IP do servidor DNS (PowerDNS)"
 }
 
-variable "gateway_ip"  {
+variable "gateway_ip" {
   type        = string
   default     = "10.40.0.1"
   description = "IP do gateway"
@@ -34,10 +34,12 @@ variable "ssh_public_key" {
 variable "mgmt_records" {
   type = map(string)
   default = {
-    pve   = "10.40.0.200"     # ajuste pros IPs reais
-    idrac = "10.40.0.32"
-    nas   = "10.40.1.4"
-    pg    = "10.40.1.75"
-    dns   = "10.40.1.53"
+    pve    = "10.40.0.200" # ajuste pros IPs reais
+    idrac  = "10.40.0.32"
+    nas    = "10.40.1.4"
+    pg     = "10.40.1.75"
+    dns    = "10.40.1.53"
+    harbor = "10.40.1.10"
+    git    = "10.40.1.11"
   }
 }

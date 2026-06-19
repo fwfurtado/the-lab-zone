@@ -10,3 +10,18 @@ TF_VAR_garage_secret_key="op://the-lab-zone/garage-terraform/secret"
 
 AWS_ACCESS_KEY_ID="op://homelab/Backblaze/Terraform Key/key-id"
 AWS_SECRET_ACCESS_KEY="op://homelab/Backblaze/Terraform Key/application-key"
+
+# ── Harbor (VM, fora do cluster) — vault homelab ─────────────────────────────
+TF_VAR_harbor_admin_password="op://homelab/Harbor/admin-password"
+TF_VAR_harbor_db_password="op://homelab/Harbor/db-password"
+
+# ── Forgejo (VM, fora do cluster) — vault homelab ────────────────────────────
+TF_VAR_forgejo_secret_key="op://homelab/Forgejo/secret-key"
+TF_VAR_forgejo_internal_token="op://homelab/Forgejo/internal-token"
+
+# ── ACME (lego DNS-01 Cloudflare) — compartilhado Harbor/Forgejo ─────────────
+TF_VAR_cloudflare_dns_api_token="op://homelab/Cloudflare/the-lab.zone"
+
+# ── Docker Hub pull creds p/ proxy cache (usado por `just harbor proxy-init`) ─
+DOCKERHUB_PROXY_USERNAME="op://homelab/DockerHub/username"
+DOCKERHUB_PROXY_TOKEN="op://homelab/DockerHub/token"
