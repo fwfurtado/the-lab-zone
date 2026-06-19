@@ -1,0 +1,27 @@
+# RuntimeClass que mapeia pro runtime `nvidia` registrado no containerd pela
+# system extension do Talos (drop-in /var/cri/conf.d/20-nvidia.part, runtime handler
+# `nvidia` -> BinaryName /usr/bin/nvidia-container-runtime).
+#
+# Todo pod que precisa da GPU (device plugin, Ollama, smoke test) usa
+# `runtimeClassName: nvidia` -> o containerd injeta o nvidia-container-runtime, que
+# expoe os devices /dev/nvidia* no container. Sem isso, mesmo com o device plugin,
+# o container nao enxerga a placa.
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: nvidia
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1" # antes do device plugin que o referencia
+handler: nvidia
+# `scheduling` e injetado na admissao em TODO pod com runtimeClassName: nvidia:
+#  - nodeSelector e MERGEADO -> garante que o pod so vai pra no com o handler nvidia
+#  - tolerations sao ADICIONADAS -> o pod passa pelo taint do no GPU sem precisar declarar
+# Resultado: pods GPU (Ollama, smoke) so precisam de `runtimeClassName: nvidia` +
+# o request `nvidia.com/gpu` — o nodeSelector/toleration vem daqui de graca.
+scheduling:
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule

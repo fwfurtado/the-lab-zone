@@ -1,0 +1,24 @@
+# NVIDIA k8s-device-plugin — anuncia `nvidia.com/gpu` nos nos com GPU.
+#
+# No Talos, driver + toolkit vem das system extensions (NAO usamos o GPU Operator, que
+# tentaria gerenciar driver e brigaria com a imutabilidade do Talos). Aqui sobe SO o
+# device plugin, que enumera a GPU (via runtime nvidia) e a expoe como recurso schedulable.
+#
+# Referencia de values: https://github.com/NVIDIA/k8s-device-plugin/blob/main/deployments/helm/nvidia-device-plugin/values.yaml
+
+# usa o runtime nvidia pra enxergar a placa (senao o plugin nao enumera nada)
+runtimeClassName: nvidia
+
+# o pod do plugin precisa rodar no no GPU, que tem taint -> tolera
+tolerations:
+  - key: nvidia.com/gpu # CONFIRA com `kubectl get node worker-3-gpu -o jsonpath='{.spec.taints}'`
+    operator: Exists
+    effect: NoSchedule
+
+# mira so o(s) no(s) com GPU (label vem do Talos machine.nodeLabels do worker-3-gpu)
+nodeSelector:
+  nvidia.com/gpu.present: "true"
+
+# nao usamos GFD (gpu-feature-discovery); o label do no vem do Talos nodeLabels
+gfd:
+  enabled: false

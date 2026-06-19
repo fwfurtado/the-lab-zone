@@ -1,0 +1,41 @@
+# NVIDIA device plugin — expoe nvidia.com/gpu como recurso schedulable.
+# Multi-source: chart Helm + values do git + a RuntimeClass (manifests/).
+# Wave 1: depois do CNI; o device plugin so precisa do runtime nvidia (extension) ja presente.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nvidia-device-plugin
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1" # depois do CNI (Cilium=0)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: core
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system # convencao p/ device plugins (system-node-critical)
+  sources:
+    - repoURL: https://nvidia.github.io/k8s-device-plugin
+      chart: nvidia-device-plugin
+      targetRevision: 0.19.2
+      helm:
+        releaseName: nvidia-device-plugin
+        valueFiles:
+          - $values/apps/core/nvidia-device-plugin/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone
+      targetRevision: main
+      ref: values
+      path: apps/core/nvidia-device-plugin/manifests
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false # kube-system ja existe
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
