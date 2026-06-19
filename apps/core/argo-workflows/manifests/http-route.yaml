@@ -5,7 +5,9 @@ metadata:
   namespace: argo-workflows
 spec:
   parentRefs:
-    - name: main
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: main
       namespace: gateway
       sectionName: https-wildcard
   hostnames:
@@ -16,5 +18,7 @@ spec:
             type: PathPrefix
             value: /
       backendRefs:
-        - name: argo-workflows-server   # service do chart: <release>-server
+        - group: ''
+          kind: Service
+          name: argo-workflows-server   # service do chart: <release>-server
           port: 2746
