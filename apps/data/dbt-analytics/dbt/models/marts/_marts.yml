@@ -1,0 +1,17 @@
+version: 2
+
+models:
+  - name: int_observations_model
+    description: "stg_observations enriquecido com model_dim (canônico/provider/is_local/tier)."
+
+  - name: mart_llm_usage_daily
+    description: "Custo, tokens e contagens por dia × projeto × modelo × tier × type."
+    columns:
+      - name: total_cost
+        description: "Soma de total_cost (Decimal). Local ~0; cloud > 0."
+
+  - name: mart_llm_latency_daily
+    description: "Percentis de latência (ms) por dia × modelo."
+
+  - name: mart_unmapped_models
+    description: "Auditoria: provided_model_name fora do seed. Vazio = seed completo."

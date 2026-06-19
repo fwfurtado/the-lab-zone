@@ -1,0 +1,17 @@
+# Run-once do ELT (migrate -> dbt build). Substitui a execução manual da Etapa 3.
+#   kubectl create -f test/wf-analytics-elt.yaml
+#   kubectl -n data get wf -w
+# ou, sobrescrevendo a revision (ex. testar um branch/SHA):
+#   argo submit -n data --from workflowtemplate/analytics-elt -p revision=<branch|sha> --watch
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: analytics-elt-
+  namespace: data
+spec:
+  workflowTemplateRef:
+    name: analytics-elt
+  # arguments:           # opcional: sobrescreve a revision default do template
+  #   parameters:
+  #     - name: revision
+  #       value: main

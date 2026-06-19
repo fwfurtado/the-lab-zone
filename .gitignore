@@ -1,2 +1,6 @@
 **/.terraform/
 **/talos/clusterconfig/
+**/.venv/
+*.log
+apps/data/dbt-analytics/dbt/.user.yml
+apps/data/dbt-analytics/dbt/target

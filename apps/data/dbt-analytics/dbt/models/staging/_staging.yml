@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: langfuse
+    # dbt-clickhouse: schema == database do ClickHouse. observations é ReplacingMergeTree.
+    schema: default
+    description: "Schema do Langfuse (read-only). Só SELECT — o user analytics não escreve aqui."
+    tables:
+      - name: observations
+
+models:
+  - name: stg_observations
+    description: "observations deduplicado (FINAL) + soft-delete filtrado + colunas tipadas."
+    columns:
+      - name: id
+        tests: [not_null]
+      - name: provided_model_name
+        description: "Nome do modelo como o Langfuse logou (alias OU cru). Join key do model_dim."
+
+  - name: model_dim
+    description: "Seed: normalização de provided_model_name -> canônico/provider/is_local/tier."
+    columns:
+      - name: model_raw
+        tests: [not_null, unique]

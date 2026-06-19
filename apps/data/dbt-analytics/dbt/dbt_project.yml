@@ -1,0 +1,29 @@
+name: analytics
+version: "0.1.0"
+config-version: 2
+profile: analytics
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+models:
+  analytics:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  analytics:
+    model_dim:
+      +column_types:
+        model_raw: String
+        model_canonical: String
+        provider: String
+        is_local: UInt8
+        tier: String
+      +engine: MergeTree
+      +order_by: model_raw

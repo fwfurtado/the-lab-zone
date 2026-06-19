@@ -1,0 +1,72 @@
+# DAG do ELT: migrate (goose, reusa clickhouse-migrate) -> dbt build.
+# O projeto dbt NÃO está na imagem: vem por git artifact (checkout em runtime, árvore preservada).
+# workingDir aponta pro subdir do projeto; profiles.yml (env-driven) está lá.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: analytics-elt
+  namespace: {{ .Release.Namespace }}
+spec:
+  entrypoint: dag
+  serviceAccountName: {{ .Values.serviceAccountName }}
+  arguments:
+    parameters:
+      - name: revision
+        value: {{ .Values.dbt.git.revision | quote }}   # branch ou SHA (pina reprodutibilidade)
+  templates:
+    - name: dag
+      dag:
+        tasks:
+          - name: migrate
+            templateRef:
+              name: clickhouse-migrate
+              template: main
+          - name: dbt-build
+            dependencies: [migrate]
+            template: dbt-build
+            arguments:
+              parameters:
+                - name: revision
+                  value: "{{`{{workflow.parameters.revision}}`}}"
+
+    - name: dbt-build
+      inputs:
+        parameters:
+          - name: revision
+        artifacts:
+          - name: repo
+            path: /src
+            git:
+              repo: {{ .Values.dbt.git.repo | quote }}
+              revision: "{{`{{inputs.parameters.revision}}`}}"
+              depth: 1
+              {{- if .Values.dbt.git.credsSecret }}
+              # repo privado: secret com username + token (PAT/deploy token), via ESO/1Password
+              usernameSecret:
+                name: {{ .Values.dbt.git.credsSecret }}
+                key: username
+              passwordSecret:
+                name: {{ .Values.dbt.git.credsSecret }}
+                key: token
+              {{- end }}
+      container:
+        image: {{ .Values.dbt.image }}
+        workingDir: /src/{{ .Values.dbt.projectDir }}
+        args: ["build", "--profiles-dir", "."]
+        env:
+          - name: CH_HOST
+            value: {{ .Values.clickhouse.host }}
+          - name: CH_PORT
+            value: "{{ .Values.clickhouse.httpPort }}"
+          - name: CH_USER
+            value: analytics
+          - name: CH_DATABASE
+            value: {{ .Values.clickhouse.database }}
+          - name: CH_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.clickhouse.analyticsSecret.name }}
+                key: {{ .Values.clickhouse.analyticsSecret.key }}
+        resources:
+          requests: { cpu: 200m, memory: 512Mi }
+          limits: { cpu: "1", memory: 1Gi }
