@@ -13,7 +13,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: argo-workflows-controller
-  namespace: argo-workflows
+  namespace: observability
 spec:
   selector:
     matchLabels:
