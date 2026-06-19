@@ -1,10 +1,4 @@
-# dbt-runner GENÉRICO: engine dbt-core + adapter clickhouse, vindos do uv.lock deste projeto
-# (fidelidade de versão, sem PyPI em runtime). NÃO contém os models/seeds — o projeto vem por
-# git artifact do Argo em runtime. Roda qualquer projeto dbt-clickhouse cujas deps caibam neste lock.
-#
-#   docker build -t zot.lab.the-lab.zone/lab/dbt-runner:0.1.0 apps/data/dbt-analytics/dbt
-#   docker push    zot.lab.the-lab.zone/lab/dbt-runner:0.1.0
-#   crane digest   zot.lab.the-lab.zone/lab/dbt-runner:0.1.0   # -> pinar em chart/values.yaml
+#  just docker build-and-push --app-name dbt-runner [--tag "<TAG>" | default "latest" ]   # -> pinar em chart/values.yaml
 FROM ghcr.io/astral-sh/uv:0.11.21-python3.12-trixie-slim
 
 WORKDIR /opt/dbt

@@ -1,6 +1,6 @@
 # DAG do ELT: migrate (goose, reusa clickhouse-migrate) -> dbt build.
-# O projeto dbt NÃO está na imagem: vem por git artifact (checkout em runtime, árvore preservada).
-# workingDir aponta pro subdir do projeto; profiles.yml (env-driven) está lá.
+# NOTA: o volume `migrations` precisa ser declarado AQUI também — templateRef empresta só o
+# template, não o spec.volumes da clickhouse-migrate. O goose-up monta esse volume.
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -9,10 +9,14 @@ metadata:
 spec:
   entrypoint: dag
   serviceAccountName: {{ .Values.serviceAccountName }}
+  volumes:
+    - name: migrations
+      configMap:
+        name: {{ .Values.migrations.configMapName }}
   arguments:
     parameters:
       - name: revision
-        value: {{ .Values.dbt.git.revision | quote }}   # branch ou SHA (pina reprodutibilidade)
+        value: {{ .Values.dbt.git.revision | quote }}
   templates:
     - name: dag
       dag:
@@ -41,7 +45,6 @@ spec:
               revision: "{{`{{inputs.parameters.revision}}`}}"
               depth: 1
               {{- if .Values.dbt.git.credsSecret }}
-              # repo privado: secret com username + token (PAT/deploy token), via ESO/1Password
               usernameSecret:
                 name: {{ .Values.dbt.git.credsSecret }}
                 key: username
