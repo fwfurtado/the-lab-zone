@@ -21,3 +21,6 @@ spec:
   podMetricsEndpoints:
     - port: metrics        # CONFIRMAR (se a porta não tiver nome, troca por: targetPort: 9090)
       path: /metrics
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
