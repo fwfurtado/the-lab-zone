@@ -1,7 +1,7 @@
 clusterName: lab-zone
-talosVersion: v1.13.4          # mesma da ISO
+talosVersion: v1.13.4 # mesma da ISO
 kubernetesVersion: v1.33.1
-endpoint: https://10.40.6.10:6443   # VIP — explico abaixo
+endpoint: https://10.40.6.10:6443 # VIP — explico abaixo
 
 clusterPodNets:
   - 10.245.0.0/16
@@ -11,7 +11,7 @@ clusterSvcNets:
 allowSchedulingOnControlPlanes: false
 
 cniConfig:
-  name: none                   # Cilium entra na Fase 2, via bootstrap
+  name: none # Cilium entra na Fase 2, via bootstrap
 
 controlPlane:
   patches:
@@ -40,46 +40,46 @@ nodes:
     controlPlane: true
     talosImageURL: factory.talos.dev/installer/ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515
     installDiskSelector:
-      size: "<= 70GB"          # acha o disco de 60GB da VM
+      size: "<= 70GB" # acha o disco de 60GB da VM
     networkInterfaces:
       - deviceSelector:
-          busPath: "0*"        # primeira NIC virtio
+          busPath: "0*" # primeira NIC virtio
         addresses: [10.40.6.11/21]
         routes:
           - network: 0.0.0.0/0
             gateway: 10.40.0.1
         vip:
-          ip: 10.40.6.10      # VIP compartilhado entre os CPs
+          ip: 10.40.6.10 # VIP compartilhado entre os CPs
   - hostname: cp-2
     ipAddress: 10.40.6.12
     controlPlane: true
     talosImageURL: factory.talos.dev/installer/ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515
     installDiskSelector:
-      size: "<= 70GB"          # acha o disco de 60GB da VM
+      size: "<= 70GB" # acha o disco de 60GB da VM
     networkInterfaces:
       - deviceSelector:
-          busPath: "0*"        # primeira NIC virtio
+          busPath: "0*" # primeira NIC virtio
         addresses: [10.40.6.12/21]
         routes:
           - network: 0.0.0.0/0
             gateway: 10.40.0.1
         vip:
-          ip: 10.40.6.10      # VIP compartilhado entre os CPs
+          ip: 10.40.6.10 # VIP compartilhado entre os CPs
   - hostname: cp-3
     ipAddress: 10.40.6.13
     controlPlane: true
     talosImageURL: factory.talos.dev/installer/ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515
     installDiskSelector:
-      size: "<= 70GB"          # acha o disco de 60GB da VM
+      size: "<= 70GB" # acha o disco de 60GB da VM
     networkInterfaces:
       - deviceSelector:
-          busPath: "0*"        # primeira NIC virtio
+          busPath: "0*" # primeira NIC virtio
         addresses: [10.40.6.13/21]
         routes:
           - network: 0.0.0.0/0
             gateway: 10.40.0.1
         vip:
-          ip: 10.40.6.10      # VIP compartilhado entre os CPs
+          ip: 10.40.6.10 # VIP compartilhado entre os CPs
 
   - hostname: worker-1
     ipAddress: 10.40.6.21
@@ -116,11 +116,18 @@ nodes:
     controlPlane: false
     talosImageURL: factory.talos.dev/installer/6698d6f136c5bb37ca8bb8482c9084305084da0a5ead1f4dcae760796f8ab3a2
     installDiskSelector:
-      size: "<= 600GB"                    # pega o WD Blue 500GB; exclui o WD Black 2TB
+      size: "<= 600GB" # pega o WD Blue 500GB; exclui o WD Black 2TB
     nodeLabels:
       nvidia.com/gpu.present: "true"
-    nodeTaints:
-      nvidia.com/gpu: "present:NoSchedule" # ver ressalva NodeRestriction
+    patches:
+      - |-
+        machine:
+          kubelet:
+            extraConfig:
+              registerWithTaints:
+                - key: "nvidia.com/gpu"
+                  value: "present"
+                  effect: "NoSchedule"
     kernelModules:
       - name: nvidia
       - name: nvidia_uvm
