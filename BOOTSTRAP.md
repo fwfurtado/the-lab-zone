@@ -1858,6 +1858,221 @@ just buckets tf-apply
 just buckets tf-destroy
 ```
 
+# Fase 7 — Stack de IA: MCP, GPU e Inferência Local
+
+## Objetivo
+
+Subir a camada de IA sobre o cluster já observável (Fase 5) e com data platform (Fase 6):
+- **MCP servers** (via ToolHive operator) expondo ferramentas pro ecossistema agentic: `github`, `grafana`, `kubernetes`, `fastcrw`, `searxng`.
+- **Kyverno** como policy engine (primeiro uso: contornar a incompatibilidade `sessionAffinity` do ToolHive com o Cilium).
+- **GPU** no `worker-3-gpu` (RTX 3090): device plugin + RuntimeClass, inferência local com **Ollama** (`qwen3-coder:30b-a3b-q4_K_M`) e proxy **LiteLLM**.
+- **Observabilidade da GPU**: DCGM exporter → VictoriaMetrics.
+
+## Decisões (Fase 7)
+
+- **ToolHive operator** (não MCP servers soltos): CRD `MCPServer` padroniza secret/RBAC/proxy. Namespace mode `allowedNamespaces: [ai, toolhive-system]`. Projeto `core` (instala cluster-scoped).
+- **stdio + proxyMode streamable-http** para `github` e `fastcrw`: o modo http nativo desses servers exige OAuth de cliente que o proxy do ToolHive não fornece. stdio também é imune ao MTU/drop do Cilium.
+- **Kyverno** em vez de patch manual recorrente para o `sessionAffinity`. Mutate idempotente com guards anti-loop.
+- **GPU via device plugin standalone** (não o gpu-operator inteiro): lab enxuto, RuntimeClass `nvidia` mapeando o runtime registrado pela system extension do Talos.
+- **Ollama com `qwen3-coder:30b-a3b-q4_K_M`** (MoE 30B total / 3B ativos, q4 = 19GB) — cabe nos 24GB da 3090, mais rápido E mais capaz que um denso 14B. Contexto capado em 32768 (peso + KV não estoura os 24GB).
+- **`qwen3-embedding` no LiteLLM é alias FIXO** — nunca renomear (o LightRAG depende dele).
+- **DCGM exporter no `kube-system`**: precisa de `SYS_ADMIN`+root; o Talos isenta o kube-system do PodSecurity por default.
+
+## Componentes e ordem de aplicação
+
+| Componente | Projeto | Namespace | sync-wave |
+|---|---|---|---|
+| RuntimeClass `nvidia` | core | (cluster) | -1 |
+| nvidia-device-plugin | core | kube-system | 1 |
+| kyverno | core | kyverno | 1 |
+| dcgm-exporter | core | kube-system | 2 |
+| toolhive operator | core | toolhive-system | (default) |
+| MCP servers | ai | ai | (default) |
+| ollama | ai | ai | 5 |
+
+> Nunca antes do CNI (Cilium = wave 0).
+
+## Passo a passo
+
+### 7.1 — Talos: habilitar a GPU no worker-3-gpu
+
+System extensions (no schematic do Image Factory): `nvidia-container-toolkit-production` + `nvidia-open-gpu-kernel-modules-production`.
+
+**Labels e taint** (ver Incidente 7.10 — `machine.nodeTaints` é armadilha):
+```yaml
+# patch do worker-3-gpu
+machine:
+  nodeLabels:
+    nvidia.com/gpu.present: "true"
+  kubelet:
+    extraConfig:
+      registerWithTaints:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+```
+`registerWithTaints` só vale no registro do nó. Em nó já joinado, aplicar o taint na mão (bridge único; o config cobre rebuilds):
+```bash
+kubectl taint node worker-3-gpu nvidia.com/gpu=present:NoSchedule
+```
+
+Smoke test:
+```bash
+kubectl run gpu-smoke --rm -it --restart=Never \
+  --overrides='{"spec":{"runtimeClassName":"nvidia","nodeSelector":{"nvidia.com/gpu.present":"true"},"tolerations":[{"key":"nvidia.com/gpu","operator":"Exists","effect":"NoSchedule"}]}}' \
+  --image=nvidia/cuda:12.6.2-base-ubuntu24.04 -- nvidia-smi
+kubectl delete pod gpu-smoke --ignore-not-found   # Completed != deletado; segura a GPU
+```
+
+### 7.2 — Ollama: pull do modelo e validação do offload
+```bash
+kubectl -n ai exec deploy/ollama -- ollama pull qwen3-coder:30b-a3b-q4_K_M
+kubectl -n ai exec deploy/ollama -- ollama ps          # PROCESSOR = 100% GPU, CONTEXT = 32768
+kubectl -n ai exec deploy/ollama -- nvidia-smi          # llama-server ocupando VRAM
+```
+Storage: o PVC `ollama-models` usa `openebs-hostpath`, cujo BasePath já é `/var/mnt/pv-data/openebs` (user volume Talos = WD Black 2TB no worker-3-gpu). Annotation `argocd.argoproj.io/sync-options: Prune=false` no PVC blinda os modelos contra prune acidental.
+
+### 7.3 — LiteLLM: registrar o modelo local
+Adicionar ao `model_list` (sem tocar no `qwen3-embedding`), depois `kubectl -n ai rollout restart deploy/litellm`:
+```yaml
+- model_name: qwen3-coder-30b-local
+  litellm_params:
+    model: ollama_chat/qwen3-coder:30b-a3b-q4_K_M
+    api_base: http://ollama.ai.svc.cluster.local:11434
+    num_ctx: 32768
+  model_info:
+    mode: chat
+```
+
+### 7.4 — MCP servers: smoke test
+Cada `MCPServer` validado com um `initialize` retornando `serverInfo` (via proxy streamable-http). `searxng` consome o engine `searxng-engine` (renomeado — ver Incidente 7.7).
+
+### 7.5 — DCGM exporter: ligar a observabilidade da GPU
+Após o sync, se a métrica não aparecer no VM, ver Incidente 7.14 (scrape novo exige reload do vmagent):
+```bash
+kubectl -n observability port-forward svc/vmsingle-victoria-metrics-vmks 8428:8428 &
+curl -s 'http://localhost:8428/api/v1/query?query=DCGM_FI_DEV_GPU_UTIL' | jq '.data.result | length'
+```
+> Consumo de GPU por workload: filtrar `exported_namespace`/`exported_pod` (o `honor_labels` renomeia as labels do PodMapper; `namespace`/`pod` crus = o próprio exporter).
+
+### ✅ Critério de saída da Fase 7
+- [ ] Os 5 MCP servers respondem `initialize` via proxy.
+- [ ] `ollama ps` mostra `100% GPU` no `qwen3-coder:30b-a3b-q4_K_M`.
+- [ ] LiteLLM expõe `qwen3-coder-30b-local`; inferência ponta a ponta no Open WebUI.
+- [ ] `DCGM_FI_DEV_GPU_UTIL` consultável no vmsingle, com labels `exported_*`.
+
+---
+
+## Incidentes
+
+### Incidente 7.1 — `sessionAffinity: ClientIP` do ToolHive quebra com o Cilium
+
+- **Sintoma:** o proxy do MCPServer não alcança o backend; conexões com `EHOSTUNREACH`. O Service de backend que o ToolHive cria vem com `sessionAffinity: ClientIP`.
+- **Causa:** o KubeProxyReplacement do Cilium não lida bem com `sessionAffinity: ClientIP` nesse padrão de Service efêmero criado em runtime — o tracking de afinidade aponta pra um endpoint inalcançável.
+- **Fix:** ClusterPolicy do Kyverno (`toolhive-backend-svc-session-affinity-none`) que faz mutate `spec.sessionAffinity: None` em Service no ns `ai` com label `toolhive: "true"`.
+- **Por que não há loop (importante):** o Service de backend `mcp-<nome>` é criado pelo PROXY em runtime (não está no git → ArgoCD não faz diff dele); o proxy não reconcilia o Service continuamente; o operator gerencia só o Service do PROXY (`app=mcpserver`), que a policy EXCLUI via precondition. Guards: idempotência (`sessionAffinity == ClientIP`) + `metadata.labels.app != mcpserver`.
+- **Lição:** mutate de admissão em recurso criado por controller-em-runtime é seguro desde que (a) o recurso não esteja sob reconciliação apertada e (b) a policy seja idempotente e exclua o que o controller-pai gerencia.
+
+### Incidente 7.2 — Quirks do ToolHive operator v0.30.0
+
+- **Sintoma:** mudanças no `MCPServer` não refletem; deletar o Service do backend não o recria; `rollout restart` no proxy é revertido.
+- **Causa:** o operator (v0.30.0) não propaga `sessionAffinity` do CR pro Service, não recria Service deletado manualmente, e reverte rollout restart do Deployment do proxy.
+- **Fix:** para reiniciar o proxy, **deletar o pod** (não `rollout restart`). Mudanças estruturais no backend = deletar o pod do proxy pra forçar recriação.
+- **Lição:** operator imaturo — tratar o Service/Deployment do proxy como efêmero e reconciliado só na criação; intervir no pod, não no controller.
+
+### Incidente 7.3 — github-mcp-server modo http exige OAuth de cliente
+
+- **Sintoma:** o `github` MCPServer em streamable-http nativo falha a autenticação; o proxy não fornece o token que o server espera.
+- **Causa:** o `github-mcp-server` v1.4.0 em modo http exige fluxo OAuth de cliente; o proxy do ToolHive não implementa isso.
+- **Fix:** rodar em **stdio + `proxyMode: streamable-http`**, com PAT via secret (`GITHUB_PERSONAL_ACCESS_TOKEN` do 1Password `github-mcp/pat`). stdio é imune ao Cilium de quebra.
+- **Lição:** quando o server http exige auth de cliente, stdio+proxy contorna e simplifica o secret.
+
+### Incidente 7.4 — ServiceAccount do kubernetes-mcp precisa existir ANTES do MCPServer
+
+- **Sintoma:** o pod do `kubernetes` MCPServer falha (`serviceaccount "kubernetes-mcp" not found`); o StatefulSet entra em backoff e não recupera sozinho mesmo após criar a SA.
+- **Causa:** o ToolHive cria o workload referenciando a SA; sem ela na hora da criação, o StatefulSet barra. RBAC split: a SA mora no ns `ai` (App do MCPServer), o ClusterRoleBinding `kubernetes-mcp-view`→ClusterRole `view` mora no `core` (cluster-scoped).
+- **Fix:** SA com `sync-wave: "-1"` no ns `ai`; binding no projeto `core`. Para destravar o StatefulSet já em backoff: **deletar o STS** (o operator recria limpo).
+- **Lição:** dependência SA→workload precisa de ordering explícito (sync-wave); StatefulSet em backoff após falha de dependência precisa de um kick (delete), não espera.
+
+### Incidente 7.5 — Instalação do Kyverno: drift eterno e CRDs grandes
+
+- **Sintoma:** app do Kyverno fica `OutOfSync` pra sempre; CRDs grandes falham no apply.
+- **Causa:** (a) o Helm renderiza `metadata.annotations`/`labels` como `{}` vazios em CRDs, que o k8s descarta → diff permanente; (b) `ClusterRole.rules` agregadas divergem; (c) CRDs grandes estouram o client-side apply.
+- **Fix:** `ServerSideApply=true` (CRDs); `ignoreDifferences` em `ClusterRole.rules` e em CRD `.metadata.annotations`/`.metadata.labels` com **group `apiextensions.k8s.io` SEM `/v1`** (usar `/v1` era o bug); sync-wave `1` (pós-CNI). O `skipBackgroundRequests: true` que o Kyverno injeta na policy entra no `ignoreDifferences` ou no manifesto pra zerar o drift.
+- **Lição:** `ignoreDifferences` de CRD usa o group puro (`apiextensions.k8s.io`), não `apiextensions.k8s.io/v1`.
+
+### Incidente 7.6 — `enableServiceLinks` injeta env que colide com a config do SearXNG
+
+- **Sintoma:** o engine SearXNG falha a subir / config corrompida; variável `SEARXNG_PORT` com valor `tcp://...`.
+- **Causa:** o k8s injeta env vars de service discovery (`<SVC>_PORT=tcp://...`) por default. O Service chamado `searxng` gera `SEARXNG_PORT`, que colide com a env de configuração que o SearXNG espera.
+- **Fix:** `enableServiceLinks: false` no pod do engine.
+- **Lição:** Service cujo nome (uppercased) bate com uma env de config do app = `enableServiceLinks: false`.
+
+### Incidente 7.7 — Colisão de nome: engine SearXNG × Service do proxy MCP
+
+- **Sintoma:** o Deployment/Service do engine SearXNG conflita com o Service que o ToolHive cria pro MCPServer `searxng`.
+- **Causa:** ambos queriam o nome `searxng` no ns `ai`.
+- **Fix:** renomear o engine pra **`searxng-engine`** (Deployment, Service e label `app: searxng-engine`); o MCP aponta `SEARXNG_URL=http://searxng-engine.ai.svc.cluster.local:8080`.
+- **Lição:** nome do MCPServer reserva o nome no namespace (o ToolHive cria objetos homônimos) — componentes auxiliares precisam de nome distinto.
+
+### Incidente 7.8 — mcp-searxng escuta em 127.0.0.1 (inacessível cross-pod)
+
+- **Sintoma:** o ToolHive marca o MCPServer `Ready`, mas o proxy recebe `connection refused` do backend.
+- **Causa:** o `mcp-searxng` faz bind em `127.0.0.1` por default; de outro pod (o proxy) é inalcançável.
+- **Fix:** `MCP_HTTP_HOST=0.0.0.0` (+ `MCP_HTTP_PORT=8080`).
+- **Lição:** **`Ready` do ToolHive ≠ backend alcançável cross-pod.** Sempre confirmar o bind em `0.0.0.0` em server http nativo.
+
+### Incidente 7.9 — Tag do Docker ≠ versão do app
+
+- **Sintoma:** comportamento/versão do `mcp-searxng` não bate com a tag da imagem.
+- **Causa:** a tag Docker (`0.8.0`) estava decoplada da versão interna do app (`1.7.0`).
+- **Fix:** usar a tag correta (`1.7.0`) e **pinar por digest** após validar.
+- **Lição:** tag não é contrato de versão; pinar digest após o primeiro deploy.
+
+### Incidente 7.10 — `machine.nodeTaints` no Talos é armadilha em nó joinado
+
+- **Sintoma:** aplicar taint via `machine.nodeTaints` falha em worker já no cluster; em cascata, os `nodeLabels` somem.
+- **Causa:** o `NodeRestriction` admission bloqueia o kubelet alterando taints de um nó já joinado; e o bug talos#8193 derruba os `nodeLabels` junto.
+- **Fix:** `nodeLabels` ficam no `machine.nodeLabels`; o taint vai via `machine.kubelet.extraConfig.registerWithTaints` (vale só no registro) + um `kubectl taint` imperativo como bridge único. Rebuilds ficam cobertos pelo config.
+- **Lição:** taint de nó existente no Talos = imperativo; `registerWithTaints` só pra novos registros. Nunca `machine.nodeTaints` em worker joinado.
+
+### Incidente 7.11 — RuntimeClass `scheduling` não basta para DaemonSet
+
+- **Sintoma:** ao subir o DCGM exporter (DaemonSet) só com `runtimeClassName: nvidia`, pods nascem `Pending`/`Unschedulable` em nós sem GPU.
+- **Causa:** a injeção de nodeSelector/toleration do bloco `scheduling` da RuntimeClass acontece na ADMISSÃO. O DaemonSet controller decide os nós lendo o TEMPLATE (antes da admissão) → cria pod em todo nó → os de não-GPU travam.
+- **Fix:** declarar `nodeSelector` + `toleration` EXPLÍCITOS no template do DaemonSet. A injeção da RuntimeClass por cima é idempotente (mesma chave/valor).
+- **Lição:** para DaemonSet, scheduling tem que estar no template — RuntimeClass `scheduling` é tarde demais pro controller.
+
+### Incidente 7.12 — Tag da imagem DCGM: `-distroless`, não `-ubuntu22.04`
+
+- **Sintoma:** pull de `nvcr.io/nvidia/k8s/dcgm-exporter:4.5.3-4.8.2-ubuntu22.04` falha (tag inexistente).
+- **Causa:** as versões 4.x do DCGM exporter passaram a publicar `-distroless` como padrão; o sufixo `-ubuntu22.04` foi descontinuado nessa linha.
+- **Fix:** usar `4.5.3-4.8.2-distroless`. Verificar tags com `skopeo list-tags docker://nvcr.io/nvidia/k8s/dcgm-exporter` ou `crane ls`.
+- **Lição:** distroless não tem shell/curl — probes viram `tcpSocket` e o teste de `/metrics` é via port-forward, não `exec curl`.
+
+### Incidente 7.13 — DCGM exporter em OOMKill com 256Mi
+
+- **Sintoma:** o pod do DCGM exporter entra em OOMKill em loop.
+- **Causa:** o DCGM roda o `nv-hostengine` EMBUTIDO no container; com `SYS_ADMIN` + métricas de profiling (`DCGM_FI_PROF_*`) o uso no boot passa dos 256Mi do manifesto oficial.
+- **Fix:** subir o limit pra `1Gi` (request `256Mi`). Opcional: counters.csv curado (sem `DCGM_FI_PROF_*`) reduz o footprint e tira a dependência do profiling — recomendado em GPU de consumidor sem MIG.
+- **Lição:** o `256Mi` do exemplo oficial é otimista pro hostengine embutido + profiling.
+
+### Incidente 7.14 — Scrape novo invisível até o vmagent recarregar a config
+
+- **Sintoma:** `VMServiceScrape` criado, endpoint do Service vivo, `selectAllByDefault: true`, sem selectors, sem erro no operator — mas a métrica não aparece no vmsingle (`result: []`) e o pool não consta nos `activeTargets` do vmagent.
+- **Falso culpado:** discovery cross-namespace. Como o VMAgent tinha `selectAllByDefault: true` e selectors vazios, o namespace nunca foi o bloqueio (mover o scrape pra observability não mudou nada).
+- **Diagnóstico:** os únicos pools ativos eram os que JÁ existiam quando o vmagent subiu; o scrape novo (e só ele) faltava → suspeita de config não recarregada.
+- **Fix:** `kubectl -n observability rollout restart deploy/vmagent-victoria-metrics-vmks` (ou o operator, se o secret de config nem tiver sido regenerado). Após o restart, a métrica entra (`seriesFetched: 1`).
+- **Lição:** scrape novo ausente, com tudo "certo" no diagnóstico estático, geralmente é o vmagent que não releu a config — restart resolve e confirma a causa.
+
+### Incidente 7.15 — Ollama travado: Deployment `missing`/`OutOfSync` no ArgoCD
+
+- **Sintoma:** o Deployment do Ollama não cria pod (`No resources found`); o app aparece com o Deployment `missing` e `OutOfSync`.
+- **Causa:** estado de sync do ArgoCD preso (operação anterior não finalizou), impedindo a materialização do Deployment.
+- **Fix:** `terminate` no sync preso, depois `sync` + `prune` no app. O Deployment nasce, o pod agenda no worker-3-gpu, o PVC `WaitForFirstConsumer` binda em seguida.
+- **Lição:** Deployment `missing`/`OutOfSync` sem pod e sem erro de admissão = sync do Argo travado; `terminate` + `sync/prune` destrava. (O PVC `Pending` com `WaitForFirstConsumer` é consequência — binda quando o pod agenda, não antes.)
+
+---
 ## Apêndice A — Rollback da fase 1
 
 `just talos tf-destroy` remove as 5 VMs e a ISO. Estado externo criado e que
