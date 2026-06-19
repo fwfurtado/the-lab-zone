@@ -7,7 +7,8 @@ metadata:
   name: analytics-elt
   namespace: {{ .Release.Namespace }}
 spec:
-  schedule: {{ .Values.dbt.schedule | quote }}     # se Argo >= 3.6, pode usar `schedules: [...]`
+  schedules:
+    - {{ .Values.dbt.schedule | quote }}     # se Argo >= 3.6, pode usar `schedules: [...]`
   timezone: {{ .Values.dbt.timezone | quote }}
   concurrencyPolicy: Forbid          # não sobrepõe runs
   startingDeadlineSeconds: 120

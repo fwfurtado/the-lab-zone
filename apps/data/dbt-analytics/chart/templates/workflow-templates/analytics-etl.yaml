@@ -18,6 +18,7 @@ spec:
       - name: analytics_elt_duration_seconds
         help: "Duração da última execução do ELT analytics"
         gauge:
+          realtime: false
           value: "{{`{{workflow.duration}}`}}"
       - name: analytics_elt_runs_total
         help: "Execuções do ELT por status final"
