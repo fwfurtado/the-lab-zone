@@ -1,0 +1,27 @@
+# Argo Workflows — perfil homelab.
+# Referência de values: github.com/argoproj/argo-helm/blob/main/charts/argo-workflows/values.yaml
+# (confira as chaves abaixo contra a versão do chart que você pinar no app.yaml).
+
+# Cluster-scoped: o controller gerencia Workflows em múltiplos namespaces.
+singleNamespace: false
+
+controller:
+  # Namespaces onde o controller gerencia Workflows (cria SA/RBAC de workflow aqui).
+  # Só `data` por enquanto; somar `ai` etc. conforme o data plane crescer.
+  workflowNamespaces:
+    - data
+
+server:
+  # auth-mode server: igual ao "admin local" do ArgoCD. SSO (Authentik) entra na Fase 9.
+  authModes:
+    - server
+  # TLS termina no Gateway; o server fica HTTP interno (porta 2746).
+  secure: false
+
+# SA que os Workflows usam pra rodar (criada nos workflowNamespaces acima).
+workflow:
+  serviceAccount:
+    create: true
+    name: argo-workflow
+  rbac:
+    create: true

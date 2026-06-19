@@ -1,0 +1,30 @@
+# Artifact repository por-namespace: o controller, ao rodar um Workflow no ns `data`, lê o
+# ConfigMap `artifact-repositories` DESTE namespace e usa o repo apontado pela annotation
+# `default-artifact-repository`. Por isso ele vive em `data` (e o secret de credencial também).
+# O projeto `core` permite destino em qualquer ns -> o app argo-workflows aplica aqui via
+# o metadata.namespace explícito.
+#
+# Garage entra como um MinIO S3-compatível: endpoint interno (porta S3 3900), insecure (HTTP
+# no cluster), region `garage` (convenção da Fase 6), path-style implícito pro endpoint custom.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: artifact-repositories
+  namespace: data
+  annotations:
+    workflows.argoproj.io/default-artifact-repository: garage
+data:
+  garage: |
+    archiveLogs: true
+    s3:
+      bucket: argo-workflows
+      endpoint: garage.data.svc.cluster.local:3900
+      region: garage
+      insecure: true
+      keyFormat: "{{workflow.namespace}}/{{workflow.name}}/{{pod.name}}"
+      accessKeySecret:
+        name: argo-artifacts
+        key: accessKey
+      secretKeySecret:
+        name: argo-artifacts
+        key: secretKey

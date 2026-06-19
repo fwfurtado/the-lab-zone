@@ -1,0 +1,48 @@
+# Argo Workflows — orquestrador do data plane (migrations, ETL, backup, ingestão).
+# Componente de plataforma -> projeto `core`. O repo argoproj.github.io/argo-helm JÁ está
+# no sourceRepos do core (o argo-cd vem do mesmo repo), e os CRDs entram pelo
+# clusterResourceWhitelist: '*'. Sem mudança no AppProject.
+#
+# Cluster-scoped (singleNamespace: false), rodando Workflows no ns `data`
+# (controller.workflowNamespaces). Multi-source no padrão dos outros apps do core.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argo-workflows
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"   # depois do CNI(0)/ESO(1)/gateway(3)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: core
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-workflows
+      targetRevision: 1.0.16
+      helm:
+        releaseName: argo-workflows
+        valueFiles:
+          - $values/apps/core/argo-workflows/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/core/argo-workflows/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argo-workflows
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true     # CRDs do Argo Workflows são grandes (client-side estoura)
+      - CreateNamespace=true     # o chart não cria o próprio ns
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
