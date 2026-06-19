@@ -16,7 +16,7 @@ locals {
     "webserver=yes",
     "webserver-address=0.0.0.0",
     "webserver-port=8081",
-    "webserver-allow-from=10.40.0.0/21",
+    "webserver-allow-from=10.40.0.0/21,192.168.10.0/24",
     "EOF",
     "rm -f /etc/powerdns/pdns.d/bind.conf",
     # RECURSOR: face pra LAN na :53, forwarda the-lab.zone pro auth local:
@@ -27,6 +27,7 @@ locals {
     "    - ${var.dns_ip}",
     "  allow_from:",
     "    - 10.40.0.0/21",
+    "    - 192.168.10.0/24",
     "recursor:",
     "  forward_zones:",
     "    - zone: the-lab.zone",
