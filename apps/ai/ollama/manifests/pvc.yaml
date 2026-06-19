@@ -1,0 +1,16 @@
+# Armazenamento dos modelos do Ollama. openebs-hostpath e node-local (RWO) -> provisiona
+# no worker-3-gpu (onde o pod pousa via RuntimeClass scheduling), e os modelos persistem la.
+# RESSALVA DE STORAGE: o hostpath usa o disco base do openebs (provavelmente no WD Blue 500GB
+# do install). Modelos grandes somam dezenas de GB; se quiser usar o WD Black 2TB, aponta o
+# base path do openebs-hostpath pra um mount nesse disco (ou cria um PV dedicado nele).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: ai
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: openebs-hostpath
+  resources:
+    requests:
+      storage: 200Gi
