@@ -1,4 +1,4 @@
-resource "proxmox_download_file" "debian_cloud" {
+resource "proxmox_virtual_environment_download_file" "debian_cloud" {
   node_name           = var.proxmox_node
   datastore_id        = "local"
   content_type        = "iso"
@@ -23,15 +23,18 @@ resource "proxmox_virtual_environment_vm" "forgejo" {
     dedicated = var.memory
   }
 
+  # Debian genericcloud NAO traz qemu-guest-agent. Com enabled=true o provider
+  # espera o agente no Read (timeout padrao 15m) e TRAVA. IP eh estatico e o
+  # SSH conecta por IP, entao nao precisamos do agente.
   agent {
-    enabled = true
+    enabled = false
   }
 
   disk {
     datastore_id = var.datastore_id
     interface    = "virtio0"
     size         = var.boot_disk_size
-    file_id      = proxmox_download_file.debian_cloud.id
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud.id
     iothread     = true
     discard      = "on"
   }

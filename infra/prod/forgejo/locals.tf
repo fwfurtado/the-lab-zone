@@ -4,6 +4,7 @@ locals {
   forgejo_script = [
     "set -euo pipefail",
     "trap 'echo \"[forgejo-provision] FALHOU -> $BASH_COMMAND (linha $LINENO)\" >&2' ERR",
+    "exec >> /var/log/forgejo-provision.log 2>&1",
     "cloud-init status --wait || true",
     "export DEBIAN_FRONTEND=noninteractive",
 

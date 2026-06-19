@@ -1,4 +1,4 @@
-resource "proxmox_download_file" "debian_cloud" {
+resource "proxmox_virtual_environment_download_file" "debian_cloud" {
   node_name           = var.proxmox_node
   datastore_id        = "local"
   content_type        = "iso" # bpg importa o qcow2 como disco; file_name precisa de extensao .img
@@ -13,6 +13,7 @@ resource "proxmox_virtual_environment_vm" "harbor" {
   description   = "Harbor registry (proxy cache + imagens proprias + Trivy) - fora do cluster"
   tags          = ["mgmt", "harbor"]
 
+
   cpu {
     cores = var.vcpus
     type  = "host" # passa as flags reais da CPU
@@ -22,8 +23,11 @@ resource "proxmox_virtual_environment_vm" "harbor" {
     dedicated = var.memory
   }
 
+  # Debian genericcloud NAO traz qemu-guest-agent. Com enabled=true o provider
+  # espera o agente no Read (timeout padrao 15m) e TRAVA. IP eh estatico e o
+  # SSH conecta por IP, entao nao precisamos do agente.
   agent {
-    enabled = true # qemu-guest-agent (vem no cloud-init via script? Debian cloud ja inclui)
+    enabled = false
   }
 
   # Disco de boot — importa a imagem cloud
@@ -31,7 +35,7 @@ resource "proxmox_virtual_environment_vm" "harbor" {
     datastore_id = var.datastore_id
     interface    = "virtio0"
     size         = var.boot_disk_size
-    file_id      = proxmox_download_file.debian_cloud.id
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud.id
     iothread     = true
     discard      = "on"
   }
