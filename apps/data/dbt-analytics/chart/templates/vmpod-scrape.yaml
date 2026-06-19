@@ -15,9 +15,12 @@ metadata:
   name: argo-workflows-controller
   namespace: observability
 spec:
+  namespaceSelector:
+    matchNames:
+      - argo-workflows
   selector:
     matchLabels:
-      app.kubernetes.io/component: workflow-controller   # CONFIRMAR
+      app.kubernetes.io/component: workflow-controller
   podMetricsEndpoints:
-    - port: metrics        # CONFIRMAR (se a porta não tiver nome, troca por: targetPort: 9090)
+    - port: metrics
       path: /metrics

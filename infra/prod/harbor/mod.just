@@ -7,7 +7,7 @@ harbor_url := "https://harbor.mgmt.the-lab.zone"
     op run --env-file=../../../.env.tpl -- terraform plan
 
 @tf-apply:
-    op run --env-file=../../../.env.tpl -- terraform apply
+    op run --env-file=../../../.env.tpl -- terraform apply -auto-approve
 
 @tf-destroy:
     op run --env-file=../../../.env.tpl -- terraform destroy
