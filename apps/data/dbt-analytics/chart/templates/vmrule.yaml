@@ -11,7 +11,7 @@ spec:
       rules:
         - alert: AnalyticsEltFailed
           # janela > intervalo do cron (6h) pra um único fracasso ser pego antes de envelhecer
-          expr: increase(analytics_elt_runs_total{status=~"Failed|Error"}[12h]) > 0
+          expr: increase(argo_workflows_analytics_elt_runs_total{status=~"Failed|Error"}[12h]) > 0
           for: 0m
           labels:
             severity: warning
