@@ -37,8 +37,8 @@ langfuse:
     # ClickHouse single-node — SEM cluster (não há Keeper → ON CLUSTER trava)
     - name: CLICKHOUSE_CLUSTER_ENABLED
       value: "false"
-    - name: AUTH_DISABLE_SIGNUP
-      value: "true"
+    # - name: AUTH_DISABLE_SIGNUP # Failed to compare desired state to live state: failed to calculate diff: error calculating structured merge diff: error building typed value from config resource: .spec.template.spec.containers[name="langfuse-worker"].env: duplicate entries for key [name="AUTH_DISABLE_SIGNUP"]
+    #   value: "true"
 
 postgresql:
   deploy: false
@@ -73,7 +73,7 @@ s3:
   bucket: langfuse
   region: garage
   endpoint: http://garage.data.svc.cluster.local:3900
-  forcePathStyle: true                     # obrigatório pro Garage (path-style)
+  forcePathStyle: true # obrigatório pro Garage (path-style)
   accessKeyId:
     secretKeyRef:
       name: langfuse-secrets
