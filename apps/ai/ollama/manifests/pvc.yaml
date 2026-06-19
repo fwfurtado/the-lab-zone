@@ -8,6 +8,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: ollama-models
   namespace: ai
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   accessModes: [ReadWriteOnce]
   storageClassName: openebs-hostpath
