@@ -2072,6 +2072,162 @@ curl -s 'http://localhost:8428/api/v1/query?query=DCGM_FI_DEV_GPU_UTIL' | jq '.d
 - **Fix:** `terminate` no sync preso, depois `sync` + `prune` no app. O Deployment nasce, o pod agenda no worker-3-gpu, o PVC `WaitForFirstConsumer` binda em seguida.
 - **Lição:** Deployment `missing`/`OutOfSync` sem pod e sem erro de admissão = sync do Argo travado; `terminate` + `sync/prune` destrava. (O PVC `Pending` com `WaitForFirstConsumer` é consequência — binda quando o pod agenda, não antes.)
 
+# Fase 8 — Analytics / ELT
+
+Plataforma analítica sobre os dados de LLM do Langfuse (custo, latência, erros) + correlação RAG×custo. Batch ELT reusando a ClickHouse existente (Altinity/CHI), orquestrado por Argo Workflows, com migrations via goose e transformações via dbt. Tudo GitOps (ArgoCD app-of-apps), imagens genéricas + "código" (migrations/projeto dbt) entregue por **git artifact** em runtime.
+
+## Decisões de arquitetura
+
+- **Migration: goose** (não Atlas — o driver ClickHouse do Atlas é pago, e o operator da Altinity não gerencia GRANTs declarativamente).
+- **Orquestrador: Argo Workflows** (cluster-scoped, `workflowNamespaces: [data]`).
+- **Imagens genéricas + git artifact**: `goose-runner` e `dbt-runner` são engines puros (sem migrations/projeto baked). O código vem do repo por `inputs.artifacts: git:` a cada run, com `revision` pinável. Mudar model/seed/migration = só commit+push (sem rebuild de imagem); mudar dependência = rebuild da imagem.
+- **ConfigMap só pra arquivos planos e estáticos**; **git artifact pra árvore que cresce** (dbt, e depois o goose também). Motivo de descartar ConfigMap pro dbt: chave de CM não aceita `/`, colisão de basename entre pastas, limite de 1MB.
+- **RAG×custo (Nível B)**: 3 projetos no Langfuse logam a mesma chamada (chat→rag→gateway) e **não há elo cross-projeto** (session_id/metadata não compartilhados). Logo: custo = só `gateway` (LiteLLM, ledger com pricing real); `rag` = fronteira semântica. O mart reprecifica os tokens do rag pela taxa $/token do gateway, casando por `model_canonical`. Evita double-count; custo é estimado (taxa blended).
+
+---
+
+## Incidentes
+
+### Orquestração (Argo Workflows)
+
+**[A1] Workflow com `generateName` não é GitOps**
+- **Sintoma:** ArgoCD falha o sync com erro de (server-side) apply num objeto com `generateName`.
+- **Causa:** `apply` precisa de `name` fixo pra calcular o diff; um `Workflow` one-shot usa `generateName`.
+- **Diagnóstico:** o `Workflow` de teste vazou pra um path sincronizado (`chart/templates/`).
+- **Fix:** só `WorkflowTemplate`/`CronWorkflow` (nome fixo) vão pro Git. `Workflow` one-shot fica em `workflows/` (fora do `source.path`) e roda imperativo: `kubectl create -f` ou `argo submit --from workflowtemplate/...`.
+- **Lição:** GitOps = nome fixo. `generateName` = imperativo. Não existe "Workflow one-shot versionado".
+
+**[A2] `templateRef` não herda `spec.volumes`**
+- **Sintoma:** `volume 'migrations' not found in workflow spec` no step `goose-up`, **só** quando rodado pela DAG `analytics-elt`; standalone funcionava.
+- **Causa:** `workflowTemplateRef` (no Workflow) copia o spec inteiro da WT (com volumes); `templateRef` (dentro de DAG/steps) empresta **só o template**, não campos spec-level como `volumes`.
+- **Diagnóstico:** Etapa 2 (standalone) passou; a DAG não.
+- **Fix imediato:** declarar `spec.volumes` também no `analytics-elt`. **Fix definitivo:** migrar as migrations do goose de ConfigMap pra **git artifact** — `inputs.artifacts` É parte do template, então é herdado via `templateRef`. Matou o acoplamento e o volume de vez.
+- **Lição:** o que é spec-level não viaja por `templateRef`; `inputs.artifacts` viaja. Git artifact > volume pra qualquer coisa chamada por `templateRef`.
+
+**[A3] Argo 3.6+/v4: breaking changes de schema**
+- **Sintoma:** sync failed — `spec.schedules: Required value` (CronWorkflow) e `spec.metrics.prometheus[0].gauge.realtime: Required value` (WorkflowTemplate).
+- **Causa:** a 3.6 trocou `schedule` (singular) por `schedules` (lista) e tornou `gauge.realtime` obrigatório.
+- **Fix:** `schedules: [ "<cron>" ]`; `realtime: false` no gauge (emite no fim do run, não ao vivo). Counter não precisa.
+- **Lição:** ao subir de versão major, validar breaking changes de CRD antes de assumir compat.
+
+### Observabilidade (VictoriaMetrics)
+
+**[O1] Métricas custom do Argo ganham prefixo `argo_workflows_`**
+- **Sintoma:** VMRule/queries com `analytics_elt_runs_total` nunca casam, mesmo com a métrica existindo.
+- **Causa:** o controller prefixa as métricas custom de workflow com `argo_workflows_`.
+- **Diagnóstico:** o nome real no `/metrics` é `argo_workflows_analytics_elt_runs_total`.
+- **Fix:** usar o nome **com prefixo** no `expr` da VMRule e em painéis.
+- **Lição:** confirmar o nome emitido no `/metrics`, não assumir o nome declarado no manifesto.
+
+**[O2] Endpoint de métricas do Argo 3.6+ é HTTPS por default**
+- **Sintoma:** `curl http://<controller>:9090/metrics` retorna vazio (`grep -c '^argo_'` = 0), apesar da porta `metrics=9090` existir.
+- **Causa:** `metricsConfig.secure` passou a ter default **true** na 3.6 → o endpoint serve HTTPS com cert self-signed.
+- **Diagnóstico:** `curl -sk https://<controller>:9090/metrics` retorna tudo.
+- **Fix:** `metricsConfig.secure: false` no controller (configmap, chave única `config`) + **restart do controller** (não faz hot-reload do metricsConfig). VMPodScrape volta pra `scheme: http`. (Alternativa: manter HTTPS e pôr `scheme: https` + `tlsConfig.insecureSkipVerify` no scrape.)
+- **Lição:** 3.6 mudou o default pra TLS; `metricsConfig` não recarrega quente.
+
+**[O3] VMPodScrape em outra namespace precisa de `namespaceSelector`**
+- **Sintoma:** o target nunca aparece no vmagent (série some na VM), mesmo com o VMPodScrape `operational` e a métrica presente na fonte.
+- **Causa:** VMPodScrape em `observability`, sem `namespaceSelector`, só procura pods na **própria** ns; o controller está em `argo-workflows`.
+- **Fix:** `spec.namespaceSelector.matchNames: [argo-workflows]`. (Padrão dos outros scrapes que vivem em observability e raspam pods em `data`.)
+- **Lição:** scrape cross-namespace exige `namespaceSelector` explícito; `operational` ≠ target ativo.
+
+**[O4] vmagent vs VMSingle pra query**
+- **Sintoma:** `unsupported path requested: "/api/v1/query"` na 8429; depois, `result: []`.
+- **Causa:** port-forward no **vmagent** (só ingest/buffer; o `/api/v1/query` dele reflete só o buffer local) em vez do **VMSingle** (8428, o storage).
+- **Fix:** query no VMSingle (`svc/vmsingle-...:8428`).
+- **Lição:** vmagent não é o storage. Query de verdade no VMSingle (ou Grafana Explore / vmui).
+
+### Plataforma de dados (ClickHouse / dbt / goose)
+
+**[D1] CHI da Altinity não cria database declarativamente**
+- **Sintoma:** o database `analytics` precisa existir antes do goose (a version table do goose mora nele).
+- **Causa:** o operator cobre users/profiles/quotas/topologia, mas não cria database de aplicação.
+- **Fix:** step `ensure-db` no Workflow (`curl` no HTTP 8123, `CREATE DATABASE IF NOT EXISTS`), fora do goose.
+- **Lição:** database de app no ClickHouse/Altinity = SQL/step, não CHI.
+
+**[D2] `singleBranch: true` no git artifact exige branch explícito**
+- **Sintoma:** `artifact repo failed to load: single branch mode without a branch specified`.
+- **Causa:** `--single-branch` precisa do nome do branch; `revision` sozinho não basta.
+- **Fix:** remover `singleBranch: true` — `depth: 1` já dá o clone raso.
+- **Lição:** `singleBranch` só com `branch:` explícito; pra otimizar, `depth` basta.
+
+**[D3] Seed do dbt é CSV puro (agate não suporta `#`)**
+- **Sintoma:** `Row N has X values but Table only has 1 columns` + `RuntimeWarning: "<col>" does not match the name of any column`.
+- **Causa:** o agate trata `#` como **dado**, não comentário; lê a 1ª linha (um comentário) como header (1 coluna), e estoura quando um comentário tem vírgula.
+- **Fix:** CSV sem comentário. Documentação vai na `description` do schema yml.
+- **Lição:** seed = CSV puro (header + dados), nada de `#`.
+
+**[D4] Seed se documenta sob a chave `seeds:`, não `models:`**
+- **Sintoma:** `WARNING: '<seed>' is a seed node, but it is specified in the models section`; testes do seed ficam **skipados**.
+- **Causa:** seed documentado sob `models:` no property file.
+- **Fix:** bloco `seeds:` (idealmente em `seeds/_seeds.yml`, co-locado com os CSVs).
+- **Lição:** property file separa `models:` de `seeds:`; co-locar com o recurso.
+
+**[D5] Mudar coluna de seed exige recriar a tabela**
+- **Sintoma:** `NO_SUCH_COLUMN_IN_TABLE` (ex.: `No such column kind in table analytics.model_dim`).
+- **Causa:** `dbt seed` faz **INSERT**, não **ALTER**; a tabela existente tem o schema antigo.
+- **Fix:** `DROP TABLE` do seed (ou `dbt build --full-refresh`) **uma vez**; o steady-state segue com `dbt build` normal.
+- **Lição:** mudança de coluna de seed = full-refresh pontual.
+
+**[D6] ClickHouse dropa coluna homônima em JOIN**
+- **Sintoma:** `UNKNOWN_IDENTIFIER: ... 'project_id' ... Maybe you meant: ['project_name']`; e `Missing columns: 'event_date'`.
+- **Causa:** com colunas de mesmo nome nos dois lados do JOIN, o ClickHouse resolve o output como ambíguo e **dropa** a coluna. `t.*` perde a colidente, e **qualificar `o.col` no SELECT não basta** se o outro lado também tiver `col`.
+- **Diagnóstico:** o `int_observations_model` (com `o.*` + join no `project_dim`, que tem `project_id`) saía sem `project_id`. Mesmo `o.project_id` explícito não sobreviveu enquanto o lado direito tinha `project_id`.
+- **Fix:** renomear a colidente do lado direito num subselect (`project_id as pd_project_id`). No SELECT, usar colunas do lado **esquerdo** e, da direita, só nomes **únicos**. Evitar `*` em models com JOIN.
+- **Lição:** em JOIN no ClickHouse, garanta nomes de coluna distintos entre os lados (renomear no subselect quando preciso).
+
+---
+
+## Estado final da app `dbt-analytics`
+
+```
+apps/data/dbt-analytics/
+├── app.yaml                      # Application (source.path -> chart/), sync-wave 5
+├── chart/                        # 1º chart local do repo
+│   ├── Chart.yaml / values.yaml  # git (repo/revision/creds), imagens, clickhouse, schedule
+│   ├── templates/
+│   │   ├── external-secrets.yaml             # clickhouse-analytics (ESO -> 1Password)
+│   │   ├── cronworkflow-analytics-elt.yaml   # schedules: [6h], workflowTemplateRef
+│   │   ├── vmrule-analytics-elt.yaml         # alerta AnalyticsEltFailed (nome COM prefixo)
+│   │   └── workflow-templates/
+│   │       ├── clickhouse-migrate.yaml       # ensure-db -> goose-up (migrations via git artifact)
+│   │       └── analytics-etl.yaml            # DAG migrate -> dbt-build + spec.metrics
+│   └── (sem configmap de migrations — removido na limpeza da verruga)
+├── migrations/clickhouse/        # migrations goose (fora do chart; git artifact)
+├── dbt/                          # projeto dbt (git artifact)
+│   ├── dbt_project.yml / profiles.yml
+│   ├── seeds/  model_dim.csv (+ kind), project_dim.csv, _seeds.yml
+│   └── models/
+│       ├── staging/      stg_observations (+trace_id), stg_traces, _staging.yml
+│       ├── intermediate/ int_observations_model (+kind/project, subselect anti-colisão),
+│       │                  int_gateway_unit_cost
+│       └── marts/        mart_llm_usage_daily, mart_llm_latency_daily, mart_unmapped_models,
+│                         mart_rag_cost_daily, mart_rag_interactions
+└── workflows/                    # Workflows run-once (generateName, fora do source.path)
+```
+
+Imagens (genéricas, `ofwfurtado/`, pin por digest): `goose-runner`, `dbt-runner` em `docker/`.
+
+## Aberto / futuro (não bloqueia a Fase 8)
+
+- **Atribuição exata de custo RAG**: hoje é reprecificação (Nível B) porque não há elo cross-projeto. Propagar um id único Open WebUI→LightRAG→LiteLLM (metadata/session) permitiria join exato e custo real por interação. É mudança nas apps, não no pipeline.
+- **Taxa de custo blended**: `int_gateway_unit_cost` mistura input+output. Refinar via `cost_details` (preço de input vs output) se a precisão importar.
+- **Alerta de staleness**: complementar o "falhou" com "não rodou em ~2 ciclos".
+
+## Validação (run de fechamento)
+
+`dbt build` → PASS=18, ERROR=0 (5 views, 4 tables, 2 seeds, 7 tests).
+
+`mart_rag_cost_daily` (reprecificação funcionando — retrieval free, geração precificada via gateway):
+
+| kind | model_canonical | tok | cost |
+|---|---|---|---|
+| completion | deepseek-v4-flash | 8424 | 0.001336 |
+| embedding | qwen3-embedding-8b | 57 | 0 |
+
+`mart_rag_interactions` (9 traces; cada trace é OU retrieval OU geração — LightRAG loga operações como traces separados, coerente com o no-link cross-projeto).
+
 ---
 ## Apêndice A — Rollback da fase 1
 
