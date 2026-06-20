@@ -1,9 +1,12 @@
 {{ config(materialized='view') }}
 
 -- Enriquece com model_dim (canônico/provider/is_local/tier/kind) e project_dim (nome/role).
--- Colunas EXPLÍCITAS (sem o.*): o ClickHouse, com `o.*` + JOIN onde o lado direito (project_dim)
--- tem uma coluna de mesmo nome (project_id), REMOVE essa coluna da expansão do `*` pra evitar
--- ambiguidade — o view perdia o project_id. Listar explícito (o.project_id) resolve.
+--
+-- Colisão de nome no JOIN: enquanto o lado direito tiver uma coluna `project_id` (a do
+-- project_dim), o ClickHouse resolve o output como ambíguo e DROPA o project_id do view — mesmo
+-- com `o.project_id` explícito no SELECT. Fix: renomear a coluna colidente do project_dim num
+-- subselect (project_id -> pd_project_id). Aí o `o.project_id` é o único `project_id` em escopo
+-- e sobrevive no view. model_dim não colide (model_raw/canonical/... são nomes únicos).
 select
     o.id,
     o.trace_id,
@@ -29,5 +32,11 @@ select
 from {{ ref('stg_observations') }} o
 left join {{ ref('model_dim') }} m
     on o.provided_model_name = m.model_raw
-left join {{ ref('project_dim') }} p
-    on o.project_id = p.project_id
+left join (
+    select
+        project_id as pd_project_id,
+        project_name,
+        project_role
+    from {{ ref('project_dim') }}
+) p
+    on o.project_id = p.pd_project_id
