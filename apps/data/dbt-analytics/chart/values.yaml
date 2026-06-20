@@ -4,34 +4,37 @@ serviceAccountName: argo-workflow
 # imagem do ensure-db (cria o database via HTTP). Pinar por digest.
 curlImage: curlimages/curl:8.20.0
 
+# Repo de onde sai o "código" entregue por git artifact em runtime:
+# as migrations do goose E o projeto dbt. Engine genérica na imagem; código vem do git.
+# Compartilhado pelos dois runners -> mesmo revision = migrate e dbt no mesmo commit.
+git:
+  repo: https://github.com/fwfurtado/the-lab-zone.git
+  revision: main # pode pinar num SHA pra reprodutibilidade total
+  credsSecret: "" # repo público -> vazio; privado -> secret (campos username + token)
+
 goose:
-  # imagem GENÉRICA goose-runner. Pinar por digest após o 1o build.
+  # imagem GENÉRICA goose-runner (bash+jq+goose, sem migrations baked). Pinar por digest.
   image: ofwfurtado/goose-runner:0.1.0
 
 dbt:
-  # imagem GENÉRICA (engine; sem projeto). Pinar por digest após o 1o build.
+  # imagem GENÉRICA (engine; sem projeto baked). Pinar por digest.
   image: ofwfurtado/dbt-runner:0.1.0
-  projectDir: apps/data/dbt-analytics/dbt   # subdir do projeto dentro do repo (git artifact)
-  git:
-    repo: https://github.com/fwfurtado/the-lab-zone.git
-    revision: main          # pode pinar num SHA pra reprodutibilidade total
-    credsSecret: ""         # repo público -> vazio. Privado -> nome do secret (username+token)
-  schedule: "0 */6 * * *"   # a cada 6h
-  timezone: "Etc/UTC"       # convenção do lab; marts são diários, fuso não muda agregação
+  projectDir: apps/data/dbt-analytics/dbt # subdir do projeto dbt no repo (git artifact)
+  schedule: "0 */6 * * *" # CronWorkflow: a cada 6h
+  timezone: "Etc/UTC"
 
+migrations:
+  # subdir das migrations no repo (git artifact). NÃO mais ConfigMap.
+  dir: apps/data/dbt-analytics/migrations/clickhouse
 
 clickhouse:
-  host: clickhouse-clickhouse.data.svc.cluster.local   # CONFIRMAR: kubectl get svc -n data
+  host: clickhouse-clickhouse.data.svc.cluster.local
   httpPort: 8123
   nativePort: 9000
   database: analytics
   adminSecret:
-    name: clickhouse-credentials   # secret admin da Fase 6
+    name: clickhouse-credentials # secret admin da Fase 6
     key: adminPassword
   analyticsSecret:
-    name: clickhouse-analytics     # ESO -> 1Password
+    name: clickhouse-analytics # ESO -> 1Password
     key: password
-
-migrations:
-  configMapName: clickhouse-migrations
-  mountPath: /migrations

@@ -1,6 +1,7 @@
 # DAG do ELT: migrate (goose, reusa clickhouse-migrate) -> dbt build.
-# NOTA: o volume `migrations` precisa ser declarado AQUI também — templateRef empresta só o
-# template, não o spec.volumes da clickhouse-migrate. O goose-up monta esse volume.
+# VERRUGA REMOVIDA: não há mais `spec.volumes` aqui. O goose-up agora recebe as migrations
+# por git artifact (inputs.artifacts), que É herdado via templateRef — então o `migrate`
+# (templateRef -> clickhouse-migrate/main) traz tudo que precisa sozinho. Sem acoplamento.
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -9,10 +10,11 @@ metadata:
 spec:
   entrypoint: dag
   serviceAccountName: {{ .Values.serviceAccountName }}
-  volumes:
-    - name: migrations
-      configMap:
-        name: {{ .Values.migrations.configMapName }}
+  arguments:
+    parameters:
+      - name: revision
+        value: {{ .Values.git.revision | quote }}   # branch ou SHA (pina o dbt-build no run)
+  # Métricas custom emitidas no fim do run (prefixo final na VM: argo_workflows_*).
   metrics:
     prometheus:
       - name: analytics_elt_duration_seconds
@@ -28,10 +30,6 @@ spec:
         counter:
           value: "1"
         when: "{{`{{workflow.status}}`}} != Running"
-  arguments:
-    parameters:
-      - name: revision
-        value: {{ .Values.dbt.git.revision | quote }}
   templates:
     - name: dag
       dag:
@@ -56,15 +54,16 @@ spec:
           - name: repo
             path: /src
             git:
-              repo: {{ .Values.dbt.git.repo | quote }}
+              repo: {{ .Values.git.repo | quote }}
               revision: "{{`{{inputs.parameters.revision}}`}}"
               depth: 1
-              {{- if .Values.dbt.git.credsSecret }}
+              singleBranch: true
+              {{- if .Values.git.credsSecret }}
               usernameSecret:
-                name: {{ .Values.dbt.git.credsSecret }}
+                name: {{ .Values.git.credsSecret }}
                 key: username
               passwordSecret:
-                name: {{ .Values.dbt.git.credsSecret }}
+                name: {{ .Values.git.credsSecret }}
                 key: token
               {{- end }}
       container:

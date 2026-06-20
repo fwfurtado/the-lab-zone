@@ -1,5 +1,7 @@
 # WorkflowTemplate reusável. 2 steps: ensure-db (cria o database) -> goose-up (migra).
-# A DAG do ETL (Etapa 4/5) referencia o template `goose-up`/`main` como passo 1.
+# As migrations chegam por GIT ARTIFACT (checkout em runtime), não mais por ConfigMap/volume.
+# Isso é o que mata a verruga: inputs.artifacts faz parte do template, então é herdado via
+# templateRef (ao contrário de spec.volumes, que é spec-level e NÃO é herdado).
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -8,10 +10,6 @@ metadata:
 spec:
   entrypoint: main
   serviceAccountName: {{ .Values.serviceAccountName }}
-  volumes:
-    - name: migrations
-      configMap:
-        name: {{ .Values.migrations.configMapName }}
   templates:
     - name: main
       steps:
@@ -38,8 +36,27 @@ spec:
                 name: {{ .Values.clickhouse.adminSecret.name }}
                 key: {{ .Values.clickhouse.adminSecret.key }}
 
-    # roda as migrations. Imagem GENÉRICA: o DSN (com encoding da senha) é montado aqui.
+    # roda as migrations. Projeto vem do git em /src; GOOSE_MIGRATION_DIR aponta pro subdir.
+    # Imagem GENÉRICA: o DSN (com encoding da senha) é montado aqui no command.
     - name: goose-up
+      inputs:
+        artifacts:
+          - name: repo
+            path: /src
+            git:
+              repo: {{ .Values.git.repo | quote }}
+              revision: {{ .Values.git.revision | quote }}
+              depth: 1
+              singleBranch: true
+              {{- if .Values.git.credsSecret }}
+              # repo privado: secret com username + token (PAT/deploy token read-only)
+              usernameSecret:
+                name: {{ .Values.git.credsSecret }}
+                key: username
+              passwordSecret:
+                name: {{ .Values.git.credsSecret }}
+                key: token
+              {{- end }}
       container:
         image: {{ .Values.goose.image }}
         command: [bash, -c]
@@ -49,7 +66,7 @@ spec:
             PWENC="$(printf '%s' "$ADMIN_PW" | jq -sRr @uri)"
             export GOOSE_DRIVER=clickhouse
             export GOOSE_DBSTRING="clickhouse://admin:${PWENC}@{{ .Values.clickhouse.host }}:{{ .Values.clickhouse.nativePort }}/{{ .Values.clickhouse.database }}"
-            export GOOSE_MIGRATION_DIR={{ .Values.migrations.mountPath }}
+            export GOOSE_MIGRATION_DIR="/src/{{ .Values.migrations.dir }}"
             # ANALYTICS_PASSWORD fica no env -> o envsub da migration o substitui.
             goose up
             goose status
@@ -64,9 +81,6 @@ spec:
               secretKeyRef:
                 name: {{ .Values.clickhouse.analyticsSecret.name }}
                 key: {{ .Values.clickhouse.analyticsSecret.key }}
-        volumeMounts:
-          - name: migrations
-            mountPath: {{ .Values.migrations.mountPath }}
         resources:
           requests: { cpu: 50m, memory: 128Mi }
           limits: { cpu: 500m, memory: 256Mi }
