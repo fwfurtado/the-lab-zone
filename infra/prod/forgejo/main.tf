@@ -1,4 +1,7 @@
-resource "proxmox_virtual_environment_download_file" "debian_cloud" {
+# Nome curto = canonico no bpg 0.109 (o longo eh deprecated). Este recurso NAO
+# suporta `terraform import`, entao a VM NAO referencia o `.id` dele (que seria
+# "known after apply" e forcaria replace). Veja o file_id do disco abaixo.
+resource "proxmox_download_file" "debian_cloud" {
   node_name           = var.proxmox_node
   datastore_id        = "local"
   content_type        = "iso"
@@ -8,11 +11,10 @@ resource "proxmox_virtual_environment_download_file" "debian_cloud" {
 }
 
 resource "proxmox_virtual_environment_vm" "forgejo" {
-  name          = "forgejo"
-  node_name     = var.proxmox_node
-  description   = "Forgejo (git + CI) - fora do cluster - SQLite + push-mirror p/ GitHub (DR)"
-  tags          = ["mgmt", "git"]
-  start_on_boot = true
+  name        = "forgejo"
+  node_name   = var.proxmox_node
+  description = "Forgejo (git + CI) - fora do cluster - SQLite + push-mirror p/ GitHub (DR)"
+  tags        = ["mgmt", "git"]
 
   cpu {
     cores = var.vcpus
@@ -34,7 +36,7 @@ resource "proxmox_virtual_environment_vm" "forgejo" {
     datastore_id = var.datastore_id
     interface    = "virtio0"
     size         = var.boot_disk_size
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud.id
+    file_id      = "${proxmox_download_file.debian_cloud.datastore_id}:${proxmox_download_file.debian_cloud.content_type}/${proxmox_download_file.debian_cloud.file_name}"
     iothread     = true
     discard      = "on"
   }
@@ -63,6 +65,8 @@ resource "proxmox_virtual_environment_vm" "forgejo" {
   operating_system {
     type = "l26"
   }
+
+  depends_on = [proxmox_download_file.debian_cloud]
 }
 
 resource "terraform_data" "forgejo_provision" {

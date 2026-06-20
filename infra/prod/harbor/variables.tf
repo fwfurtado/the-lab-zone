@@ -65,8 +65,8 @@ variable "debian_cloud_image_url" {
 # ── Harbor ──────────────────────────────────────────────────────────────────
 variable "harbor_version" {
   type        = string
-  default     = "v2.15.2"
-  description = "Pin >= 2.15.1 (2.15.0 tinha bug no proxy cache do Docker Hub)"
+  default     = "v2.15.1"
+  description = "GA mais novo da linha 2.15 (v2.15.2 so existe como rc1). Tem o fix do proxy cache do Docker Hub."
 }
 
 variable "harbor_admin_password" {

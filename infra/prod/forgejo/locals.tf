@@ -1,21 +1,21 @@
 locals {
   forgejo_fqdn = "git.mgmt.the-lab.zone"
 
+  # Mesma estrategia do harbor: top-level POSIX grava o script real e roda com
+  # bash explicito + log. Bash-ismos ficam dentro do arquivo.
   forgejo_script = [
+    "set -e",
+    "cat > /root/provision-forgejo.sh <<'PROVEOF'",
+    "#!/usr/bin/env bash",
     "set -euo pipefail",
     "trap 'echo \"[forgejo-provision] FALHOU -> $BASH_COMMAND (linha $LINENO)\" >&2' ERR",
-    "exec >> /var/log/forgejo-provision.log 2>&1",
     "cloud-init status --wait || true",
     "export DEBIAN_FRONTEND=noninteractive",
-
-    # ── [1/5] Docker ──────────────────────────────────────────────────────
     "echo '==> [1/5] apt + docker'",
     "apt-get update -qq",
     "apt-get install -y -qq ca-certificates curl",
     "curl -fsSL https://get.docker.com | sh",
     "systemctl enable --now docker",
-
-    # ── [2/5] TLS via lego v5 (DNS-01 Cloudflare) ────────────────────────
     "echo '==> [2/5] TLS via lego (DNS-01)'",
     "mkdir -p /etc/lego /srv/forgejo/data/tls",
     "cat > /etc/lego/cloudflare.env <<'EOF'",
@@ -23,7 +23,6 @@ locals {
     "EOF",
     "chmod 600 /etc/lego/cloudflare.env",
     "if [ ! -f /etc/lego/certificates/${local.forgejo_fqdn}.crt ]; then docker run --rm --env-file /etc/lego/cloudflare.env -v /etc/lego:/etc/lego ${var.lego_image} run --accept-tos --email ${var.acme_email} --dns cloudflare --dns.resolvers ${var.acme_propagation_resolver} --domains ${local.forgejo_fqdn} --path /etc/lego; fi",
-    # deploy do cert (container roda uid/gid 1000 e precisa LER):
     "cat > /usr/local/bin/forgejo-cert-deploy.sh <<'EOF'",
     "#!/bin/sh",
     "set -e",
@@ -36,16 +35,12 @@ locals {
     "EOF",
     "chmod +x /usr/local/bin/forgejo-cert-deploy.sh",
     "/usr/local/bin/forgejo-cert-deploy.sh",
-
-    # ── [3/5] Segredos do Forgejo (env_file) ─────────────────────────────
     "echo '==> [3/5] .env'",
     "cat > /srv/forgejo/.env <<'EOF'",
     "FORGEJO__security__SECRET_KEY=${var.forgejo_secret_key}",
     "FORGEJO__security__INTERNAL_TOKEN=${var.forgejo_internal_token}",
     "EOF",
     "chmod 600 /srv/forgejo/.env",
-
-    # ── [4/5] docker-compose (SQLite, TLS proprio, sem reverse proxy) ────
     "echo '==> [4/5] docker compose up'",
     "cat > /srv/forgejo/docker-compose.yml <<'EOF'",
     "services:",
@@ -78,8 +73,6 @@ locals {
     "      - \"${var.forgejo_ssh_port}:22\"",
     "EOF",
     "cd /srv/forgejo && docker compose up -d",
-
-    # ── [5/5] Renovação automática ───────────────────────────────────────
     "echo '==> [5/5] timer de renovacao'",
     "cat > /etc/systemd/system/lego-renew.service <<'EOF'",
     "[Unit]",
@@ -105,5 +98,8 @@ locals {
     "systemctl daemon-reload",
     "systemctl enable --now lego-renew.timer",
     "echo '==> forgejo provisionado'",
+    "PROVEOF",
+    "chmod 600 /root/provision-forgejo.sh",
+    "bash /root/provision-forgejo.sh > /var/log/forgejo-provision.log 2>&1",
   ]
 }
