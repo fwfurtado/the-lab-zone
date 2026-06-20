@@ -1,30 +1,30 @@
 locals {
   harbor_fqdn = "harbor.mgmt.the-lab.zone"
 
-  # remote-exec "inline" concatena tudo num único script: set/trap/export/vars persistem.
+  # ESTRATEGIA: o top-level do remote-exec roda no shell ambiente (pode ser
+  # dash, que NAO suporta `set -o pipefail` nem `trap ERR`). Entao o top-level
+  # eh 100% POSIX: grava o script real em /root/provision-harbor.sh e o executa
+  # com `bash` EXPLICITO, redirecionando tudo pro log. Os bash-ismos vivem
+  # dentro do arquivo, sob bash garantido. Heredoc externo 'PROVEOF' (quoted) =
+  # nada eh expandido pelo shell; o Terraform ja interpolou os ${...} antes.
   harbor_script = [
+    "set -e",
+    "cat > /root/provision-harbor.sh <<'PROVEOF'",
+    "#!/usr/bin/env bash",
     "set -euo pipefail",
     "trap 'echo \"[harbor-provision] FALHOU -> $BASH_COMMAND (linha $LINENO)\" >&2' ERR",
-    "exec >> /var/log/harbor-provision.log 2>&1",
     "cloud-init status --wait || true",
     "export DEBIAN_FRONTEND=noninteractive",
-
-    # ── [1/6] Pré-requisitos + Docker ─────────────────────────────────────
     "echo '==> [1/6] apt + docker'",
     "apt-get update -qq",
     "apt-get install -y -qq ca-certificates curl",
     "curl -fsSL https://get.docker.com | sh",
     "systemctl enable --now docker",
-
-    # ── [2/6] Disco dedicado de blobs (virtio1 -> /dev/vdb) em /data ─────
     "echo '==> [2/6] disco de dados /data'",
     "if ! blkid /dev/vdb >/dev/null 2>&1; then mkfs.ext4 -F -L harbor-data /dev/vdb; fi",
     "mkdir -p /data",
     "grep -q '/dev/vdb' /etc/fstab || echo '/dev/vdb /data ext4 defaults,discard 0 2' >> /etc/fstab",
     "mount -a",
-
-    # ── [3/6] TLS via lego v5 (DNS-01 Cloudflare) ────────────────────────
-    # v5: `run` vem ANTES das flags. Cópia do cert é robusta a layout (find por FQDN).
     "echo '==> [3/6] TLS via lego (DNS-01)'",
     "mkdir -p /etc/lego /etc/harbor/tls",
     "cat > /etc/lego/cloudflare.env <<'EOF'",
@@ -32,7 +32,6 @@ locals {
     "EOF",
     "chmod 600 /etc/lego/cloudflare.env",
     "if [ ! -f /etc/lego/certificates/${local.harbor_fqdn}.crt ]; then docker run --rm --env-file /etc/lego/cloudflare.env -v /etc/lego:/etc/lego ${var.lego_image} run --accept-tos --email ${var.acme_email} --dns cloudflare --dns.resolvers ${var.acme_propagation_resolver} --domains ${local.harbor_fqdn} --path /etc/lego; fi",
-    # script de deploy do cert — reusado pelo provision e pelo renew (uid 10000 do Harbor precisa LER -> 0644)
     "cat > /usr/local/bin/harbor-cert-deploy.sh <<'EOF'",
     "#!/bin/sh",
     "set -e",
@@ -44,8 +43,6 @@ locals {
     "EOF",
     "chmod +x /usr/local/bin/harbor-cert-deploy.sh",
     "/usr/local/bin/harbor-cert-deploy.sh",
-
-    # ── [4/6] Installer oficial do Harbor ────────────────────────────────
     "echo '==> [4/6] download + harbor.yml'",
     "curl -fsSL -o /tmp/harbor.tgz https://github.com/goharbor/harbor/releases/download/${var.harbor_version}/harbor-online-installer-${var.harbor_version}.tgz",
     "rm -rf /opt/harbor && tar xzf /tmp/harbor.tgz -C /opt",
@@ -77,8 +74,6 @@ locals {
     "EOF",
     "echo '==> [5/6] install.sh --with-trivy (demora: puxa ~10 imagens)'",
     "cd /opt/harbor && ./install.sh --with-trivy",
-
-    # ── [6/6] Renovação automática ───────────────────────────────────────
     "echo '==> [6/6] timer de renovacao'",
     "cat > /etc/systemd/system/lego-renew.service <<'EOF'",
     "[Unit]",
@@ -104,5 +99,8 @@ locals {
     "systemctl daemon-reload",
     "systemctl enable --now lego-renew.timer",
     "echo '==> harbor provisionado'",
+    "PROVEOF",
+    "chmod 600 /root/provision-harbor.sh",
+    "bash /root/provision-harbor.sh > /var/log/harbor-provision.log 2>&1",
   ]
 }

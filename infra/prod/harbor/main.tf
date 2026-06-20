@@ -8,11 +8,10 @@ resource "proxmox_virtual_environment_download_file" "debian_cloud" {
 }
 
 resource "proxmox_virtual_environment_vm" "harbor" {
-  name          = "harbor"
-  node_name     = var.proxmox_node
-  description   = "Harbor registry (proxy cache + imagens proprias + Trivy) - fora do cluster"
-  tags          = ["mgmt", "harbor"]
-
+  name        = "harbor"
+  node_name   = var.proxmox_node
+  description = "Harbor registry (proxy cache + imagens proprias + Trivy) - fora do cluster"
+  tags        = ["mgmt", "harbor"]
 
   cpu {
     cores = var.vcpus
