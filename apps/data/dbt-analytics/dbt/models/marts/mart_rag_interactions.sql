@@ -1,14 +1,17 @@
 {{ config(materialized='table', engine='MergeTree', order_by='(event_date, trace_id)') }}
 
 -- Forma de cada interação RAG (projeto `rag`), por trace:
---   n_retrievals  = observações kind='embedding' (as buscas vetoriais do LightRAG)
+--   n_retrievals  = observações kind='embedding' (buscas vetoriais do LightRAG)
 --   n_generations = observações kind='completion' (geração/extração do LightRAG)
 --   wall_ms       = latência ponta-a-ponta do trace (último end - primeiro start)
--- SEM custo aqui — custo mora no mart_rag_cost_daily (reprecificado). Aqui é volume/forma,
--- onde double-count não é problema (não somo custo). É a resposta de "quanto retrieval uma
--- query de RAG dispara e quão pesada ela é".
+-- SEM custo aqui — custo mora no mart_rag_cost_daily (reprecificado). Aqui é volume/forma.
+--
+-- IMPORTANTE: event_date/trace_id saem do int (o, lado esquerdo). Do trace (t, lado direito) só
+-- puxo trace_name/session_id (nomes ÚNICOS). Não dá pra selecionar t.event_date/t.project_id —
+-- o ClickHouse perde colunas de mesmo nome do lado direito do JOIN. As condições de ON com nomes
+-- iguais (qualificadas) são ok.
 select
-    t.event_date,
+    o.event_date,
     o.trace_id,
     t.trace_name,
     t.session_id,
@@ -25,4 +28,4 @@ inner join {{ ref('stg_traces') }} t
    and o.project_id = t.project_id
 where o.project_role = 'rag'
 group by
-    t.event_date, o.trace_id, t.trace_name, t.session_id
+    o.event_date, o.trace_id, t.trace_name, t.session_id

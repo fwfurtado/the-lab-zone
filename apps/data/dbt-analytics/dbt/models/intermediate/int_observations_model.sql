@@ -1,10 +1,24 @@
 {{ config(materialized='view') }}
 
 -- Enriquece com model_dim (canônico/provider/is_local/tier/kind) e project_dim (nome/role).
--- LEFT JOINs: não-mapeados caem em 'unknown' (e aparecem no mart_unmapped_models / fica óbvio
--- se um project_id novo surgir). project_role é o eixo de custo: só 'gateway' tem custo real.
+-- Colunas EXPLÍCITAS (sem o.*): o ClickHouse, com `o.*` + JOIN onde o lado direito (project_dim)
+-- tem uma coluna de mesmo nome (project_id), REMOVE essa coluna da expansão do `*` pra evitar
+-- ambiguidade — o view perdia o project_id. Listar explícito (o.project_id) resolve.
 select
-    o.*,
+    o.id,
+    o.trace_id,
+    o.project_id,
+    o.type,
+    o.level,
+    o.provided_model_name,
+    o.start_time,
+    o.end_time,
+    o.event_date,
+    o.latency_ms,
+    o.total_cost,
+    o.input_tokens,
+    o.output_tokens,
+    o.total_tokens,
     coalesce(m.model_canonical, o.provided_model_name) as model_canonical,
     coalesce(m.provider, 'unknown')                    as provider,
     coalesce(m.is_local, toUInt8(0))                   as is_local,
