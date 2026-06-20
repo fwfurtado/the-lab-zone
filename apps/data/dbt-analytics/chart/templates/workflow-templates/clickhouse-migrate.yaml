@@ -47,7 +47,6 @@ spec:
               repo: {{ .Values.git.repo | quote }}
               revision: {{ .Values.git.revision | quote }}
               depth: 1
-              singleBranch: true
               {{- if .Values.git.credsSecret }}
               # repo privado: secret com username + token (PAT/deploy token read-only)
               usernameSecret:

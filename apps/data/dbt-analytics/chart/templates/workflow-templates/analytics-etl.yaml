@@ -57,7 +57,6 @@ spec:
               repo: {{ .Values.git.repo | quote }}
               revision: "{{`{{inputs.parameters.revision}}`}}"
               depth: 1
-              singleBranch: true
               {{- if .Values.git.credsSecret }}
               usernameSecret:
                 name: {{ .Values.git.credsSecret }}
