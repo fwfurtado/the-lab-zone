@@ -25,5 +25,13 @@ seeds:
         provider: String
         is_local: UInt8
         tier: String
+        kind: String
       +engine: MergeTree
       +order_by: model_raw
+    project_dim:
+      +column_types:
+        project_id: String
+        project_name: String
+        project_role: String
+      +engine: MergeTree
+      +order_by: project_id

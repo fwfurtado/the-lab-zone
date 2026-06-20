@@ -1,27 +1,41 @@
-model_raw,model_canonical,provider,is_local,tier
-qwen3-coder-30b-local,qwen3-coder-30b,ollama,1,local
-ollama_chat/qwen3-coder:30b-a3b-q4_K_M,qwen3-coder-30b,ollama,1,local
-lightrag,lightrag,ollama,1,local
-ollama_chat/lightrag:latest,lightrag,ollama,1,local
-qwen3-embedding,qwen3-embedding-8b,openrouter,0,paid
-openai/qwen/qwen3-embedding-8b,qwen3-embedding-8b,openrouter,0,paid
-kimi-k2.7-code-paid,kimi-k2.7-code,moonshotai,0,paid
-openrouter/moonshotai/kimi-k2.7-code,kimi-k2.7-code,moonshotai,0,paid
-qwen3-coder,qwen3-coder,openrouter,0,free
-openrouter/qwen/qwen3-coder:free,qwen3-coder,openrouter,0,free
-qwen3-coder-paid,qwen3-coder,openrouter,0,paid
-openrouter/qwen/qwen3-coder,qwen3-coder,openrouter,0,paid
-qwen3-coder-next-paid,qwen3-coder-next,openrouter,0,paid
-openrouter/qwen/qwen3-coder-next,qwen3-coder-next,openrouter,0,paid
-qwen3-next-80b,qwen3-next-80b,openrouter,0,free
-openrouter/qwen/qwen3-next-80b-a3b-instruct:free,qwen3-next-80b,openrouter,0,free
-gemma-4-26b,gemma-4-26b,openrouter,0,free
-openrouter/google/gemma-4-26b-a4b-it:free,gemma-4-26b,openrouter,0,free
-gpt-oss-120b,gpt-oss-120b,openrouter,0,free
-openrouter/openai/gpt-oss-120b:free,gpt-oss-120b,openrouter,0,free
-minimax-m3-paid,minimax-m3,openrouter,0,paid
-openrouter/minimax/minimax-m3,minimax-m3,openrouter,0,paid
-deepseek-v4-pro-paid,deepseek-v4-pro,openrouter,0,paid
-openrouter/deepseek/deepseek-v4-pro,deepseek-v4-pro,openrouter,0,paid
-deepseek-v4-flash-paid,deepseek-v4-flash,openrouter,0,paid
-openrouter/deepseek/deepseek-v4-flash,deepseek-v4-flash,openrouter,0,paid
+# model_dim — normalização de provided_model_name (Langfuse) -> modelo canônico.
+# Fonte: model_list do LiteLLM (apps/ai/litellm/values.yaml).
+#
+# provided_model_name aparece em DUAS formas no Langfuse: o alias (model_name do LiteLLM)
+# e o model cru (litellm_params.model). Por isso CADA modelo tem 2 linhas: alias + cru.
+#
+# is_local: 1 = inferência local (ollama @ worker-3-gpu), 0 = cloud (openrouter).
+# tier: local | free | paid (granularidade extra de custo).
+# kind: completion | embedding — separa geração de RETRIEVAL (embedding) sem string-match no SQL.
+#       É o eixo da Etapa 6 (RAG): embedding = custo de retrieval; completion = geração.
+#
+# LIMITAÇÃO conhecida: o fallback qwen3-coder->qwen3-coder-paid pode colapsar free/paid no
+#   cru `openrouter/qwen/qwen3-coder` (sem :free). O custo desambigua (free~0); is_local não
+#   é afetado. Modelos novos no LiteLLM => adicionar 2 linhas aqui (o mart_unmapped_models acusa).
+model_raw,model_canonical,provider,is_local,tier,kind
+qwen3-coder-30b-local,qwen3-coder-30b,ollama,1,local,completion
+ollama_chat/qwen3-coder:30b-a3b-q4_K_M,qwen3-coder-30b,ollama,1,local,completion
+lightrag,lightrag,ollama,1,local,completion
+ollama_chat/lightrag:latest,lightrag,ollama,1,local,completion
+qwen3-embedding,qwen3-embedding-8b,openrouter,0,paid,embedding
+openai/qwen/qwen3-embedding-8b,qwen3-embedding-8b,openrouter,0,paid,embedding
+kimi-k2.7-code-paid,kimi-k2.7-code,moonshotai,0,paid,completion
+openrouter/moonshotai/kimi-k2.7-code,kimi-k2.7-code,moonshotai,0,paid,completion
+qwen3-coder,qwen3-coder,openrouter,0,free,completion
+openrouter/qwen/qwen3-coder:free,qwen3-coder,openrouter,0,free,completion
+qwen3-coder-paid,qwen3-coder,openrouter,0,paid,completion
+openrouter/qwen/qwen3-coder,qwen3-coder,openrouter,0,paid,completion
+qwen3-coder-next-paid,qwen3-coder-next,openrouter,0,paid,completion
+openrouter/qwen/qwen3-coder-next,qwen3-coder-next,openrouter,0,paid,completion
+qwen3-next-80b,qwen3-next-80b,openrouter,0,free,completion
+openrouter/qwen/qwen3-next-80b-a3b-instruct:free,qwen3-next-80b,openrouter,0,free,completion
+gemma-4-26b,gemma-4-26b,openrouter,0,free,completion
+openrouter/google/gemma-4-26b-a4b-it:free,gemma-4-26b,openrouter,0,free,completion
+gpt-oss-120b,gpt-oss-120b,openrouter,0,free,completion
+openrouter/openai/gpt-oss-120b:free,gpt-oss-120b,openrouter,0,free,completion
+minimax-m3-paid,minimax-m3,openrouter,0,paid,completion
+openrouter/minimax/minimax-m3,minimax-m3,openrouter,0,paid,completion
+deepseek-v4-pro-paid,deepseek-v4-pro,openrouter,0,paid,completion
+openrouter/deepseek/deepseek-v4-pro,deepseek-v4-pro,openrouter,0,paid,completion
+deepseek-v4-flash-paid,deepseek-v4-flash,openrouter,0,paid,completion
+openrouter/deepseek/deepseek-v4-flash,deepseek-v4-flash,openrouter,0,paid,completion

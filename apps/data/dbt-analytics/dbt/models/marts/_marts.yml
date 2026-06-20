@@ -2,16 +2,31 @@ version: 2
 
 models:
   - name: int_observations_model
-    description: "stg_observations enriquecido com model_dim (canônico/provider/is_local/tier)."
+    description: "stg_observations enriquecido com model_dim (canônico/provider/is_local/tier/kind) e project_dim (nome/role)."
+
+  - name: int_gateway_unit_cost
+    description: "Custo unitário ($/token) por modelo canônico, derivado só do gateway (ledger). Taxa blended."
 
   - name: mart_llm_usage_daily
     description: "Custo, tokens e contagens por dia × projeto × modelo × tier × type."
     columns:
       - name: total_cost
-        description: "Soma de total_cost (Decimal). Local ~0; cloud > 0."
+        description: "Soma de total_cost (Decimal). ATENÇÃO: só é custo real em project_role='gateway'; somar entre projetos = double-count."
 
   - name: mart_llm_latency_daily
     description: "Percentis de latência (ms) por dia × modelo."
 
   - name: mart_unmapped_models
     description: "Auditoria: provided_model_name fora do seed. Vazio = seed completo."
+
+  - name: mart_rag_cost_daily
+    description: "RAG × custo (Nível B): tokens do projeto rag reprecificados pela taxa unitária do gateway, por dia × modelo × kind. est_cost é estimado (taxa blended)."
+    columns:
+      - name: est_cost
+        description: "Custo de RAG ESTIMADO (tokens do rag × $/token do gateway). Não é cobrança real — é atribuição sem double-count."
+
+  - name: mart_rag_interactions
+    description: "Forma de cada interação RAG (projeto rag) por trace: nº de retrievals (embedding), gerações, tokens e latência ponta-a-ponta."
+    columns:
+      - name: trace_id
+        tests: [not_null]
