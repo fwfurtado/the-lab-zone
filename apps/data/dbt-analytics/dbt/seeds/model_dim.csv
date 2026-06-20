@@ -1,17 +1,3 @@
-# model_dim — normalização de provided_model_name (Langfuse) -> modelo canônico.
-# Fonte: model_list do LiteLLM (apps/ai/litellm/values.yaml).
-#
-# provided_model_name aparece em DUAS formas no Langfuse: o alias (model_name do LiteLLM)
-# e o model cru (litellm_params.model). Por isso CADA modelo tem 2 linhas: alias + cru.
-#
-# is_local: 1 = inferência local (ollama @ worker-3-gpu), 0 = cloud (openrouter).
-# tier: local | free | paid (granularidade extra de custo).
-# kind: completion | embedding — separa geração de RETRIEVAL (embedding) sem string-match no SQL.
-#       É o eixo da Etapa 6 (RAG): embedding = custo de retrieval; completion = geração.
-#
-# LIMITAÇÃO conhecida: o fallback qwen3-coder->qwen3-coder-paid pode colapsar free/paid no
-#   cru `openrouter/qwen/qwen3-coder` (sem :free). O custo desambigua (free~0); is_local não
-#   é afetado. Modelos novos no LiteLLM => adicionar 2 linhas aqui (o mart_unmapped_models acusa).
 model_raw,model_canonical,provider,is_local,tier,kind
 qwen3-coder-30b-local,qwen3-coder-30b,ollama,1,local,completion
 ollama_chat/qwen3-coder:30b-a3b-q4_K_M,qwen3-coder-30b,ollama,1,local,completion

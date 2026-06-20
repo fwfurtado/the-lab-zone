@@ -23,15 +23,3 @@ models:
     columns:
       - name: trace_id
         tests: [not_null]
-
-  - name: model_dim
-    description: "Seed: normalização de provided_model_name -> canônico/provider/is_local/tier/kind."
-    columns:
-      - name: model_raw
-        tests: [not_null, unique]
-
-  - name: project_dim
-    description: "Seed: project_id -> nome/role (chat/rag/gateway). gateway = ÚNICO ledger de custo."
-    columns:
-      - name: project_id
-        tests: [not_null, unique]

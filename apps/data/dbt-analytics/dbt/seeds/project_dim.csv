@@ -1,13 +1,3 @@
-# project_dim — normalização de project_id (Langfuse) -> nome legível + papel semântico.
-#
-# project_role define a função no pipeline de custo:
-#   gateway = LiteLLM. ÚNICO ledger de custo real (pricing do provider). Custo só sai daqui.
-#   rag     = LightRAG. Fronteira semântica de RAG (quais chamadas são retrieval/geração de RAG).
-#   chat    = Open WebUI. UI de chat do usuário.
-#
-# A MESMA chamada subjacente é logada em até 3 projetos (open webui -> lightrag -> litellm),
-# então somar custo entre projetos = contagem dupla. Custo = só project_role='gateway'.
-# IDs vêm da URL do Langfuse / do recon (group by project_id).
 project_id,project_name,project_role
 cmqhcx1re0006xb072cvfnlji,gateway,gateway
 cmqilh1vv000ixb07byomlbdc,rag,rag

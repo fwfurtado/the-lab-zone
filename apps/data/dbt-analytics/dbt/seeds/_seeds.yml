@@ -1,0 +1,23 @@
+version: 2
+
+seeds:
+  - name: model_dim
+    description: >
+      Normalização de provided_model_name (Langfuse) -> canônico/provider/is_local/tier/kind.
+      Fonte: model_list do LiteLLM. provided_model_name vem em 2 formas (alias + cru), por isso
+      cada modelo tem 2 linhas. is_local: 1=local (ollama@worker-3-gpu), 0=cloud (openrouter).
+      kind: completion|embedding (embedding = retrieval do RAG). Limitacao: o fallback
+      qwen3-coder->qwen3-coder-paid pode colapsar free/paid no cru sem :free (o custo desambigua).
+      CSV puro (sem comentario # — agate nao suporta). Modelo novo => +2 linhas (mart_unmapped acusa).
+    columns:
+      - name: model_raw
+        tests: [not_null, unique]
+
+  - name: project_dim
+    description: >
+      project_id -> nome/role (chat/rag/gateway). project_role='gateway' e o UNICO ledger de custo
+      real (LiteLLM tem o pricing). A mesma chamada e logada em ate 3 projetos, entao somar custo
+      entre projetos = double-count. CSV puro (sem comentario #).
+    columns:
+      - name: project_id
+        tests: [not_null, unique]

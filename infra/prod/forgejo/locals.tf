@@ -64,6 +64,7 @@ locals {
     "      FORGEJO__server__SSH_PORT: \"${var.forgejo_ssh_port}\"",
     "      FORGEJO__server__SSH_LISTEN_PORT: \"22\"",
     "      FORGEJO__service__DISABLE_REGISTRATION: \"true\"",
+    "      FORGEJO__security__INSTALL_LOCK: \"true\"",
     "    volumes:",
     "      - /srv/forgejo/data:/data",
     "      - /etc/timezone:/etc/timezone:ro",
