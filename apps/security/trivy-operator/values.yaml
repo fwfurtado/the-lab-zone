@@ -30,10 +30,14 @@ operator:
 serviceMonitor:
   enabled: false
 
-# Recursos enxutos pro nó único.
+# Recursos do OPERATOR (resources top-level mapeia pro container do operator).
+# O operator faz watch de ~30 tipos de recurso (todos os nativos + os ~12 CRDs
+# do trivy); cada informer guarda cache em memória proporcional ao nº de objetos.
+# Num cluster cheio, 256Mi OOM-mata no startup -> CrashLoop + liveness :9090
+# connection refused. 1Gi dá folga (o T630 tem RAM sobrando).
 resources:
   requests:
     cpu: 50m
-    memory: 128Mi
-  limits:
     memory: 256Mi
+  limits:
+    memory: 1Gi
