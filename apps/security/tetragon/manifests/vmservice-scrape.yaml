@@ -1,0 +1,23 @@
+# Scrape das métricas do Tetragon (agente + operator) pelo vmagent.
+# Cross-namespace -> namespaceSelector obrigatório (padrão O3 da Fase 8).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: tetragon
+  namespace: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  namespaceSelector:
+    matchNames:
+      - tetragon
+  selector:
+    matchLabels:
+      # [CONFERIR pós-deploy] labels reais do Service de métricas:
+      #   kubectl -n tetragon get svc --show-labels
+      app.kubernetes.io/name: tetragon
+  endpoints:
+    # [CONFERIR pós-deploy] porta de métricas do Tetragon (default: 2112).
+    #   kubectl -n tetragon get svc -o yaml | grep -A3 ports
+    - port: metrics
+      path: /metrics

@@ -1,0 +1,34 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tetragon
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: security
+  sources:
+    - repoURL: https://helm.cilium.io
+      chart: tetragon
+      targetRevision: 1.7.0
+      helm:
+        releaseName: tetragon
+        valueFiles:
+          - $values/apps/security/tetragon/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/security/tetragon/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tetragon
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # CRD TracingPolicy é grande -> client-side apply estoura.
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true

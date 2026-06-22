@@ -1,0 +1,42 @@
+# Tetragon 1.7.0 — observabilidade de runtime via eBPF.
+#
+# DECISÃO DA FASE 9: SÓ OBSERVAÇÃO. Sem enforcement, sem TracingPolicy de
+# bloqueio. O enforcement (eBPF que MATA syscall/processo) só entra depois de
+# termos baseline de eventos pra saber o que é normal — ligar no escuro é tiro
+# no pé. Os eventos saem no stdout do pod (sidecar export-stdout, default do
+# chart) -> coletados pelo OTel filelog -> VictoriaLogs, sem config extra.
+#
+# Consulta dos eventos (depois de subir):
+#   VictoriaLogs: {kubernetes_namespace_name="tetragon"}
+#   ou ao vivo:   kubectl -n tetragon exec ds/tetragon -c tetragon -- \
+#                   tetra getevents -o compact
+#
+# [CONFERIR] nomes de chave com:
+#   helm show values tetragon --repo https://helm.cilium.io --version 1.7.0
+
+tetragon:
+  enabled: true
+  # Nível de processo: exec/exit já dão o mapa de "o que roda onde". Sem
+  # TracingPolicy de enforcement nesta fase.
+  enableProcessCred: true
+  enableProcessNs: true
+
+# O operator gerencia o CRD TracingPolicy. Mantido ligado pra quando formos
+# evoluir pra enforcement (fase futura), mas sem nenhuma policy aplicada agora.
+tetragonOperator:
+  enabled: true
+
+# DaemonSet em TODOS os nós, inclusive control-plane, pra observar o cluster
+# inteiro (os CPs do Talos têm taint NoSchedule).
+# [CONFERIR] chave de tolerations do chart 1.7.0 (pode ser
+# `tetragon.tolerations` ou top-level `tolerations`).
+tolerations:
+  - operator: Exists
+
+# Recursos enxutos pro T630.
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
