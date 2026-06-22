@@ -40,6 +40,24 @@ langfuse:
     # - name: AUTH_DISABLE_SIGNUP # Failed to compare desired state to live state: failed to calculate diff: error calculating structured merge diff: error building typed value from config resource: .spec.template.spec.containers[name="langfuse-worker"].env: duplicate entries for key [name="AUTH_DISABLE_SIGNUP"]
     #   value: "true"
 
+    # ── OIDC / Authentik (Fase 9) — provider DEDICADO AUTH_AUTHENTIK_* ──────────
+    - name: AUTH_AUTHENTIK_CLIENT_ID
+      value: "langfuse"             # = chave do app no oidc.tf (não é segredo)
+    - name: AUTH_AUTHENTIK_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: langfuse-secrets    # mesmo secret do resto (ESO), nova key abaixo
+          key: oidcClientSecret
+    # Formato exigido: https://<domain>/application/o/<slug> (trailing slash ok).
+    # Com slash p/ casar o `iss` que o Authentik emite (per_provider).
+    - name: AUTH_AUTHENTIK_ISSUER
+      value: "https://auth.mgmt.the-lab.zone/application/o/langfuse/"
+    # Linka o login SSO à conta que você JÁ tem no Langfuse (mesmo email) —
+    # preserva a org/projetos existentes. Sem isto: erro "sign in with the same
+    # provider you used to create this account".
+    - name: AUTH_AUTHENTIK_ALLOW_ACCOUNT_LINKING
+      value: "true"
+
 postgresql:
   deploy: false
   host: cnpg-cluster-rw.data.svc.cluster.local
