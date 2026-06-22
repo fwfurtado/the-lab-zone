@@ -38,6 +38,8 @@ spec:
     # criamos nenhuma (só observação), mas o whitelist deixa o caminho pronto.
     - group: "cilium.io"
       kind: TracingPolicy
+    - group: "aquasecurity.github.io"
+      kind: "*"
 
   namespaceResourceWhitelist:
     - group: "*"
