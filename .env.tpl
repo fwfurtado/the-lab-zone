@@ -25,3 +25,7 @@ TF_VAR_cloudflare_dns_api_token="op://homelab/Cloudflare/the-lab.zone"
 # ── Docker Hub pull creds p/ proxy cache (usado por `just harbor proxy-init`) ─
 DOCKERHUB_PROXY_USERNAME="op://homelab/DockerHub/username"
 DOCKERHUB_PROXY_TOKEN="op://homelab/DockerHub/token"
+
+# --- B2 Keys
+B2_APPLICATION_KEY_ID="op://Private/Backblaze/Master Key/key-id"
+B2_APPLICATION_KEY="op://Private/Backblaze/Master Key/application-key"
