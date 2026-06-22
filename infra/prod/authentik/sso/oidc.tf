@@ -13,6 +13,9 @@ resource "authentik_provider_oauth2" "this" {
   authorization_flow = data.authentik_flow.authorization.id
   invalidation_flow  = data.authentik_flow.invalidation.id
   property_mappings  = local.common_scopes
+  grant_types        = ["authorization_code", "refresh_token"]
+
+  signing_key = data.authentik_certificate_key_pair.default.id
 
   # allowed_redirect_uris é nested attribute (lista de objetos), atribuído com `=`.
   allowed_redirect_uris = [

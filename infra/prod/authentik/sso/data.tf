@@ -20,6 +20,11 @@ data "authentik_property_mapping_provider_scope" "profile" {
   name = "authentik default OAuth Mapping: OpenID 'profile'"
 }
 
+# --- Certificado e chave para OAuth2 (self-signed) ---
+data "authentik_certificate_key_pair" "default" {
+  name = "authentik Self-signed Certificate"
+}
+
 # ── Scope mapping de GROUPS (não é built-in) ────────────────────────────────
 # Emite o claim `groups` com os grupos do usuário. Necessário pro RBAC por
 # grupo no ArgoCD/Grafana/Harbor/Forgejo.
