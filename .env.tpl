@@ -39,3 +39,15 @@ TF_VAR_authentik_admin_token="op://homelab/AuthentikVM/admin-api-token"
 # Backup -> B2 (app key ESCOPADA criada na PARTE 1)
 TF_VAR_b2_backup_key_id="op://homelab/B2 Authentik Backup/keyID"
 TF_VAR_b2_backup_key="op://homelab/B2 Authentik Backup/applicationKey"
+
+# ── authentik/sso (config OIDC do IdP) ──
+TF_VAR_authentik_url=https://auth.mgmt.the-lab.zone
+TF_VAR_authentik_token="op://homelab/AuthentikVM/admin-api-token"
+
+# client_secret por app (mesmo item lido pelo ESO no cluster)
+TF_VAR_oidc_secret_argocd="op://the-lab-zone/oidc-argocd/client_secret"
+TF_VAR_oidc_secret_grafana="op://the-lab-zone/oidc-grafana/client_secret"
+TF_VAR_oidc_secret_open_webui="op://the-lab-zone/oidc-open-webui/client_secret"
+TF_VAR_oidc_secret_langfuse="op://the-lab-zone/oidc-langfuse/client_secret"
+TF_VAR_oidc_secret_harbor="op://the-lab-zone/oidc-harbor/client_secret"
+TF_VAR_oidc_secret_forgejo="op://the-lab-zone/oidc-forgejo/client_secret"
