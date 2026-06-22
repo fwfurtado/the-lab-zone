@@ -1,0 +1,3 @@
+cluster:
+  proxy:
+    disabled: true # Kube-proxy OFF — Cilium assume via eBPF

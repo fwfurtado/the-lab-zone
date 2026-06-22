@@ -1,0 +1,33 @@
+# Mirrors de registry -> projetos proxy cache do Harbor.
+#
+# DECISÃO 1 — fallback implícito: listamos APENAS o endpoint do Harbor com
+# `overridePath: true` e NÃO setamos `skipFallback`. Por padrão o Talos cai pro
+# registry upstream original quando o mirror está inacessível, e ele monta o
+# path canônico do upstream sozinho. Assim evitamos o conflito de `overridePath`
+# (que no formato map é por-mirror, não por-endpoint): se listássemos o upstream
+# explicitamente como 2º endpoint, ele herdaria o overridePath e quebraria o
+# path. Harbor fora do ar => pull continua direto do upstream. É exatamente o
+# anti-brick que a gente quer.
+#
+# DECISÃO 2 — só registries de WORKLOAD. NÃO espelhamos registry.k8s.io nem
+# factory.talos.dev (imagens de sistema/bootstrap). Se o Harbor estiver fora
+# durante um reboot/upgrade de nó, o kubelet/installer ainda baixa direto e o
+# nó não brica.
+#
+# Harbor tem cert Let's Encrypt válido (lego) -> sem insecureSkipVerify.
+# O endpoint inclui /v2/<projeto> e overridePath impede o /v2 duplicado.
+machine:
+  registries:
+    mirrors:
+      docker.io:
+        endpoints:
+          - https://harbor.mgmt.the-lab.zone/v2/dockerhub-proxy
+        overridePath: true
+      ghcr.io:
+        endpoints:
+          - https://harbor.mgmt.the-lab.zone/v2/ghcr-proxy
+        overridePath: true
+      quay.io:
+        endpoints:
+          - https://harbor.mgmt.the-lab.zone/v2/quay-proxy
+        overridePath: true

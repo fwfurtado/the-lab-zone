@@ -21,18 +21,9 @@ worker:
     - "@patches/workers/user-volume-config.yaml"
 
 patches:
-  - |-
-    cluster:
-      proxy:
-        disabled: true                    # Kube-proxy OFF — Cilium assume via eBPF
-  - |-
-    machine:
-      time:
-        servers:
-          - pool.ntp.org
-      network:
-        nameservers:
-          - 10.40.0.1                     # UDR (depois: DNS interno da LXC)
+  - "@patches/all/registry-mirrors.yaml"
+  - "@patches/all/disable-kube-proxy.yaml"
+  - "@patches/all/ntp-and-dns.yaml"
 
 nodes:
   - hostname: cp-1

@@ -1,0 +1,8 @@
+machine:
+  time:
+    servers:
+      - pool.ntp.org
+  network:
+    nameservers:
+      - 10.40.1.53 # PowerDNS
+      - 10.40.0.1 # UDR (depois: DNS interno da LXC)
