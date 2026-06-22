@@ -1,0 +1,148 @@
+# apps/observability/grafana/manifests/tetragon-events-dashboard.yaml
+#
+# Dashboard custom do Tetragon sobre o VictoriaLogs, entregue como ConfigMap
+# para o SIDECAR de dashboards do Grafana descobrir (label `grafana_dashboard`).
+#
+# PRÉ-REQUISITO: o sidecar de dashboards precisa estar habilitado no values do
+# Grafana. [CONFERIR] se já está:
+#   helm get values <release-grafana> -n observability | grep -A3 'sidecar:'
+# Se não estiver, somar no values:
+#   sidecar:
+#     dashboards:
+#       enabled: true
+#       label: grafana_dashboard          # default que o sidecar procura
+#       # searchNamespace: ALL            # se o Grafana não estiver em observability
+#
+# Se você preferir NÃO ligar o sidecar e seguir só com o provider clássico
+# (dashboards.default), dá pra colar o JSON inline no values com
+# `dashboards.default.tetragon-events.json: |` — mas polui o values com ~150
+# linhas. O ConfigMap é o caminho mais limpo pra dashboards custom no git.
+#
+# sync-wave: depois do Grafana subir. Ajuste se o teu app do Grafana usar waves.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tetragon-events-dashboard
+  namespace: observability
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    # opcional: organiza numa pasta no Grafana
+    grafana_folder: "Security"
+data:
+  tetragon-events.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 0,
+      "title": "Tetragon — Runtime Events (eBPF)",
+      "uid": "tetragon-events",
+      "tags": ["security", "tetragon", "ebpf"],
+      "timezone": "browser",
+      "schemaVersion": 39,
+      "time": { "from": "now-6h", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "ds",
+            "label": "VictoriaLogs",
+            "type": "datasource",
+            "query": "victoriametrics-logs-datasource",
+            "current": { "text": "VictoriaLogs", "value": "VictoriaLogs" },
+            "hide": 0
+          }
+        ]
+      },
+      "panels": [
+        {
+          "title": "process_exec na janela",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+          "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+              "queryType": "stats",
+              "expr": "{k8s.namespace.name=\"tetragon\"} process_exec | stats count() total"
+            }
+          ]
+        },
+        {
+          "title": "Eventos com CAP_SYS_ADMIN na janela",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+          "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] } } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+              "queryType": "stats",
+              "expr": "{k8s.namespace.name=\"tetragon\"} process_exec CAP_SYS_ADMIN | stats count() total"
+            }
+          ]
+        },
+        {
+          "title": "Taxa de process_exec (por minuto)",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+          "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "fillOpacity": 40 } } },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+              "queryType": "statsRange",
+              "step": "1m",
+              "expr": "{k8s.namespace.name=\"tetragon\"} process_exec | stats count() hits"
+            }
+          ]
+        },
+        {
+          "title": "Top binários executados",
+          "type": "table",
+          "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+          "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+              "queryType": "stats",
+              "expr": "{k8s.namespace.name=\"tetragon\"} process_exec | unpack_json | stats by (\"process_exec.process.binary\") count() hits | sort by (hits desc) | limit 25"
+            }
+          ]
+        },
+        {
+          "title": "Execuções por namespace observado",
+          "type": "table",
+          "gridPos": { "h": 9, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+              "queryType": "stats",
+              "expr": "{k8s.namespace.name=\"tetragon\"} process_exec | unpack_json | stats by (\"process_exec.process.pod.namespace\") count() hits | sort by (hits desc)"
+            }
+          ]
+        },
+        {
+          "title": "Stream — execuções privilegiadas (CAP_SYS_ADMIN)",
+          "type": "logs",
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 17 },
+          "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+          "options": { "showTime": true, "wrapLogMessage": true, "dedupStrategy": "none", "sortOrder": "Descending" },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": { "type": "victoriametrics-logs-datasource", "uid": "${ds}" },
+              "queryType": "instant",
+              "expr": "{k8s.namespace.name=\"tetragon\"} process_exec CAP_SYS_ADMIN"
+            }
+          ]
+        }
+      ]
+    }
