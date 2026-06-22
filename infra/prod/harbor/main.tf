@@ -63,7 +63,7 @@ resource "proxmox_virtual_environment_vm" "harbor" {
       }
     }
     dns {
-      servers = [var.gateway_ip] # a VM resolve via UDR; nunca via si mesma
+      servers = [var.split_dns_ip, var.gateway_ip] # a VM resolve via UDR; nunca via si mesma
     }
     user_account {
       # Debian genericcloud: sshd com PermitRootLogin prohibit-password -> login

@@ -33,6 +33,11 @@ variable "gateway_ip" {
   default = "10.40.0.1"
 }
 
+variable "split_dns_ip" {
+  type    = string
+  default = "10.40.1.53"
+}
+
 variable "vcpus" {
   type    = number
   default = 4

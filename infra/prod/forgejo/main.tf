@@ -50,7 +50,7 @@ resource "proxmox_virtual_environment_vm" "forgejo" {
       }
     }
     dns {
-      servers = [var.gateway_ip]
+      servers = [var.split_dns_ip, var.gateway_ip]
     }
     user_account {
       username = "root"
