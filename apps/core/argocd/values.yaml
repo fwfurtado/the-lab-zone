@@ -21,6 +21,25 @@ configs:
       end
       return hs
 
+    url: https://argocd.lab.the-lab.zone
+    oidc.config: |
+      name: Authentik
+      issuer: https://auth.mgmt.the-lab.zone/application/o/argocd/
+      clientID: argocd
+      # resolve do Secret `argocd-oidc` (ESO) — exige o label part-of: argocd
+      clientSecret: $argocd-oidc:client_secret
+      requestedScopes: [openid, profile, email, groups]
+      requestedIDTokenClaims:
+        groups:
+          essential: true
+
+  rbac:
+    # `the-lab-admins` = o grupo (não-superuser) que você criou no directory.tf.
+    # O scope `groups` precisa estar ligado pro ArgoCD ler o claim.
+    policy.csv: |
+      g, the-lab-admins, role:admin
+    scopes: "[groups]"
+
 # SSO entra com o Authentik (Fase 6); até lá, admin local:
 dex:
   enabled: false

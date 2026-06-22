@@ -18,6 +18,9 @@ spec:
     - repoURL: https://github.com/fwfurtado/the-lab-zone.git
       targetRevision: main
       ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/core/argocd/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
