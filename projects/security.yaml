@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: security
+  namespace: argocd
+spec:
+  description: "Fase 9 — segurança: scanning (Trivy), runtime eBPF (Tetragon), NetworkPolicies default-deny"
+
+  sourceRepos:
+    - https://github.com/fwfurtado/the-lab-zone.git
+    - https://helm.cilium.io # tetragon (mesmo repo do Cilium, já usado no core)
+    - ghcr.io/aquasecurity/helm-charts # trivy-operator (OCI, mesmo padrão do toolhive no core)
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: trivy-system # trivy-operator
+    - server: https://kubernetes.default.svc
+      namespace: tetragon # tetragon (DaemonSet eBPF)
+    - server: https://kubernetes.default.svc
+      namespace: observability # VMServiceScrape dos componentes de segurança
+    - server: https://kubernetes.default.svc
+      namespace: data # CiliumNetworkPolicy (default-deny ingress)
+    - server: https://kubernetes.default.svc
+      namespace: ai # CiliumNetworkPolicy (default-deny ingress)
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    # CRDs grandes do trivy-operator (vulnerabilityreports, configauditreports, ...)
+    # e do tetragon (tracingpolicies, tracingpoliciesnamespaced).
+    - group: "apiextensions.k8s.io"
+      kind: CustomResourceDefinition
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRole
+    - group: "rbac.authorization.k8s.io"
+      kind: ClusterRoleBinding
+    # TracingPolicy do Tetragon é cluster-scoped (cilium.io). Nesta fase NÃO
+    # criamos nenhuma (só observação), mas o whitelist deixa o caminho pronto.
+    - group: "cilium.io"
+      kind: TracingPolicy
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
