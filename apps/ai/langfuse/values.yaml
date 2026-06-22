@@ -51,7 +51,7 @@ langfuse:
     # Formato exigido: https://<domain>/application/o/<slug> (trailing slash ok).
     # Com slash p/ casar o `iss` que o Authentik emite (per_provider).
     - name: AUTH_AUTHENTIK_ISSUER
-      value: "https://auth.mgmt.the-lab.zone/application/o/langfuse/"
+      value: "https://auth.mgmt.the-lab.zone/application/o/langfuse"
     # Linka o login SSO à conta que você JÁ tem no Langfuse (mesmo email) —
     # preserva a org/projetos existentes. Sem isto: erro "sign in with the same
     # provider you used to create this account".
