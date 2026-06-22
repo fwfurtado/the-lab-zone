@@ -15,43 +15,7 @@ pipelines:
           key: LANGFUSE_SECRET_KEY
     - name: LANGFUSE_HOST
       value: "http://langfuse-web.ai.svc.cluster.local:3000"
-    # ── OIDC / Authentik (Fase 9) ───────────────────────────────────────────────
-    - name: ENABLE_OAUTH_SIGNUP
-      value: "true"
-    - name: OAUTH_PROVIDER_NAME
-      value: "Authentik"
-    # discovery é PER-SLUG no Open WebUI (diferente do Grafana, que usa endpoints
-    # globais). [CONFERIR] slug do app no data.tf (provável: open-webui).
-    - name: OPENID_PROVIDER_URL
-      value: "https://auth.mgmt.the-lab.zone/application/o/open-webui/.well-known/openid-configuration"
-    # [CONFERIR] tem que bater EXATAMENTE com o redirect declarado no data.tf.
-    - name: OPENID_REDIRECT_URI
-      value: "https://chat.lab.the-lab.zone/oauth/oidc/callback"
-    - name: OAUTH_SCOPES
-      value: "openid email profile groups"
-    - name: OAUTH_CLIENT_ID
-      value: "open-webui"            # = chave do app no oidc.tf (não é segredo)
-    - name: OAUTH_CLIENT_SECRET
-      valueFrom:
-        secretKeyRef:
-          name: open-webui-oidc      # ESO materializa (ver external-secret)
-          key: client_secret
-    - name: OAUTH_MERGE_ACCOUNTS_BY_EMAIL
-      value: "true"
 
-    # ── Role mapping por grupo ──────────────────────────────────────────────────
-    # the-lab-admins -> admin no Open WebUI. O claim `groups` do Authentik traz os
-    # nomes dos grupos nativamente (mesmo claim do Grafana).
-    - name: ENABLE_OAUTH_ROLE_MANAGEMENT
-      value: "true"
-    - name: OAUTH_ROLES_CLAIM
-      value: "groups"
-    - name: OAUTH_ADMIN_ROLES
-      value: "the-lab-admins"
-    # quem pode logar. Só the-lab-admins por enquanto (single-user). Pra liberar
-    # outros como usuário comum, cria um grupo e soma aqui: "the-lab-admins,the-lab-users".
-    - name: OAUTH_ALLOWED_ROLES
-      value: "the-lab-admins"
 ollama:
   enabled: false
 redis:
@@ -116,6 +80,43 @@ extraEnvVars:
     value: "https://chat.lab.the-lab.zone"
   - name: ENABLE_PERSISTENT_CONFIG
     value: "false"
+  # ── OIDC / Authentik (Fase 9) ───────────────────────────────────────────────
+  - name: ENABLE_OAUTH_SIGNUP
+    value: "true"
+  - name: OAUTH_PROVIDER_NAME
+    value: "Authentik"
+  # discovery é PER-SLUG no Open WebUI (diferente do Grafana, que usa endpoints
+  # globais). [CONFERIR] slug do app no data.tf (provável: open-webui).
+  - name: OPENID_PROVIDER_URL
+    value: "https://auth.mgmt.the-lab.zone/application/o/open-webui/.well-known/openid-configuration"
+  # [CONFERIR] tem que bater EXATAMENTE com o redirect declarado no data.tf.
+  - name: OPENID_REDIRECT_URI
+    value: "https://chat.lab.the-lab.zone/oauth/oidc/callback"
+  - name: OAUTH_SCOPES
+    value: "openid email profile groups"
+  - name: OAUTH_CLIENT_ID
+    value: "open-webui"            # = chave do app no oidc.tf (não é segredo)
+  - name: OAUTH_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: open-webui-oidc      # ESO materializa (ver external-secret)
+        key: client_secret
+  - name: OAUTH_MERGE_ACCOUNTS_BY_EMAIL
+    value: "true"
+
+  # ── Role mapping por grupo ──────────────────────────────────────────────────
+  # the-lab-admins -> admin no Open WebUI. O claim `groups` do Authentik traz os
+  # nomes dos grupos nativamente (mesmo claim do Grafana).
+  - name: ENABLE_OAUTH_ROLE_MANAGEMENT
+    value: "true"
+  - name: OAUTH_ROLES_CLAIM
+    value: "groups"
+  - name: OAUTH_ADMIN_ROLES
+    value: "the-lab-admins"
+  # quem pode logar. Só the-lab-admins por enquanto (single-user). Pra liberar
+  # outros como usuário comum, cria um grupo e soma aqui: "the-lab-admins,the-lab-users".
+  - name: OAUTH_ALLOWED_ROLES
+    value: "the-lab-admins"
 
 route:
   enabled: true
