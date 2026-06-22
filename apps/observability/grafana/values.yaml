@@ -92,7 +92,10 @@ dashboards:
       gnetId: 763
       revision: 5
       datasource: VictoriaMetrics
-
+    trivy-operator:
+      gnetId: 17813
+      revision: 2
+      datasource: VictoriaMetrics
 # Plugin de datasource para VictoriaLogs
 plugins:
   - victoriametrics-logs-datasource
@@ -119,4 +122,4 @@ sidecar:
     enabled: true
     label: grafana_dashboard
     labelValue: "1"
-    searchNamespace: ALL   # busca em todos os namespaces
+    searchNamespace: ALL # busca em todos os namespaces
