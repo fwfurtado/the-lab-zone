@@ -16,6 +16,21 @@ grafana.ini:
     serve_from_sub_path: false
   auth:
     disable_login_form: false
+  auth.generic_oauth:
+    enabled: true
+    name: Authentik
+    client_id: grafana                # = chave do app no oidc.tf (não é segredo)
+    # client_secret NÃO vai aqui — entra via env GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
+    scopes: "openid email profile groups"
+    # Endpoints do Authentik são GLOBAIS (não per-provider); o provider é
+    # identificado pelo client_id. Só o issuer/jwks é que é per-slug.
+    auth_url: https://auth.mgmt.the-lab.zone/application/o/authorize/
+    token_url: https://auth.mgmt.the-lab.zone/application/o/token/
+    api_url: https://auth.mgmt.the-lab.zone/application/o/userinfo/
+    # the-lab-admins -> Admin (org admin); qualquer outro -> Viewer.
+    # `groups` é o claim que o teu scope mapping emite (lista de nomes de grupo).
+    role_attribute_path: "contains(groups[*], 'the-lab-admins') && 'Admin' || 'Viewer'"
+    use_pkce: true
   analytics:
     reporting_enabled: false
     check_for_updates: false
@@ -25,6 +40,13 @@ admin:
   existingSecret: grafana-admin-secret
   userKey: admin-user
   passwordKey: admin-password
+
+# O client_secret é obtido via ExternalSecret (manifests/external-secrets.yaml)
+envValueFrom:
+  GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET:
+    secretKeyRef:
+      name: grafana-oidc
+      key: client_secret
 
 # Não sobrescrever securityContext — o default do chart (uid 472, fsGroup 472)
 # é necessário para que o PVC tenha as permissões corretas no mountPath.
