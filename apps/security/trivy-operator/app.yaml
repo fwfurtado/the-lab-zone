@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trivy-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: security
+  sources:
+    - repoURL: https://aquasecurity.github.io/helm-charts/
+      chart: trivy-operator
+      targetRevision: 0.33.2
+      helm:
+        releaseName: trivy-operator
+        valueFiles:
+          - $values/apps/security/trivy-operator/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/security/trivy-operator/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: trivy-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # CRDs grandes (relatórios de scan) estouram o client-side apply.
+      - ServerSideApply=true
+      # No DR o dry-run dos CRs do trivy roda antes do CRD existir.
+      - SkipDryRunOnMissingResource=true

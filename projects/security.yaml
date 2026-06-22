@@ -9,7 +9,7 @@ spec:
   sourceRepos:
     - https://github.com/fwfurtado/the-lab-zone.git
     - https://helm.cilium.io # tetragon (mesmo repo do Cilium, já usado no core)
-    - ghcr.io/aquasecurity/helm-charts # trivy-operator (OCI, mesmo padrão do toolhive no core)
+    - https://aquasecurity.github.io/helm-charts/ # trivy-operator (OCI, mesmo padrão do toolhive no core)
 
   destinations:
     - server: https://kubernetes.default.svc

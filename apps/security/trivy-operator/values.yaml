@@ -1,0 +1,39 @@
+# trivy-operator 0.33.2 — scanning CONTÍNUO de runtime (in-cluster).
+#
+# Camada distinta do Harbor: o Harbor escaneia no PUSH (imagens que entram no
+# registry); o trivy-operator escaneia o que ESTÁ RODANDO no cluster e materializa
+# os achados como CRs (VulnerabilityReport, ConfigAuditReport, ...) consultáveis
+# via kubectl. Decisão da Fase 9: só o operator, Harbor fica como está.
+#
+# [CONFERIR] valide os nomes das chaves abaixo com:
+#   helm show values oci://ghcr.io/aquasecurity/helm-charts/trivy-operator --version 0.33.2
+# (histórico do repo: chart que ignora chave inexistente já mordeu — openebs NDM,
+#  victoria-logs clusterIP. Mantemos o values MÍNIMO de propósito.)
+
+trivy:
+  # Standalone: o trivy roda embutido no job, sem servidor externo.
+  mode: Standalone
+  # Só reporta CVE COM fix disponível — corta o ruído de "unfixed" que não dá pra agir.
+  ignoreUnfixed: true
+
+operator:
+  # Não escanear sistema nem o próprio namespace do trivy.
+  # (o operator escaneia todos os namespaces, menos os excluídos)
+  excludeNamespaces: "kube-system,trivy-system"
+  # TTL dos relatórios: re-scan periódico mantém o retrato fresco.
+  scannerReportTTL: "24h"
+  # Limita jobs simultâneos pra não competir com workload real no T630.
+  scanJobsConcurrentLimit: 2
+
+# Métricas: usamos VMServiceScrape próprio (manifests/), não o ServiceMonitor
+# do Prometheus que o chart oferece.
+serviceMonitor:
+  enabled: false
+
+# Recursos enxutos pro nó único.
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

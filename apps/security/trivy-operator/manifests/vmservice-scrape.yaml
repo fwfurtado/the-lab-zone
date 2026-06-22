@@ -1,0 +1,25 @@
+# Scrape das métricas do trivy-operator pelo vmagent.
+# Vive em observability (como os demais scrapes do repo) e aponta pro Service
+# no namespace trivy-system via namespaceSelector — padrão O3 da Fase 8
+# (scrape cross-namespace EXIGE namespaceSelector explícito).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: trivy-operator
+  namespace: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  namespaceSelector:
+    matchNames:
+      - trivy-system
+  selector:
+    matchLabels:
+      # [CONFERIR pós-deploy] labels reais do Service com:
+      #   kubectl -n trivy-system get svc --show-labels
+      app.kubernetes.io/name: trivy-operator
+  endpoints:
+    # [CONFERIR pós-deploy] a porta de métricas do Service (default: 80 -> 8080).
+    #   kubectl -n trivy-system get svc trivy-operator -o yaml | grep -A3 ports
+    - port: metrics
+      path: /metrics
