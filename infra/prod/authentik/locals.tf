@@ -24,7 +24,9 @@ locals {
     "apt-get install -y -qq ca-certificates curl unzip",
     "curl -fsSL https://get.docker.com | sh",
     "systemctl enable --now docker",
-    "curl -fsSL https://rclone.org/install.sh | bash",
+    # O instalador do rclone retorna exit 3 quando já está na última versão ->
+    # com set -e isso quebraria a RE-provisão. Guard: só instala se faltar.
+    "command -v rclone >/dev/null 2>&1 || curl -fsSL https://rclone.org/install.sh | bash",
     "mkdir -p /opt/authentik/pgdata /opt/authentik/redis /opt/authentik/media /opt/authentik/templates /opt/authentik/certs /opt/authentik/backups",
 
     "echo '==> [2/6] .env (segredos) + compose'",
