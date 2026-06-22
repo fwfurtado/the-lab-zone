@@ -3,3 +3,4 @@ mod dns
 mod buckets
 mod harbor
 mod forgejo
+mod authentik

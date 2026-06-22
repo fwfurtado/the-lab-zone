@@ -29,3 +29,13 @@ DOCKERHUB_PROXY_TOKEN="op://homelab/DockerHub/token"
 # --- B2 Keys
 B2_APPLICATION_KEY_ID="op://Private/Backblaze/Master Key/key-id"
 B2_APPLICATION_KEY="op://Private/Backblaze/Master Key/application-key"
+
+
+# --- Authentik (VM IdP tier-0) ---
+TF_VAR_authentik_secret_key="op://homelab/AuthentikVM/secret-key"
+TF_VAR_authentik_pg_password="op://homelab/AuthentikVM/pg-password"
+TF_VAR_authentik_admin_password="op://homelab/AuthentikVM/admin-password"
+TF_VAR_authentik_admin_token="op://homelab/AuthentikVM/admin-api-token"
+# Backup -> B2 (app key ESCOPADA criada na PARTE 1)
+TF_VAR_b2_backup_key_id="op://homelab/B2 Authentik Backup/keyID"
+TF_VAR_b2_backup_key="op://homelab/B2 Authentik Backup/applicationKey"

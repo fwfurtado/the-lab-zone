@@ -41,5 +41,6 @@ variable "mgmt_records" {
     dns    = "10.40.1.53"
     harbor = "10.40.1.10"
     git    = "10.40.1.11"
+    auth   = "10.40.1.12"
   }
 }

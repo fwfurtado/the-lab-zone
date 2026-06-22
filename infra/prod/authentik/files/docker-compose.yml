@@ -1,0 +1,73 @@
+# Authentik 2026.5.3 — IdP tier-0, VM autocontida (fora do cluster).
+#
+# Pins EXPLÍCITOS e casados com o compose oficial 2026.5:
+#   - postgres:16-alpine  (o Helm foi pra PG18; o COMPOSE oficial segue no 16 —
+#     e é o major que o runbook de restore assume. NÃO troque sem migração.)
+#   - redis:7-alpine      (cache-only no 2026.5; baixo risco, fixo p/ reprodutibilidade)
+#   - ghcr.io/goauthentik/server:2026.5.3 (server e worker = mesma imagem)
+#
+# TODA config/segredo vem do .env via `env_file` — de propósito NÃO usamos
+# substituição ${...} no compose, pra não colidir com a interpolação do
+# Terraform no provisionamento (o arquivo é entregue verbatim, via base64).
+# O `$${...}` nos healthchecks é escape do COMPOSE (vira $ literal -> o shell do
+# container expande a env), e fica intacto porque o arquivo não passa pelo TF.
+
+x-authentik: &authentik
+  image: ghcr.io/goauthentik/server:2026.5.3
+  restart: unless-stopped
+  env_file:
+    - .env
+  depends_on:
+    postgresql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgresql:
+    image: docker.io/library/postgres:16-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d $${POSTGRES_DB} -U $${POSTGRES_USER}"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 5s
+    env_file:
+      - .env
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    command: --save 60 1 --loglevel warning
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      start_period: 20s
+      interval: 30s
+      retries: 5
+      timeout: 3s
+    volumes:
+      - ./redis:/data
+
+  server:
+    <<: *authentik
+    command: server
+    ports:
+      - "80:9000"    # redirect -> https
+      - "443:9443"   # HTTPS (cert do lego, atribuído ao Brand)
+    volumes:
+      - ./media:/media
+      - ./templates:/templates
+      - ./certs:/certs
+
+  worker:
+    <<: *authentik
+    command: worker
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./media:/media
+      - ./templates:/templates
+      - ./certs:/certs
