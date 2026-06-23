@@ -51,4 +51,4 @@ dropped ns:
 # Aplica uma baseline de pending/ à mão (fora do GitOps, pra fase de audit).
 # Ex.: just netpol apply-pending data/clickhouse
 apply-pending path:
-    kubectl apply -f pending/{{path}}.yaml
+    kubectl apply -f pendings/{{path}}.yaml

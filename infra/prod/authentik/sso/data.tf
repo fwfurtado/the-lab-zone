@@ -19,6 +19,10 @@ data "authentik_property_mapping_provider_scope" "email" {
 data "authentik_property_mapping_provider_scope" "profile" {
   name = "authentik default OAuth Mapping: OpenID 'profile'"
 }
+data "authentik_property_mapping_provider_scope" "offline_access" {
+  managed = "goauthentik.io/providers/oauth2/scope-offline_access"
+}
+
 
 # --- Certificado e chave para OAuth2 (self-signed) ---
 data "authentik_certificate_key_pair" "default" {
@@ -42,6 +46,7 @@ locals {
     data.authentik_property_mapping_provider_scope.openid.id,
     data.authentik_property_mapping_provider_scope.email.id,
     data.authentik_property_mapping_provider_scope.profile.id,
+    data.authentik_property_mapping_provider_scope.offline_access.id,
     authentik_property_mapping_provider_scope.groups.id,
   ]
 
