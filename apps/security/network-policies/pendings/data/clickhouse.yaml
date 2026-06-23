@@ -1,0 +1,13 @@
+# apps/security/network-policies/pending/data/clickhouse.yaml
+# Default-deny INGRESS puro. ingress: [] NEGA tudo; ingress: [{}] LIBERA tudo (não usar).
+# Sem egress -> egress livre nesta fase. Allows vêm da observação (verdict AUDIT). Ver README.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: clickhouse-default-deny-ingress
+  namespace: data
+spec:
+  endpointSelector:
+    matchLabels:
+      clickhouse.altinity.com/chi: clickhouse # [CONFERIR] nome do CHI (operator Altinity)
+  ingress: []

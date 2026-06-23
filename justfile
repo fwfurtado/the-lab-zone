@@ -5,6 +5,7 @@ mod argo
 mod garage
 mod litellm
 mod docker
+mod apps
 
 @setup:
     mkdir -p ~/.config/sops/age

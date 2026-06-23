@@ -68,6 +68,8 @@ spec:
     podTemplates:
       - name: clickhouse-pod
         metadata:
+          labels:
+            app.kubernetes.io/name: clickhouse
           annotations:
             prometheus.io/scrape: "true"
             prometheus.io/port: "9363"
