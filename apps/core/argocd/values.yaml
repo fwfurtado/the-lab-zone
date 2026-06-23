@@ -28,7 +28,7 @@ configs:
       clientID: argocd
       # resolve do Secret `argocd-oidc` (ESO) — exige o label part-of: argocd
       clientSecret: $argocd-oidc:client_secret
-      requestedScopes: [openid, profile, email, groups]
+      requestedScopes: [openid, profile, email, groups, offline_access]
       requestedIDTokenClaims:
         groups:
           essential: true
