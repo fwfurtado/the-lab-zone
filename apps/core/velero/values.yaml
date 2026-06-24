@@ -100,3 +100,8 @@ schedules:
             values:
               - memgraph
               # - valkey   # descomente se Valkey passar a persistir algo que importe
+
+# CRDs: o ArgoCD já aplica o diretório crds/ do chart (--include-crds por padrão).
+# O job upgradeCRDs é redundante AQUI e ainda arrasta docker.io/bitnami/kubectl,
+# que sumiu do Docker Hub (deprecation Bitnami de 28/08/2025). Desligado.
+upgradeCRDs: false
