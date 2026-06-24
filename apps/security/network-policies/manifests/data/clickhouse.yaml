@@ -26,3 +26,14 @@ spec:
               protocol: TCP
             - port: "8123"
               protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app.kubernetes.io/name: analytics-etl
+      toPorts:
+        - ports:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+            - port: "8123"
+              protocol: TCP
