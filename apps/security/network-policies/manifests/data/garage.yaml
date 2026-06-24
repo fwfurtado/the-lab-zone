@@ -23,6 +23,9 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: data
             app.kubernetes.io/name: clickhouse
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app.kubernetes.io/name: qdrant-backup
       toPorts:
         - ports:
             - port: "3900"
