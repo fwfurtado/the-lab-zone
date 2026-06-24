@@ -2769,6 +2769,316 @@ kubectl -n observability exec vmalertmanager-victoria-metrics-vmks-0 -c alertman
 - Observabilidade de drops: `hubble_drop_total` → VMRule → vmalert → vmalertmanager →
   **Slack**, validada fim-a-fim com drop real.
 
+# Fase 9 — Resolução de alertas (control plane, otel, backups, plumbing)
+
+> Operação de 2026-06-24. 10 alertas ativos no Alertmanager → 4 causas-raiz.
+> Vários alertas eram sintoma um do outro; o mapa de dependência abaixo separa
+> causa de efeito.
+
+```
+[Talos não expõe métricas do control plane]
+   ├─ ScrapePoolHasNoTargets  (kube-controller-manager)
+   ├─ ScrapePoolHasNoTargets  (kube-scheduler)
+   ├─ ScrapePoolHasNoTargets  (kube-etcd)
+   └─ (downstream) TooManyScrapeErrors / TooManyLogs do vmagent
+
+[otel-collector agent DaemonSet travado]
+   ├─ KubeDaemonSetMisScheduled
+   └─ KubeDaemonSetRolloutStuck
+
+[Backups falhando no ns data]
+   ├─ KubeJobFailed (clickhouse-backup)
+   └─ KubeJobFailed (qdrant-backup)
+
+[Alertmanager sem inhibition/null receiver]
+   ├─ Watchdog       (sempre firing, by design)
+   └─ InfoInhibitor  (guarda dos severity=info)
+```
+
+---
+
+## 1. Control plane do Talos não expõe métricas
+
+**Sintoma**
+`ScrapePoolHasNoTargets` em `kube-controller-manager`, `kube-scheduler` e
+`kube-etcd` (este último gerado pelo chart como `victoria-metrics-vmks-kube-etcd`),
+com "0 discovered targets". Em paralelo, `TooManyScrapeErrors` e `TooManyLogs`
+do vmagent como ruído downstream.
+
+**Causa**
+No Talos, por padrão:
+- `kube-controller-manager` e `kube-scheduler` escutam métricas em `127.0.0.1`
+  (bind-address loopback) → service discovery não acha endpoint → 0 targets.
+- `etcd` não expõe o listener de métricas dedicado.
+
+Além disso, o control plane roda como **static pod em host-network**, sem Service
+nem labels que deem match — um `VMServiceScrape` sozinho não descobre nada.
+
+**Diagnóstico**
+```bash
+# "0 discovered targets" = service discovery não achou endpoint (≠ target down)
+curl -s http://localhost:8429/targets | rg "kube-controller-manager|kube-scheduler|kube-etcd"
+
+# confirma o que o processo etcd REALMENTE escuta (fonte de verdade do runtime)
+talosctl -n 10.40.6.11 ps | rg etcd          # procurar --listen-metrics-urls
+talosctl -n 10.40.6.11 netstat -tlnp | rg 2381  # a 2381 está ouvindo?
+```
+
+**Fix**
+
+*(a) Machine config dos 3 control planes (cp-1/2/3):*
+```yaml
+cluster:
+  controllerManager:
+    extraArgs:
+      bind-address: 0.0.0.0
+  scheduler:
+    extraArgs:
+      bind-address: 0.0.0.0
+  etcd:
+    extraArgs:
+      # listener dedicado de métricas em HTTP puro, sem mTLS.
+      # Mais limpo que extrair client cert do etcd.
+      listen-metrics-urls: http://0.0.0.0:2381
+```
+
+*(b) Scrapes via VMStaticScrape* (NÃO Service+Endpoints — ver lição 1b).
+Um arquivo por componente em `apps/observability/victoria-metrics/manifests/`:
+
+```yaml
+# kube-controller-manager (10257/https)
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: kube-controller-manager
+  namespace: observability
+spec:
+  jobName: kube-controller-manager
+  targetEndpoints:
+    - targets: ["10.40.6.11:10257", "10.40.6.12:10257", "10.40.6.13:10257"]
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true   # cert Talos vale só p/ localhost, não p/ IP do nó
+---
+# kube-scheduler: idêntico, porta 10259
+# kube-etcd: porta 2381, scheme http, SEM bearer token / SEM tls
+```
+
+E no `values.yaml` do chart:
+```yaml
+kubeControllerManager: { enabled: false }
+kubeScheduler:         { enabled: false }
+kubeEtcd:              { enabled: false }   # senão recria o scrape antigo (2379/https) e briga
+```
+
+*(c) Aplicar o machine config exige reiniciar os CPs — ver lição 1c.*
+
+**Lição**
+
+- **(1a)** Control plane no Talos não é observável out-of-the-box. Expor métrica
+  é decisão explícita de machine config (`bind-address`/`listen-metrics-urls`),
+  não só de chart. CM/scheduler em `https` com `insecureSkipVerify` (cert vale só
+  p/ localhost); etcd em `http://0.0.0.0:2381` (listener dedicado, sem auth).
+
+- **(1b)** `Endpoints` está excluído no `argocd-cm` (`resource.exclusions`) — boa
+  higiene, mas faz o ArgoCD **não aplicar** Service+Endpoints manuais. Usar
+  `VMStaticScrape` (alvos estáticos por `ip:porta`) em vez disso: dispensa
+  Service/Endpoints, some o warning, e é o idioma correto pra host-network.
+  Requer `vmagent.spec.selectAllByDefault: true` (default do chart).
+
+- **(1c)** **etcd no Talos NÃO é hot-reload.** Static pods (CM/scheduler/apiserver)
+  o Talos recria na hora quando o machine config muda — por isso CM e scheduler
+  pegaram o `bind-address` sozinhos. O etcd é serviço gerenciado e só relê
+  `extraArgs` num restart do serviço — e `talosctl service etcd restart` é
+  **bloqueado por design** (guard-rail anti-perda-de-quórum). O caminho é
+  `talosctl reboot --mode=default`, **um CP por vez**, confirmando `etcd status`
+  Healthy entre cada (quórum = 2 de 3). Sintoma clássico do erro: config certa no
+  `get machineconfig`, mas `connection refused` na 2381 e processo etcd com uptime
+  alto (sem o arg novo).
+```bash
+T=infra/prod/talos/clusterconfig/talosconfig
+talosctl --talosconfig=$T -n 10.40.6.11 reboot --mode=default
+talosctl --talosconfig=$T -n 10.40.6.11 health --wait-timeout=10m
+talosctl --talosconfig=$T -n 10.40.6.11 etcd status   # Healthy ANTES do próximo
+# repetir .12, depois .13 — NUNCA os três juntos
+```
+
+---
+
+## 2. otel-collector agent DaemonSet travado (MisScheduled + RolloutStuck)
+
+**Sintoma**
+`KubeDaemonSetMisScheduled` + `KubeDaemonSetRolloutStuck` no
+`otel-collector-opentelemetry-collector-agent`. `DESIRED=2`, mas 3 pods Running.
+
+**Causa**
+Taint `nvidia.com/gpu=present:NoSchedule` adicionado ao `worker-3-gpu`
+**depois** do DaemonSet já ter pod naquele nó. O controller passou a não desejar
+o nó (DESIRED 3→2), mas o pod pré-taint, sem toleration, virou órfão misscheduled
+e travou o rollout. Timeline confirma: pod do GPU com AGE menor (5d22h) que os
+outros dois (9d), marcando a data do taint.
+
+**Diagnóstico**
+```bash
+kubectl -n observability get ds otel-collector-opentelemetry-collector-agent -o wide
+# DESIRED vs nº real de pods — divergência = misscheduled
+kubectl -n observability get pods -l app.kubernetes.io/name=opentelemetry-collector -o wide
+# AGE do pod "intruso" marca quando o taint entrou
+kubectl describe node worker-3-gpu | grep -A5 Taints
+```
+
+**Fix**
+Toleration **específica** no values do otel-collector (GitOps via ArgoCD):
+```yaml
+# values.yaml do otel-collector (mode: daemonset) — top-level
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+```
+Após sync: DESIRED volta a 3, pods recriados, misscheduled zera, rollout converge
+3/3.
+
+**Lição**
+Taint em nó com DaemonSet já agendado não remove o pod existente — gera
+misscheduled e trava o rollout. DaemonSet de telemetria é **exceção legítima** ao
+`NoSchedule`: queremos observabilidade JUSTO no nó isolado (GPU = carga mais cara
+e quente). Tolerar **específico** ao taint conhecido, NÃO `operator: Exists`
+pelado (que toleraria qualquer taint e furaria o isolamento de outros nós).
+Atenção: ao definir `tolerations` no values, o chart substitui a lista default
+inteira — conferir se há default a preservar (em geral, p/ agent em workers, não há).
+
+---
+
+## 3. Backups falhando no namespace data (KubeJobFailed)
+
+**Sintoma**
+`KubeJobFailed` em `clickhouse-backup-*` e `qdrant-backup-*` (ns `data`). Alguns
+runs completavam, outros falhavam — aparência enganosa de intermitência.
+
+**Causa**
+CNP default-deny de **ingress** no namespace `data` (Fase 9) derrubando a conexão
+`backup-pod → serviço de dados` DENTRO do próprio namespace. Mesmo mecanismo do
+tombo anterior (Postgres/Langfuse/LiteLLM): default-deny de ingress nega conexão
+pod→pod intra-namespace se não houver allow explícita.
+
+**Diagnóstico**
+```bash
+# FONTE DE VERDADE — Hubble mostra o drop na hora (rodar com um backup ativo):
+hubble observe --namespace data --verdict DROPPED --follow
+# saída reveladora:
+#   data/qdrant-backup-...:33138 <> data/qdrant-0:6333 Policy denied DROPPED (TCP Flags: SYN)
+
+# logs do job (se o pod ainda existir):
+kubectl -n data logs job/<job-name> --all-containers --prefix
+```
+> ⚠️ NÃO confiar em timeline de Jobs (Completed vs Failed) pra inferir CNP — engana.
+> O Hubble flow é o veredito. (Diagnóstico inicial por timeline estava ERRADO;
+> o `hubble observe --verdict DROPPED` corrigiu.)
+
+**Fix**
+1. Adicionar allow de **ingress** intra-namespace pros pods de backup alcançarem
+   Qdrant (`:6333`) e ClickHouse sidecar (`:7171` / `:9000`).
+2. Limpar os Jobs falhos (o alerta é sticky — só some ao remover o Job):
+```bash
+kubectl -n data delete job clickhouse-backup-<id> qdrant-backup-<id>
+```
+3. (Higiene, opcional) nos CronJobs: `failedJobsHistoryLimit: 1`,
+   `successfulJobsHistoryLimit: 3`, `ttlSecondsAfterFinished` só nos de sucesso.
+
+**Lição**
+`KubeJobFailed` é sticky por design — fica firing até o objeto Job falho ser
+removido, mesmo que runs seguintes passem. Para diagnosticar CNP, Hubble flow
+(`--verdict DROPPED`) é a fonte de verdade — inferência por timeline de Jobs
+engana. Default-deny de ingress derruba conexão pod→pod DENTRO do mesmo namespace.
+
+---
+
+## 4. Watchdog + InfoInhibitor chegando ao Slack (plumbing mal roteado)
+
+**Sintoma**
+`Watchdog` e `InfoInhibitor` (ns `trivy-system`) entregues ao contact point real
+(Slack), poluindo notificações.
+
+**Causa**
+Alertmanager sem `inhibit_rules` nem route pra null receiver. Esses dois são
+alertas de **plumbing** do kube-prometheus/VM rules, não incidentes:
+- `Watchdog`: sempre firing (prova de vida do pipeline / DeadMansSnitch).
+- `InfoInhibitor`: existe SÓ para inibir alertas `severity=info` (ruído quando
+  isolados). Ele só fica `active` quando há um info firando no namespace —
+  estava guardando um info do Trivy operator (vuln report).
+
+**Fix**
+No `VMAlertmanagerConfig` (`observability`):
+```yaml
+spec:
+  route:
+    receiver: slack
+    routes:
+      - receiver: blackhole              # null receiver
+        matchers:
+          - alertname =~ "Watchdog|InfoInhibitor"
+        continue: false
+  receivers:
+    - name: slack
+      slack_configs: [ ... ]
+    - name: blackhole                    # sem config = engolido
+  inhibit_rules:
+    # warning/critical inibem info do MESMO namespace
+    - source_matchers: ['severity =~ "warning|critical"']
+      target_matchers: ['severity = "info"']
+      equal: ["namespace"]
+    # InfoInhibitor inibe info do MESMO namespace quando não há warning/critical
+    - source_matchers: ['alertname = "InfoInhibitor"']
+      target_matchers: ['severity = "info"']
+      equal: ["namespace"]
+```
+
+**Validação**
+```bash
+# config aceita?
+kubectl -n observability get vmalertmanagerconfig slack -o jsonpath='{.status}'
+# o dry-run de roteamento é o veredito — tem que retornar blackhole:
+kubectl -n observability exec -it vmalertmanager-victoria-metrics-vmks-0 -c alertmanager -- \
+  amtool config routes test --alertmanager.url=http://localhost:9093 \
+  alertname=InfoInhibitor namespace=trivy-system severity=none
+# nenhum severity=info vazando?
+kubectl -n observability exec -it vmalertmanager-victoria-metrics-vmks-0 -c alertmanager -- \
+  amtool alert query --alertmanager.url=http://localhost:9093 severity=info
+```
+
+**Lição**
+`Watchdog`/`InfoInhibitor` são plumbing do kube-prometheus — devem ser
+consumidos/inibidos, nunca roteados a humano. Roteamento (null receiver) ≠
+inibição: a sub-route esconde o InfoInhibitor do Slack, mas são as `inhibit_rules`
+que de fato suprimem os `info` reais. `equal: [namespace]` é crítico — inibição
+só vale no mesmo namespace. Eles continuam `active` no `amtool alert query` e na
+tela "Active notifications" do Grafana (que lista por estado, não por receiver),
+mas com `Delivered to ...-blackhole` = não chegam no Slack. Estado final correto.
+
+---
+
+## Nota transversal: alertas de saúde do vmagent são reflexos
+
+`TooManyScrapeErrors` / `TooManyLogs` (instance = o próprio vmagent, `:8429`)
+apareceram DUAS vezes nesta operação, por gatilhos diferentes:
+1. Downstream do etcd falhando (item 1).
+2. Fallout transitório do victoria-metrics-operator sob carga — o endpoint
+   `/metrics` dele (`:8080`) deu timeout (`Client.Timeout exceeded`) enquanto
+   digeria a enxurrada de reconciliações da própria operação (VMStaticScrape,
+   delete de VMServiceScrape, kubeEtcd, recriação do otel DS, VMAlertmanagerConfig).
+
+Ambas resolveram **sozinhas** ao cessar a causa upstream.
+
+**Lição:** esses alertas são reflexos — apontam um TARGET falhando, não um problema
+no vmagent. Achar o target (`curl :8429/targets | rg "down|error="` + logs do
+vmagent `| rg <ip>`), NÃO silenciar o alerta. Se o operator engasga após muitas
+mudanças, é transitório: esperar a fila de reconciliação esvaziar antes de mexer
+em timeout/threshold/limits. Só tratar como falso-positivo crônico (afrouxar
+`scrape_timeout` do job ou threshold da regra) se persistir com o target saudável.
+
 ---
 ## Apêndice A — Rollback da fase 1
 
