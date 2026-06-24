@@ -1,0 +1,63 @@
+# kube-controller-manager (10257/https) — control plane do Talos
+#
+# Talos roda o CM como static pod em host-network, SEM Service nem labels que
+# deem match. Por isso criamos um Service headless (clusterIP: None, sem selector)
+# + Endpoints manuais com os IPs dos CPs. O VMServiceScrape casa pelo label do Service.
+#
+# TLS: o cert do CM no Talos é válido só para localhost, não para o IP do nó.
+# insecureSkipVerify é aceitável aqui — tráfego interno ao cluster.
+# Pré-requisito (machine config): cluster.controllerManager.extraArgs.bind-address: 0.0.0.0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-controller-manager
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: kube-controller-manager
+    app.kubernetes.io/component: kube-controller-manager
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: http-metrics
+      port: 10257
+      targetPort: 10257
+      protocol: TCP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: kube-controller-manager   # nome IDÊNTICO ao Service
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: kube-controller-manager
+    app.kubernetes.io/component: kube-controller-manager
+subsets:
+  - addresses:
+      - ip: 10.40.6.11
+      - ip: 10.40.6.12
+      - ip: 10.40.6.13
+    ports:
+      - name: http-metrics
+        port: 10257
+        protocol: TCP
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: kube-controller-manager
+  namespace: observability
+spec:
+  jobLabel: app.kubernetes.io/component
+  namespaceSelector:
+    matchNames: [observability]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-controller-manager
+  endpoints:
+    - port: http-metrics
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true

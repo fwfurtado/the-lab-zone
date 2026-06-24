@@ -1,0 +1,20 @@
+# hubble-metrics (Cilium) — métricas de flow do Hubble
+#
+# O Cilium/Hubble já cria o Service com o label k8s-app: hubble no kube-system,
+# então aqui basta o VMServiceScrape (sem Service/Endpoints manuais).
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: hubble-metrics
+  namespace: observability
+spec:
+  namespaceSelector:
+    matchNames: [kube-system]
+  selector:
+    matchLabels:
+      k8s-app: hubble
+  endpoints:
+    - port: hubble-metrics
+      path: /metrics
+      interval: 30s
