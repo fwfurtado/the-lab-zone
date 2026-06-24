@@ -37,6 +37,9 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: data
             app.kubernetes.io/name: analytics-etl
+        - matchLabels:
+            io.kubernetes.pod.namespace: argo-workflows
+            app.kubernetes.io/name: argo-workflows-server
       toPorts:
         - ports:
             - port: "3900"
