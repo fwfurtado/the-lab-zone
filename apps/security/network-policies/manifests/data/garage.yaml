@@ -20,6 +20,9 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: langfuse
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app.kubernetes.io/name: clickhouse
       toPorts:
         - ports:
             - port: "3900"
