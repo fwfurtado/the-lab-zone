@@ -2228,6 +2228,547 @@ Imagens (genéricas, `ofwfurtado/`, pin por digest): `goose-runner`, `dbt-runner
 
 `mart_rag_interactions` (9 traces; cada trace é OU retrieval OU geração — LightRAG loga operações como traces separados, coerente com o no-link cross-projeto).
 
+
+# Fase 9 — SSO (Authentik) + Network Policies default-deny
+
+Consolidado dos incidentes e decisões da Fase 9. Formato por incidente:
+**Sintoma → Causa → Diagnóstico → Fix → Lição.**
+
+Estado final: SSO via Authentik em 6 apps (ArgoCD, Grafana, Open WebUI, Langfuse
+in-cluster; Harbor, Forgejo em VM mgmt). Default-deny **ingress** em `data` e `ai`,
+app por app, validado em Cilium Policy Audit Mode. Hubble forward-auth adiado p/ 1.20.
+
+---
+
+## Parte 1 — SSO via Authentik
+
+### 1.1 `grant_types` vazio no Authentik 2026.5
+
+- **Sintoma:** todos os apps OIDC falhavam o fluxo com `invalid_request`.
+- **Causa:** o provider OAuth2 do Authentik 2026.5 não defaulta `grant_types`; sem
+  ele o provider não anuncia `authorization_code`/`refresh_token`.
+- **Diagnóstico:** erro no início do fluxo, antes de qualquer redirect, em todos os
+  apps de uma vez → aponta pro IdP, não pro app.
+- **Fix:** `grant_types = ["authorization_code", "refresh_token"]` no
+  `authentik_provider_oauth2` (via `for_each`, corrigiu os 6 de uma vez).
+- **Lição:** erro idêntico em todos os apps = problema no provider compartilhado.
+
+### 1.2 `signing_key` ausente → HS256 vs RS256
+
+- **Sintoma:** "failed to verify the token" nos apps mesmo com login OK no Authentik.
+- **Causa:** sem `signing_key`, o Authentik assina o id_token em HS256; os clientes
+  esperam RS256 validável via JWKS.
+- **Diagnóstico:** discovery expõe `id_token_signing_alg_values_supported: [RS256]`,
+  mas o token vinha HS256 (issue goauthentik/terraform-provider #501).
+- **Fix:** `signing_key = data.authentik_certificate_key_pair.default.id`
+  (`name = "authentik Self-signed Certificate"`).
+- **Lição:** OIDC com validação por JWKS exige chave assimétrica; conferir o `alg`
+  do token vs `*_signing_alg_values_supported` do discovery.
+
+### 1.3 Recovery flow do Authentik não bound ao brand
+
+- **Sintoma:** novo usuário SSO sem caminho de "esqueci a senha".
+- **Causa:** recovery flow não vem vinculado ao brand por padrão.
+- **Fix:** usar `password` write-only do 1Password ao criar usuários; akadmin reseta
+  como break-glass.
+- **Lição:** akadmin é o break-glass de identidade; documentar separado dos apps.
+
+### 1.4 ArgoCD CLI gRPC-web atrás do Gateway — DESCARTADO
+
+- **Sintoma:** `argocd` CLI falhava atrás do Cilium Gateway (Unimplemented →
+  `--grpc-web` → timeout :80 → `--skip-test-tls` → 404).
+- **Causa:** o Cilium Gateway/Envoy converte gRPC-web→gRPC nativo por padrão
+  (`grpcWebTranslation`), e o argocd-server insecure não fala gRPC nativo.
+- **Diagnóstico:** causa-raiz isolada, mas fix exigiria GatewayClass dedicada
+  (`CiliumGatewayClassConfig{grpcWebTranslation.enabled:false}`).
+- **Fix:** **não corrigido por decisão** — over-engineering p/ um lab. CLI fica no
+  `argocd login --core`; UI+RBAC via SSO funcionam. Admin local de DR.
+- **Lição:** nem todo problema isolado merece fix; registrar a não-decisão e o porquê.
+
+### 1.5 Trailing slash no issuer — Langfuse vs Harbor (OPOSTOS)
+
+- **Sintoma:** Langfuse dava 301 no discovery; Harbor dava "failed to verify
+  connection". Mesmo IdP, sintomas diferentes.
+- **Causa:** o Authentik emite `issuer` **com** barra final
+  (`.../application/o/<slug>/`). As libs reagem ao contrário:
+  - **Langfuse** (`openid-client`, Node): concatena a barra → `//.well-known` → 301.
+    Precisa do endpoint **SEM** barra.
+  - **Harbor** (`go-oidc`, Go): faz `TrimSuffix` pro discovery (200 OK), mas valida
+    o `issuer` **literal** contra o do documento → mismatch sem a barra. Precisa
+    **COM** barra.
+- **Diagnóstico:** `curl` no `.well-known` de dentro do container (prova
+  conectividade/cert) + comparar o campo `issuer` do JSON com o configurado.
+- **Fix:** Langfuse `AUTH_AUTHENTIK_ISSUER` sem barra; Harbor "Endereço OIDC" com barra.
+- **Lição:** o `issuer` do discovery é a autoridade; casar com o que **cada lib**
+  espera. "Failed to verify connection" no Harbor com curl OK = mismatch de issuer,
+  não conectividade.
+
+### 1.6 Langfuse SSO não provisiona organização
+
+- **Sintoma:** login SSO OK, mas org e projetos somem (visão vazia).
+- **Causa:** SSO no Langfuse é **autenticação, não autorização**;
+  `ALLOW_ACCOUNT_LINKING` só age na criação; o login gerou identidade sem membership.
+- **Diagnóstico:** login local (email/senha) mostra org/projetos intactos → dados não
+  sumiram, é a conta SSO sem vínculo.
+- **Fix:** Org Settings → Members → Invite member com o email da conta SSO (Owner) →
+  relogar.
+- **Lição:** diferente de Grafana/Open WebUI (que mapeiam role pelo claim `groups`),
+  Langfuse exige provisioning manual de org (Members) ou SCIM.
+
+### 1.7 Harbor exige `offline_access` no scope
+
+- **Sintoma:** login web OK, mas o CLI secret (`docker login`) não sobrevivia.
+- **Causa:** o Harbor usa refresh token pra manter o CLI secret; sem `offline_access`
+  disponível no provider, não há refresh.
+- **Fix:** adicionar o scope mapping `offline_access` ao provider Authentik (lado-IdP,
+  Terraform) + incluir no scope do Harbor. `grant_types` já tinha `refresh_token` (1.1).
+- **Lição:** `property_mappings` só **disponibiliza** o scope; o app só recebe refresh
+  se **pedir** `offline_access` — inócuo pros outros apps.
+
+### 1.8 Harbor — campos da UI trocados
+
+- **Sintoma:** login falhava após o "test OIDC" passar.
+- **Causa:** "Atributo com nome do grupo (claim)" preenchido com `preferred_username`
+  e "OIDC Group Filter" com `groups` (invertidos).
+- **Fix:** Group Claim = `groups`; Group Filter = **vazio**; Username Claim =
+  `preferred_username` (habilita só com auto-onboard ligado).
+- **Lição:** o "test OIDC" valida só conexão/issuer, não os claims; campos de claim
+  só quebram no login real.
+
+### 1.9 Harbor — migração OIDC só sem usuários locais
+
+- **Causa:** o Harbor só troca pra `oidc_auth` se não houver usuário local além do admin.
+- **Lição:** conferir antes; usuário local (mesmo deletado) pode travar a migração.
+
+### 1.10 Harbor — DNS split-horizon + wildcard catch-all mascarando NXDOMAIN
+
+- **Sintoma:** "failed to verify connection"; `getent` resolvia
+  `auth.mgmt.the-lab.zone` pra **10.40.2.1** (errado; Authentik é 10.40.1.12), cert
+  `*.platform.the-lab.zone` não batia.
+- **Causa:** a VM usava a UDR (10.40.0.1) como DNS, que não resolve `*.mgmt`. A
+  consulta dava NXDOMAIN, o resolver appendava o search domain, e um **wildcard
+  catch-all** apontava o nome inventado pra 10.40.2.1.
+- **Diagnóstico:** `getent hosts` mostrou o nome canônico com sufixo de search domain
+  + IP errado; `curl -v` mostrou cert com CN que não casa o hostname.
+- **Fix:** apontar `dns.servers` da VM pro PowerDNS (10.40.1.53) — quem tem a verdade
+  do split-horizon.
+- **Lição:** wildcard catch-all é perigoso — mascara NXDOMAIN com IP/cert errados em
+  vez de falhar limpo. Erro de TLS pode ser sintoma de DNS, não de certificado.
+
+### 1.11 Forgejo — auto-registration via SSO
+
+- **Sintoma:** primeiro login SSO recusado ("registration disabled").
+- **Causa:** `FORGEJO__service__DISABLE_REGISTRATION=true` bloqueia o auto-register
+  via OAuth (Gitea #16826), mesmo com `ENABLE_AUTO_REGISTRATION=true`.
+- **Fix (no compose/`locals.tf`):**
+  `DISABLE_REGISTRATION=false` + `ALLOW_ONLY_EXTERNAL_REGISTRATION=true` +
+  `oauth2_client.ENABLE_AUTO_REGISTRATION=true` (+ `USERNAME=preferred_username`,
+  `ACCOUNT_LINKING=auto`).
+- **Lição:** "registro só via SSO" = registro local fechado + externo liberado, não
+  registro globalmente desabilitado.
+
+### 1.12 Forgejo — callback = nome da auth source
+
+- **Causa:** o callback é `/user/oauth2/<Authentication Name>/callback`; o
+  `<nome>` precisa bater com o redirect no `data.tf`.
+- **Lição:** o nome da source não é cosmético — define a URL de redirect.
+
+### 1.13 Hubble forward-auth — ADIADO p/ Cilium 1.20
+
+- **Sintoma:** Hubble UI não tem auth nativa; o `mode=forward_single` do proxy
+  provider assume o Gateway fazendo ext_authz.
+- **Causa:** o Cilium Gateway API **não** tem external auth no 1.19.4. O
+  `HTTPRouteExternalAuth` (GEP-1494, PR #45739) só chega no **1.20**. Alternativa via
+  `CiliumEnvoyConfig` cru é frágil (#29831).
+- **Fix:** **adiado p/ 1.20.** Hubble UI segue acessível por port-forward. Ao retomar:
+  confirmar GEP-1494 GA + Deployment do outpost in-cluster + filtro ext_auth no
+  HTTPRoute + `signing_key` no `authentik_provider_proxy.hubble` (ainda falta).
+- **Lição:** mesma natureza do 1.4 — não-decisão documentada com gatilho de retomada.
+
+---
+
+## Parte 2 — Network Policies (default-deny ingress em `data` e `ai`)
+
+### Decisões de arquitetura
+
+- **Reuso do AppProject `security`** (não um project/namespace dedicado). Separação
+  real vem do **path no Git** (`apps/security/network-policies/`) + **prune por app**,
+  não de namespace. As CNPs vão pra `data`/`ai` pelo próprio `metadata.namespace`.
+- **Fronteira GitOps:** `manifests/` = enforçado/sincronizado pelo ArgoCD;
+  `pending/` = baselines em audit, aplicadas à mão, **fora** do GitOps. Promoção =
+  `git mv pending/ → manifests/` (atômico, um arquivo por app).
+- **Audit mode é imperativo** (ver 2.6). O ciclo observar→refinar vive fora do Git;
+  só o resultado final (CNP com allows, em enforcement) é declarativo.
+
+### 2.1 AppProject recusa destino com namespace vazio
+
+- **Sintoma:** `application destination ... namespace '' do not match any of the
+  allowed destinations in project 'security'`.
+- **Causa:** o `app.yaml` não fixava `destination.namespace` (de propósito, pois cada
+  CNP traz o seu). O ArgoCD valida o par `(server, '')` contra o project, e `''` não
+  estava nos destinations.
+- **Fix:** fixar `destination.namespace: tetragon` (qualquer namespace já permitido no
+  project) — só p/ validação; as CNPs vão pra `data`/`ai` pelo próprio metadata.
+- **Lição:** `destination.namespace` cumpre dois papéis — default p/ recursos sem
+  namespace **e** o que o project valida. O segundo não aceita vazio.
+
+### 2.2 `ingress: []` é INVÁLIDO no CRD
+
+- **Sintoma:** CNP aplicada mas `VALID: False`; nenhum efeito.
+- **Causa:** lista de ingress vazia (`[]`) viola o validador:
+  `rule must have at least one of Ingress, IngressDeny, Egress, EgressDeny`.
+- **Diagnóstico:** `kubectl get cnp` mostra `VALID False`; `describe` dá a mensagem.
+- **Fix:** default-deny ingress puro = **`ingress: - {}`** (uma regra **presente
+  porém vazia** = nenhuma origem permitida = nega tudo, e passa na validação).
+- **Lição:** `ingress: []` ≠ `ingress: - {}`. O `[]` é inválido; o `- {}` é o
+  default-deny. (E `- {}` **não** é allow-all — allow-all seria `fromEntities: [all]`.)
+
+### 2.3 `enableDefaultDeny` sozinho não enforça
+
+- **Causa:** setar só `enableDefaultDeny.ingress: true` sem nenhuma stanza de regra
+  não ativa o default-deny (cilium #35558).
+- **Lição:** precisa da seção `ingress` com regra (`- {}`); o campo sozinho é insuficiente.
+
+### 2.4 CNP `VALID: False` silenciosa → audit sem efeito
+
+- **Sintoma:** audit mode `Enabled`, mas `hubble observe` vazio com tráfego fluindo.
+- **Causa:** a CNP estava `VALID: False` (2.2) → não aplicada a endpoint nenhum →
+  endpoint com `policy-enabled: none` → audit mode sem efeito (não há policy p/ auditar).
+- **Diagnóstico:** `cilium-dbg endpoint get <id>` mostra `policy-enabled: none` em vez
+  de `ingress`.
+- **Fix:** corrigir a CNP (2.2) até `VALID: True`; aí `policy-enabled` vira `ingress`.
+- **Lição:** depois de aplicar uma CNP, **sempre** conferir `VALID: True` **e** o
+  `policy-enabled` do endpoint antes de confiar que o audit observa.
+
+### 2.5 Audit vem `Disabled` por padrão → bloqueio real
+
+- **Sintoma:** Langfuse e LiteLLM `Policy denied DROPPED` na 5432 ao aplicar a baseline
+  do Postgres.
+- **Causa:** `PolicyAuditMode` vem `Disabled`; aplicar a default-deny sem ligar o audit
+  **antes** = enforcement imediato.
+- **Fix:** deletar a CNP p/ destravar; reaplicar **só após** `audit ... Enabled`
+  confirmado (`audit-status` = Enabled em **todos** os pods do alvo).
+- **Lição:** ordem obrigatória: ligar audit → confirmar Enabled → aplicar baseline.
+  Nunca aplicar default-deny sem o audit ativo.
+
+### 2.6 `PolicyAuditMode` é imperativo e não persiste
+
+- **Causa:** não é campo de nenhum recurso K8s — é opção de runtime do endpoint
+  (`cilium-dbg endpoint config`, ID efêmero). Não declarável em GitOps; reseta em
+  restart do agent/pod.
+- **Fix:** encapsular o ritual no `mod.just` (`audit Enabled/Disabled`) — comando
+  versionado, efeito imperativo.
+- **Lição:** o audit é andaime de transição, não estado desejado; por isso fica fora
+  do Git. Janela de audit curta por app (restart re-tranca se a CNP já existe).
+
+### 2.7 Pool de conexão persistente esconde os SYN
+
+- **Sintoma:** cliente claramente usando o serviço, mas nenhum verdict de policy.
+- **Causa:** o policy-verdict é avaliado na **abertura** (SYN). Pools persistentes
+  (Langfuse→PG/CH, operator) reusam conexões abertas antes da policy → sem SYN novo.
+- **Fix:** `kubectl rollout restart` no **cliente** (não no destino) p/ forçar
+  reabertura → SYN → verdict.
+- **Lição:** "sem verdict" ≠ "sem tráfego". Forçar reconexão; e o buffer do Hubble gira
+  rápido a alto flows/s — usar `--follow` durante o restart, não `--last` depois.
+
+### 2.8 Labels que fogem do padrão `app.kubernetes.io/name`
+
+- **CNPG:** pods usam `cnpg.io/cluster: <nome>` (aqui `cnpg-cluster`); não filtrar por
+  `instanceRole` (cobre primário e réplicas, sobrevive a failover).
+- **ClickHouse (Altinity):** `clickhouse.altinity.com/chi: <chi>`.
+- **Lição:** confirmar sempre com `kubectl get pod --show-labels` antes de escrever o
+  `endpointSelector`.
+
+### 2.9 Argo Workflows — pods sem label estável
+
+- **Sintoma:** o ELT (`analytics-elt`) aparecia no AUDIT com pods cujo único label útil
+  (`workflows.argoproj.io/workflow`) muda a cada run.
+- **Causa:** pods de workflow não têm label de identidade estável por padrão.
+- **Fix:** adicionar `spec.podMetadata.labels` fixo no **WorkflowTemplate** (propaga a
+  todos os pods do workflow, inclusive os de `templateRef`). Aqui:
+  `app.kubernetes.io/name: analytics-etl`.
+- **Lição:** policy que mira workload efêmero (job/workflow) exige um label estável
+  **adicionado** ao template. (Nota: label ficou `analytics-etl`, recurso é
+  `analytics-elt` — typo histórico, consistente nos dois lados.)
+
+### 2.10 Cross-namespace exige o label de namespace no `fromEndpoints`
+
+- **Causa:** sem `io.kubernetes.pod.namespace: <ns>`, o `matchLabels` casa só dentro do
+  namespace da própria CNP.
+- **Fix:** todo `fromEndpoints` cross-namespace leva `io.kubernetes.pod.namespace`
+  junto do label do app (ex.: vmagent em `observability` → ClickHouse/PG/Garage em `data`).
+- **Lição:** allow entre namespaces sem o label de namespace simplesmente não casa.
+
+### 2.11 Origem `ingress` (Gateway/Envoy) usa `fromEntities`, não `fromEndpoints`
+
+- **Sintoma:** Open WebUI (exposto via Gateway) com source identity `reserved:ingress`.
+- **Causa:** o último hop é o Envoy do Cilium Gateway, identidade reservada — não um pod.
+- **Fix:** `fromEntities: [ingress]` (+ `health`/`host` se aparecerem probes do
+  kubelet no AUDIT).
+- **Lição:** identidades reservadas (`ingress`, `host`, `health`, `world`,
+  `remote-node`) → `fromEntities`. Errar a regra do app exposto **derruba a própria UI**
+  — validar abrindo a URL após enforçar.
+
+### 2.12 Fluxos esporádicos só aparecem quando rodam
+
+- **Sintoma:** o ELT (CronWorkflow) só apareceu no AUDIT quando o schedule disparou.
+- **Causa:** backups, crons e jobs periódicos não geram tráfego contínuo.
+- **Fix:** cobrir um **ciclo completo** na observação; disparar manualmente o que for
+  raro (ELT, backup) antes de promover.
+- **Lição:** o maior risco do default-deny é o fluxo que você não viu. Promover sem ter
+  exercitado um ciclo = descobrir a quebra dias depois. Deixar `--verdict DROPPED`
+  rodando após enforçar como rede de segurança.
+
+### 2.13 Operator CNPG não precisou da 5432 (decisão conservadora)
+
+- **Observação:** o `cloudnative-pg` (`cnpg-system`) gerencia o cluster via **instance
+  manager (8000)**; restart do operator re-sincronizou sem dropar na 5432.
+- **Decisão:** mesmo assim, **liberar 5432 + 8000** pro operator (conservador) — custo
+  ~zero (componente confiável do próprio cluster), cobre operações raras que o restart
+  não exercita (failover, scale-up, restore).
+- **Lição:** mínimo-privilégio vs falhar-em-manutenção. Pra banco, a precaução numa
+  regra barata vale mais que o minimalismo. Se escalar p/ HA, reabrir audit no scale-up.
+
+---
+
+## Parte 3 — Observabilidade de drops (alerta de network policy → Slack)
+
+Objetivo: alertar quando uma policy dropa tráfego em `data`/`ai` (sinal de allow
+rule faltando). Cadeia: `hubble_drop_total` → VMRule `CiliumPolicyDrop` → vmalert →
+vmalertmanager → Slack. A saga foi longa porque cada elo tinha sua pegadinha.
+
+### Decisões de arquitetura
+
+- **VMServiceScrape no MESMO namespace do service alvo.** Scrape cross-namespace
+  (scrape em `observability` mirando service em `kube-system` via `namespaceSelector`)
+  não funciona de forma confiável no VM operator. Pôr o scrape junto do service.
+- **VMRule no app que o alerta monitora** (`network-policies`, ns `observability`) —
+  coeso: a regra vive ao lado do que ela vigia. O project `security` já permite
+  `observability` e o whitelist `*/*` cobre VMRule.
+- **Slack via VMAlertmanagerConfig + ESO**, nunca URL inline. Repo é público → a
+  webhook URL vem de Infisical (ExternalSecret) e o `slack_configs.api_url` referencia
+  o secret por `{name, key}`, não o valor.
+- **Data source-managed alerts** (vmalert avalia, Grafana só UI). Não usar
+  Grafana-managed pras mesmas regras (avaliação dupla). vmalert é stateless, estado
+  nas próprias métricas.
+
+### 3.1 Hubble não exporta métricas Prometheus
+
+- **Sintoma:** `hubble_drop_total` não existe no VM; Grafana não mostra nada.
+- **Causa:** o bloco `hubble` no values do Cilium tinha só `relay` e `ui`, **sem
+  `metrics`**. Hubble observava (UI/CLI = flow buffer interno) mas não exportava.
+- **Fix:** adicionar `hubble.metrics.enabled` no values do Cilium, com `drop` e
+  `labelsContext` p/ ter os labels que tornam o alerta acionável:
+  ```yaml
+  hubble:
+    metrics:
+      enableOpenMetrics: true
+      enabled:
+        - drop:labelsContext=source_namespace,destination_namespace,traffic_direction
+        - flow:labelsContext=source_namespace,destination_namespace
+        - tcp
+        - dns
+  ```
+- **Lição:** observar (relay/ui) e exportar (metrics) são coisas separadas. `drop`
+  não vem por padrão; `labelsContext` é o que dá origem/destino (sem ele, métrica
+  existe mas sem saber de onde). Evitar `source_ip`/`destination_ip` (cardinalidade).
+
+### 3.2 A 9965 pareceu servir gRPC em vez de flow metrics
+
+- **Sintoma:** `curl <node-ip>:9965/metrics` retornou `grpc_server_handled_total`,
+  `observer.Observer`, `peer.Peer` — não `hubble_drop/flow_*`.
+- **Causa:** o curl foi no IP do **nó** (a 9965 tem `hostPort`), e pegou outro
+  listener. O metrics server de flow estava OK (log do agent: `Starting Hubble
+  metrics server address=:9965 metricConfig="drop flow tcp dns"`).
+- **Fix:** testar de dentro via port-forward no **service**:
+  `kubectl -n kube-system port-forward svc/hubble-metrics 9965:9965` →
+  `curl localhost:9965/metrics | grep -E "^hubble_(drop|flow)"`.
+- **Lição:** confirmar a métrica no service (não no hostPort do nó) e via grep
+  `hubble_*` (não gRPC). O log do agent é a fonte da verdade de onde o server subiu.
+
+### 3.3 VMServiceScrape cross-namespace não vira target
+
+- **Sintoma:** scrape criado em `observability` mirando `hubble-metrics` em
+  `kube-system`; não aparece em `/targets` do vmagent; `hubble_drop_total` ausente.
+- **Causa:** o `namespaceSelector` do VMServiceScrape no VM operator é inconsistente —
+  o scrape casa services do **próprio namespace** do scrape. Em `observability` ele
+  procurava o service ali (não existe) e não gerava target.
+- **Fix:** mover o VMServiceScrape p/ `kube-system` (mesmo namespace do service),
+  `selector.matchLabels: {k8s-app: hubble}`, `endpoints.port: hubble-metrics` (nome,
+  não número). **E reiniciar o operator** (ver 3.7).
+- **Lição:** VMServiceScrape junto do service que ele scrapeia. Todos os scrapes que
+  funcionam estão co-localizados com o alvo; o único cross-ns era o que falhava.
+
+### 3.4 VMRule não materializada apesar de `selectAllByDefault: true`
+
+- **Sintoma:** VMRule `hubble-policy-drops` criada, válida, sem labels exigidos, mas
+  não aparece entre as regras do vmalert no Grafana (262 outras aparecem).
+- **Causa:** o operator não reconciliou o VMRule no rulefile do vmalert. Não era
+  seletor (`selectAllByDefault: true`) nem label — era reconciliação travada.
+- **Fix:** **restart do operator** (ver 3.7). Após isso, apareceu.
+- **Lição:** com `selectAllByDefault: true` + VMRule válido + não aparece = quase
+  sempre reconciliação. Confirmar no rulefile do vmalert e reiniciar o operator.
+
+### 3.5 Integração Grafana (ver alertas/regras no Grafana)
+
+- **Causa/Fix:** três peças, todas via values (GitOps, sem UI):
+  - **Alertmanager datasource** no Grafana (vê firing em Alerting → Active
+    notifications): `type: alertmanager`, `url: http://vmalertmanager-...:9093`,
+    `jsonData.implementation: prometheus`.
+  - **`vmalert.proxyURL`** no `vmsingle.spec.extraArgs` apontando p/
+    `http://vmalert-...:8080` — põe a Ruler API na mesma URL da Query API (exigência
+    do Grafana p/ data-source-managed).
+  - **`jsonData.manageAlerts: true`** no datasource VictoriaMetrics existente.
+- **Lição:** "ver regras" (proxyURL + manageAlerts no datasource VM) e "ver firing"
+  (Alertmanager datasource) são telas/configs diferentes. O seletor "Choose
+  Alertmanager" precisa apontar pro datasource externo, não pro "Grafana" interno.
+
+### 3.6 Alerta não fira no teste por burst vs `for:`
+
+- **Sintoma:** drop gerado (`seq 5 | xargs curl`), métrica sobe, mas `CiliumPolicyDrop`
+  não chega a `firing`.
+- **Causa:** o `for: 2m` exige o `rate(...[5m])` positivo por 2min contínuos. Um burst
+  pontual de curls some antes disso; a regra fica `pending` e volta a `normal`.
+- **Fix:** drop **sustentado** > 2min:
+  `sh -c 'while true; do curl -m 2 -s http://<ip-clickhouse>:8123; sleep 3; done'`.
+- **Lição:** testar alerta com `for:` exige tráfego sustentado, não burst. E o drop
+  por policy é **timeout** no curl (sem RST/refused), não erro de conexão.
+
+### 3.7 Padrão recorrente: operator não materializa → restart
+
+- **Sintoma:** recurso do VM operator (VMServiceScrape, VMRule) criado e correto, mas
+  não vira config/rulefile/target.
+- **Causa:** o operator não reconcilia o recurso novo até ser reiniciado, mesmo com
+  `selectAllByDefault: true` e o recurso 100% válido.
+- **Fix:** `kubectl -n observability rollout restart deploy/victoria-metrics-victoria-metrics-operator`.
+- **Lição:** **aconteceu 3x nesta fase** (scrape, rule, config). Recurso VM correto que
+  "não aparece" → primeiro reflexo é reiniciar o operator, não o último recurso.
+
+### 3.8 `useManagedConfig: false` mantém o blackhole e ignora VMAlertmanagerConfigs
+
+- **Sintoma:** SSO/scrape/rule OK, alerta fira, mas não vai pro Slack. O config gerado
+  do alertmanager seguia `route.receiver: blackhole`, sem rastro do receiver slack —
+  mesmo com `selectAllByDefault: true`, `disableNamespaceMatcher: true`, e o
+  VMAlertmanagerConfig `slack` Synced.
+- **Causa:** o chart vmks tem `config` **default** (`route.receiver: blackhole`). Com
+  `alertmanager.useManagedConfig: false` (default), o chart materializa esse config
+  num Secret e seta `configSecret` no VMAlertmanager. **Enquanto `configSecret` está
+  setado, o operator IGNORA todos os VMAlertmanagerConfigs.** Remover o `config` do
+  values não bastou — o chart caiu no default dele (blackhole).
+- **Fix:** `alertmanager.useManagedConfig: true` no values do vmks — o chart deixa de
+  setar `configSecret`; o operator passa a combinar os VMAlertmanagerConfigs.
+- **Lição:** no vmks, remover `alertmanager.config` não desliga o config default. A
+  flag `useManagedConfig: true` é o que libera os VMAlertmanagerConfigs a assumirem.
+  Confirmar `kubectl get vmalertmanager ... -o jsonpath='{.spec.configSecret}'` vazio.
+
+### 3.9 Secret `-config` defasado após trocar `useManagedConfig`
+
+- **Sintoma:** após `useManagedConfig: true`, o Slack passou a receber, MAS o secret
+  `vmalertmanager-<name>-config` ainda mostrava blackhole no `gunzip`.
+- **Causa:** o secret `-config` ficou **órfão/defasado** na transição de modo. O
+  config ativo (com o receiver slack como rota filha `continue: true`, sem namespace
+  matcher) está no que o **pod** carregou, não nesse secret.
+- **Fix:** ler a verdade de dentro do pod:
+  `kubectl exec vmalertmanager-...-0 -c alertmanager -- cat /etc/alertmanager/config_out/*.yaml`.
+- **Lição:** a fonte da verdade do alertmanager é o config no pod (`config_out/`), não
+  o secret `-config` (que pode defasar). A prova definitiva é o comportamento: alerta
+  no Slack > leitura de um secret possivelmente obsoleto.
+
+### 3.10 VMAlertmanagerConfig — snake_case no route + namespace matcher
+
+- **Sintoma 1:** sync falhou com `.spec.route.repeatInterval: field not declared in
+  schema`.
+- **Causa/Fix 1:** o CRD usa **snake_case** no route: `repeat_interval`, `group_wait`,
+  `group_interval`, `group_by` (não camelCase). Conferir com
+  `kubectl explain vmalertmanagerconfig.spec.route --recursive`.
+- **Sintoma 2 (evitado):** VMAlertmanagerConfig tem **namespace matcher forçado** —
+  alertas precisam de label `namespace=<ns-do-config>`. O `CiliumPolicyDrop` tem
+  `destination_namespace=data/ai`, não casaria.
+- **Fix 2:** `disableNamespaceMatcher: true` no VMAlertmanager (sem isso, alerta cai
+  no fallback em vez de ir pro Slack).
+- **Lição:** snake_case no route do VMAlertmanagerConfig; `disableNamespaceMatcher:
+  true` num alertmanager central que roteia alertas de vários namespaces.
+
+---
+
+## Apêndice — Ciclo padrão por app (referência rápida)
+
+```
+# 1. label real + nº de pods
+kubectl -n <ns> get pod -l <selector> --show-labels
+
+# 2. LIGA audit ANTES de tudo (vem Disabled!)
+just apps::network-policies::audit <ns> <selector> Enabled
+just apps::network-policies::audit-status <ns> <selector>   # confirma Enabled em TODOS
+
+# 3. aplica baseline (pending/, à mão)
+just apps::network-policies::apply-pending <ns>/<app>
+kubectl -n <ns> get cnp <app>-default-deny-ingress          # VALID: True
+# conferir policy-enabled: ingress no endpoint (cilium-dbg)
+
+# 4. observa (força reconexão dos clientes p/ os SYN aparecerem)
+hubble observe --namespace <ns> -l <selector> -t policy-verdict --follow | rg 'AUDITED|DROP'
+kubectl -n <client-ns> rollout restart deploy/<cliente>
+
+# 5. cada AUDIT vira allow (fromEndpoints+toPorts; fromEntities p/ ingress/host/health)
+#    refina até zerar AUDIT, cobrindo 1 ciclo completo (inclui crons/backups)
+
+# 6. PROMOVE
+git mv pending/<ns>/<app>.yaml manifests/<ns>/<app>.yaml
+git commit -m "netpol: <app> default-deny ingress"
+just apps::network-policies::audit <ns> <selector> Disabled   # vira enforcement
+
+# 7. rede de segurança
+hubble observe --namespace <ns> --verdict DROPPED --follow
+```
+
+## Apêndice — Cadeia de observabilidade de drops (referência rápida)
+
+```
+# 1. Cilium values: habilita métricas Hubble (drop com labelsContext)
+#    hubble.metrics.enabled: [drop:labelsContext=..., flow:..., tcp, dns]
+
+# 2. VMServiceScrape em kube-system (mesmo ns do service hubble-metrics)
+#    selector k8s-app=hubble, port hubble-metrics  -> RESTART operator
+
+# 3. VMRule CiliumPolicyDrop (rate(hubble_drop_total{reason="POLICY_DENIED",
+#    destination_namespace=~"data|ai"}[5m])>0, for:2m)  -> RESTART operator
+
+# 4. Grafana: Alertmanager datasource + vmalert.proxyURL no vmsingle +
+#    manageAlerts:true no datasource VM
+
+# 5. Slack: ExternalSecret (webhook do Infisical) + VMAlertmanagerConfig
+#    (slack_configs.api_url -> {name,key}; route snake_case)
+#    vmks: alertmanager.useManagedConfig:true + disableNamespaceMatcher:true
+
+# Validar fim-a-fim (drop sustentado > for:):
+kubectl run droptest -n default --image=curlimages/curl --rm -it --restart=Never -- \
+  sh -c 'while true; do curl -m 2 -s http://<ip-clickhouse>:8123; sleep 3; done'
+# -> hubble_drop_total++ -> CiliumPolicyDrop firing -> Slack
+
+# Verdade do config do alertmanager (NÃO o secret -config, que pode defasar):
+kubectl -n observability exec vmalertmanager-victoria-metrics-vmks-0 -c alertmanager \
+  -- cat /etc/alertmanager/config_out/*.yaml
+```
+
+## Pendências da Fase 9
+
+- **Hubble forward-auth** → Cilium 1.20 (GEP-1494) + `signing_key` no proxy provider.
+- **Egress** em `data`/`ai` (fase futura; lembrar DNS p/ kube-dns:53 e ClickHouse→Garage:3900).
+- **Dashboards Tetragon** → confirmar schema dos campos no VictoriaLogs (LogsQL).
+- **Secret `-config` órfão** do alertmanager (defasado pós-`useManagedConfig`) — checar
+  se o prune do ArgoCD limpou ou se ficou lixo inofensivo.
+- **`inhibit_rules`** (severity critical→warning) sumiu ao remover o `config` inline —
+  recriar no VMAlertmanagerConfig se quiser a supressão de volta.
+
+## Concluído na Fase 9
+
+- SSO Authentik em 6 apps (ArgoCD, Grafana, Open WebUI, Langfuse; Harbor, Forgejo em VM).
+- Default-deny ingress em `data` (clickhouse, postgresql, garage, valkey, qdrant,
+  memgraph) e `ai` (open-webui, litellm, langfuse, ollama), app por app, via audit mode.
+- Observabilidade de drops: `hubble_drop_total` → VMRule → vmalert → vmalertmanager →
+  **Slack**, validada fim-a-fim com drop real.
+
 ---
 ## Apêndice A — Rollback da fase 1
 
