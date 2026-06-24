@@ -11,4 +11,11 @@ spec:
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: data
-            app.kubernetes.io/name: velkey-exporter
+            app.kubernetes.io/name: valkey-exporter
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: langfuse
+      toPorts:
+        - ports:
+          - port: "6379"
+            protocol: TCP
