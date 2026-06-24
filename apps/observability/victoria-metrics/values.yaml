@@ -53,6 +53,7 @@ vmalert:
 # Substitui o app separado apps/observability/alertmanager/ (que deve ser removido).
 alertmanager:
   enabled: true
+  useManagedConfig: true
   spec:
     selectAllByDefault: true
     disableNamespaceMatcher: true
