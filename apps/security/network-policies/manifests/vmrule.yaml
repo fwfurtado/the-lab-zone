@@ -1,0 +1,24 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: hubble-policy-drops
+  namespace: observability
+spec:
+  groups:
+    - name: cilium-network-policy
+      rules:
+        - alert: CiliumPolicyDrop
+          expr: |
+            sum by (source_namespace, destination_namespace) (
+              rate(hubble_drop_total{reason="POLICY_DENIED", destination_namespace=~"data|ai"}[5m])
+            ) > 0
+          for: 2m # evita falso-positivo de drop pontual (1 reconexão e some)
+          labels:
+            severity: warning
+          annotations:
+            summary: "Network policy dropando em {{ $labels.destination_namespace }}"
+            description: >-
+              {{ $labels.source_namespace }} -> {{ $labels.destination_namespace }}
+              negado por policy ({{ $value | humanize }} drops/s).
+              Provável allow rule faltando — checar com:
+              hubble observe --namespace {{ $labels.destination_namespace }} --verdict DROPPED
