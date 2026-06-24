@@ -2529,6 +2529,57 @@ app por app, validado em Cilium Policy Audit Mode. Hubble forward-auth adiado p/
 - **Lição:** mínimo-privilégio vs falhar-em-manutenção. Pra banco, a precaução numa
   regra barata vale mais que o minimalismo. Se escalar p/ HA, reabrir audit no scale-up.
 
+### 2.14 `archiveLogs` do Argo cria dependência de rede invisível → Garage:3900
+
+- **Sintoma:** após migrar os backups pra Argo Workflows, surgiram fluxos pra
+  `garage:3900` que **não existiam no desenho original**: `clickhouse-backup` e
+  `analytics-etl` (ns `data`) batendo na 3900, e — ao abrir um run concluído na UI —
+  o `argo-workflows-server` (ns `argo-workflows`) também.
+- **Causa:** `artifact-repositories` (ns `data`) tem `archiveLogs: true`. Isso tem
+  **dois lados** que ninguém escreve no manifesto do app:
+  1. **Escrita:** o sidecar `wait` de **todo** pod de Workflow arquiva os logs no
+     Garage:3900 ao concluir.
+  2. **Leitura:** o `argo-workflows-server` lê de volta do Garage:3900 pra servir os
+     logs na UI quando você abre um run arquivado.
+  Nenhum dos dois fazia parte do mapa "quem-fala-com-o-Garage" da Fase 6/8.
+- **Fix:** na `garage-default-deny-ingress`, liberar a 3900 para todos os clientes do
+  artifact repo:
+  - **produtores** (ns `data`): `qdrant-backup` (já tinha, por causa do rclone),
+    `clickhouse-backup` e `analytics-etl`;
+  - **leitor** (ns `argo-workflows`): `argo-workflows-server`.
+```yaml
+    - fromEndpoints:
+        # ... langfuse, clickhouse, qdrant-backup ...
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app.kubernetes.io/name: clickhouse-backup
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app.kubernetes.io/name: analytics-etl
+        - matchLabels:
+            io.kubernetes.pod.namespace: argo-workflows
+            app.kubernetes.io/name: argo-workflows-server
+      toPorts:
+        - ports: [{ port: "3900", protocol: TCP }]
+```
+- **Diagnóstico:** validar antes de tirar o Garage do audit — exercitar um run E abrir a
+  UI dele (senão o fluxo do server não aparece):
+```bash
+# disparar um backup e abrir o run concluído na UI do Argo, então:
+hubble observe --namespace data --to-label app.kubernetes.io/name=garage \
+  --port 3900 --follow
+# tem que aparecer FORWARDED (ou AUDIT em audit mode), nunca DROPPED, vindo de:
+#   data/clickhouse-backup-...        (wait sidecar, escrita)
+#   data/analytics-etl-...            (wait sidecar, escrita)
+#   argo-workflows/argo-workflows-server-...  (leitura pra UI)
+```
+- **Lição:** `archiveLogs` é uma dependência de rede **transversal**, não do app — vale
+  pra qualquer Workflow arquivado. O mapa de "quem fala com o artifact repo" é: **todo
+  pod de workflow** (escrita do wait sidecar) + **o server** (leitura pra UI) + (se um dia
+  ligar `artifactGC`) os **pods de GC** (delete). `qdrant-backup` mascarava o gap porque
+  já falava com o Garage pelo rclone; `clickhouse-backup` expôs, porque o upload real é do
+  sidecar `clickhouse` (não dele) — como Workflow, ele só precisa do Garage pro log.
+
 ---
 
 ## Parte 3 — Observabilidade de drops (alerta de network policy → Slack)
@@ -2760,6 +2811,8 @@ kubectl -n observability exec vmalertmanager-victoria-metrics-vmks-0 -c alertman
   se o prune do ArgoCD limpou ou se ficou lixo inofensivo.
 - **`inhibit_rules`** (severity critical→warning) sumiu ao remover o `config` inline —
   recriar no VMAlertmanagerConfig se quiser a supressão de volta.
+- **`artifactGC` do Argo** (se ligar um dia): os pods de GC **deletam** artifacts do
+  Garage → liberar `:3900` pro label deles na `garage` CNP (mesma classe do 2.14).
 
 ## Concluído na Fase 9
 
@@ -2768,6 +2821,9 @@ kubectl -n observability exec vmalertmanager-victoria-metrics-vmks-0 -c alertman
   memgraph) e `ai` (open-webui, litellm, langfuse, ollama), app por app, via audit mode.
 - Observabilidade de drops: `hubble_drop_total` → VMRule → vmalert → vmalertmanager →
   **Slack**, validada fim-a-fim com drop real.
+- Backups (Qdrant, ClickHouse) migrados de `batch/v1 CronJob` → Argo `CronWorkflow`
+  (`containerSet` no Qdrant; trigger do sidecar no ClickHouse). CNP do Garage ajustada
+  pro `archiveLogs` (produtores + `argo-workflows-server`) — ver 2.14 / 3.1.
 
 # Fase 9 — Resolução de alertas (control plane, otel, backups, plumbing)
 
@@ -2993,6 +3049,37 @@ kubectl -n data delete job clickhouse-backup-<id> qdrant-backup-<id>
 removido, mesmo que runs seguintes passem. Para diagnosticar CNP, Hubble flow
 (`--verdict DROPPED`) é a fonte de verdade — inferência por timeline de Jobs
 engana. Default-deny de ingress derruba conexão pod→pod DENTRO do mesmo namespace.
+
+## 3.1 Backups migrados: `batch/v1 CronJob` → Argo `CronWorkflow`
+
+Últimos `CronJob` do data plane migrados pro Argo (padrão do `analytics-elt`):
+orquestração, métricas e retry unificados sob o controller.
+
+**Decisões**
+
+- **Qdrant — `containerSet`, não DAG.** O CronJob era `initContainer`(snapshot) +
+  `container`(upload) no **mesmo pod** com `emptyDir`. O equivalente fiel é um
+  `containerSet`: 2 containers, 1 pod, 1 volume compartilhado, com `dependencies:
+  [snapshot]` no upload. Importa pra CNP: **1 pod = 1 identidade Cilium = 1 label**. Um
+  DAG geraria 2 pods e mandaria o snapshot pro bucket `argo-workflows` só pra baixar de
+  novo (round-trip desnecessário).
+- **ClickHouse — container único** que trigga o sidecar (`:7171`). De quebra, troquei o
+  `sleep 30` cego por **polling** de `/backup/status` (sai com erro se a operação
+  reportar `error`).
+- **Identidade estável:** `spec.podMetadata.labels: app.kubernetes.io/name:
+  {qdrant,clickhouse}-backup` (mesma jogada do 2.9) → as CNPs de `qdrant`(`:6333`) e
+  `clickhouse`(`:7171`) **continuam casando sem alteração**.
+- **Retry:** `restartPolicy: OnFailure` (CronJob) → `retryStrategy` (Argo).
+- **Volume:** o `emptyDir` do containerSet fica em `spec.volumes` do **WorkflowTemplate**
+  e **É herdado** pelo `workflowTemplateRef` do CronWorkflow — diferente da verruga do
+  `templateRef` (2.x do dbt), que é template-level e não carrega `spec.volumes`.
+
+**Lição**
+
+Migrar `Job → Workflow` não é só trocar o `kind`. Muda três coisas com consequência de
+rede: a **identidade** (pod labels → ver 2.9), o **caminho dos logs** (`archiveLogs` →
+Garage:3900 → ver 2.14) e o **modelo de retry**. A CNP que valia pro CronJob pode não
+valer pro Workflow.
 
 ---
 
