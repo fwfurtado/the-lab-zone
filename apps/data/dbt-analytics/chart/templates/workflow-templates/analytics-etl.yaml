@@ -10,6 +10,9 @@ metadata:
 spec:
   entrypoint: dag
   serviceAccountName: {{ .Values.serviceAccountName }}
+  podMetadata:
+    labels:
+      app.kubernetes.io/name: analytics-etl
   arguments:
     parameters:
       - name: revision

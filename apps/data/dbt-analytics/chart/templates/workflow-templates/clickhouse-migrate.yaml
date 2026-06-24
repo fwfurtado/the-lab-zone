@@ -10,6 +10,9 @@ metadata:
 spec:
   entrypoint: main
   serviceAccountName: {{ .Values.serviceAccountName }}
+  podMetadata:
+    labels:
+      app.kubernetes.io/name: analytics-etl
   templates:
     - name: main
       steps:
