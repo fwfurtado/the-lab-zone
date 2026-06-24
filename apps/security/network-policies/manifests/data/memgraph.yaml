@@ -1,0 +1,11 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: memgraph-default-deny-ingress
+  namespace: data
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: memgraph
+  ingress:
+    - {}
