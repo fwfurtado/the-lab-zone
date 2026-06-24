@@ -1,6 +1,3 @@
-# apps/security/network-policies/pending/data/postgresql.yaml
-# Default-deny INGRESS puro. ingress: [] NEGA tudo; ingress: [{}] LIBERA tudo (não usar).
-# Sem egress -> egress livre nesta fase. Allows vêm da observação (verdict AUDIT). Ver README.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

@@ -1,6 +1,3 @@
-# apps/security/network-policies/pending/data/garage.yaml
-# Default-deny INGRESS puro. ingress: [] NEGA tudo; ingress: [{}] LIBERA tudo (não usar).
-# Sem egress -> egress livre nesta fase. Allows vêm da observação (verdict AUDIT). Ver README.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -9,5 +6,21 @@ metadata:
 spec:
   endpointSelector:
     matchLabels:
-      app.kubernetes.io/name: garage # [CONFERIR]
-  ingress: []
+      app.kubernetes.io/name: garage
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "3903"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: langfuse
+      toPorts:
+        - ports:
+            - port: "3900"
+              protocol: TCP

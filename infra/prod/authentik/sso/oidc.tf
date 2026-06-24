@@ -14,6 +14,7 @@ resource "authentik_provider_oauth2" "this" {
   invalidation_flow  = data.authentik_flow.invalidation.id
   property_mappings  = local.common_scopes
   grant_types        = ["authorization_code", "refresh_token"]
+  access_token_validity = "hours=6"
 
   signing_key = data.authentik_certificate_key_pair.default.id
 
