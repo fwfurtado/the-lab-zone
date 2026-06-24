@@ -75,6 +75,14 @@ datasources:
         url: http://victoria-logs-vls-server.observability.svc.cluster.local:9428
         access: proxy
 
+      - name: Alertmanager
+        type: alertmanager
+        url: http://vmalertmanager-victoria-metrics-vmks.observability.svc.cluster.local:9093
+        access: proxy
+        jsonData:
+          implementation: prometheus
+          handleGrafanaManagedAlerts: false
+
 dashboardProviders:
   dashboardproviders.yaml:
     apiVersion: 1
