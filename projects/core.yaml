@@ -19,6 +19,7 @@ spec:
     - ghcr.io/stacklok/toolhive
     - https://kyverno.github.io/kyverno/
     - https://nvidia.github.io/k8s-device-plugin
+    - https://vmware-tanzu.github.io/helm-charts
   destinations:
     - namespace: "*"
       server: https://kubernetes.default.svc

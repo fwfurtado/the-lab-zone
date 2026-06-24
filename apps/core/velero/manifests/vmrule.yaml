@@ -1,0 +1,54 @@
+# Alertas do Velero. Depende do VMPodScrape (vm-pod-scrape.yaml) ter virado target.
+# Reaproveita a cadeia vmalert -> vmalertmanager -> Slack montada na Fase 9.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: velero
+  namespace: observability
+spec:
+  groups:
+    - name: velero
+      rules:
+        # Qualquer backup que terminou em falha nas últimas 6h.
+        - alert: VeleroBackupFailed
+          expr: increase(velero_backup_failure_total[6h]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: velero
+          annotations:
+            summary: "Backup do Velero falhou"
+            description: "Houve {{ $value }} falha(s) de backup do Velero nas últimas 6h."
+
+        # Falha parcial (alguns itens/volumes não entraram) — silenciosa se não alertar.
+        - alert: VeleroBackupPartialFailure
+          expr: increase(velero_backup_partial_failure_total[6h]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: velero
+          annotations:
+            summary: "Backup do Velero com falha parcial"
+            description: "{{ $value }} backup(s) parcialmente falho(s) nas últimas 6h."
+
+        # Nenhum backup bem-sucedido há mais de 26h (schedule diário + folga).
+        - alert: VeleroBackupStale
+          expr: (time() - velero_backup_last_successful_timestamp) > 93600
+          for: 15m
+          labels:
+            severity: warning
+            component: velero
+          annotations:
+            summary: "Backup do Velero envelhecido"
+            description: "O schedule {{ $labels.schedule }} não tem sucesso há mais de 26h."
+
+        # node-agent down = FSB dos órfãos não roda (Memgraph fica sem backup).
+        - alert: VeleroNodeAgentDown
+          expr: absent(velero_node_agent_collector_up) or min(velero_node_agent_collector_up) == 0
+          for: 10m
+          labels:
+            severity: warning
+            component: velero
+          annotations:
+            summary: "Velero node-agent indisponível"
+            description: "Sem node-agent não há File System Backup — os órfãos param de ser salvos."

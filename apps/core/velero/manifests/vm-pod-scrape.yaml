@@ -1,0 +1,17 @@
+# Velero (server) e node-agent expõem métricas em 8085 (port `http-monitoring`).
+# Ambos compartilham app.kubernetes.io/name: velero, então um scrape cobre os dois.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: velero
+  namespace: observability
+spec:
+  namespaceSelector:
+    matchNames:
+      - velero
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: velero
+  podMetricsEndpoints:
+    - port: http-monitoring
+      path: /metrics

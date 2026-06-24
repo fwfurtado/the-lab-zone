@@ -1,0 +1,102 @@
+# Velero — Fase 10 (DR). Destino: B2 (off-site real; o Garage é on-site no T630).
+#
+# Sem CSI snapshot: na Fase 4 o LocalPV hostpath foi escolhido e os CRDs de
+# VolumeSnapshot foram DESLIGADOS de propósito. Logo aqui é File System Backup
+# (node-agent + Kopia), nunca volume snapshot. `volumeSnapshotLocation` fica vazio.
+
+# Plugin S3 (B2 fala S3). initContainer copia o binário do plugin pro /plugins.
+initContainers:
+  - name: velero-plugin-for-aws
+    image: velero/velero-plugin-for-aws:v1.12.1
+    imagePullPolicy: IfNotPresent
+    volumeMounts:
+      - mountPath: /target
+        name: plugins
+
+# Credenciais: secret materializado pelo ESO (chave `cloud` = arquivo ini AWS).
+credentials:
+  useSecret: true
+  existingSecret: velero-b2-creds
+
+configuration:
+  # Uploader de FSB. Kopia é default desde 1.12; restic está deprecado.
+  uploaderType: kopia
+  # Opt-in: só faz FSB de volume anotado/selecionado. Os PVs de banco com backup
+  # nativo (CNPG/ClickHouse/Qdrant) NÃO entram — FSB de banco vivo é inconsistente.
+  defaultVolumesToFsBackup: false
+
+  backupStorageLocation:
+    - name: b2
+      provider: aws
+      bucket: the-lab-zone-velero
+      default: true
+      config:
+        region: us-east-005
+        s3ForcePathStyle: "true"
+        s3Url: https://s3.us-east-005.backblazeb2.com
+
+  # Sem CSI/cloud snapshots neste lab.
+  volumeSnapshotLocation: []
+
+# node-agent (DaemonSet) faz o FSB lendo os volumes montados nos pods.
+# No Talos o kubelet root é /var/lib/kubelet (default do chart) — não precisa patch.
+deployNodeAgent: true
+nodeAgent:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+# Métricas: o lab usa VMPodScrape (manifests/vm-pod-scrape.yaml), não o
+# ServiceMonitor do Prometheus-operator. Desliga o do chart pra não gerar lixo.
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+  prometheusRule:
+    enabled: false
+
+# Schedules. TTL define a retenção dos backups do PRÓPRIO Velero no bucket
+# the-lab-zone-velero (independente do espelho the-lab-zone-dr).
+schedules:
+  # Rede de segurança de objetos K8s. Mesmo com o GitOps reconstruindo quase tudo,
+  # pega CRs e estado gerado que não está versionado. SEM FSB (só metadata).
+  cluster-meta:
+    disabled: false
+    schedule: "0 1 * * *"
+    useOwnerReferencesInBackup: false
+    template:
+      ttl: "720h"          # 30d
+      defaultVolumesToFsBackup: false
+      snapshotVolumes: false
+      excludedNamespaces:
+        - kube-system
+        - kube-public
+        - kube-node-lease
+
+  # FSB dos órfãos: stores SEM backup nativo (Memgraph; e Valkey se você decidir
+  # persistir). É o único FSB de dado real do cluster.
+  stateful-orphans:
+    disabled: false
+    schedule: "30 1 * * *"
+    template:
+      ttl: "720h"          # 30d
+      defaultVolumesToFsBackup: true
+      includedNamespaces:
+        - data
+      labelSelector:
+        matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+              - memgraph
+              # - valkey   # descomente se Valkey passar a persistir algo que importe
