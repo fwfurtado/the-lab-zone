@@ -19,6 +19,7 @@ spec:
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9121"
+        app.kubernetes.io/name: valkey-exporter
     spec:
       containers:
         - name: redis-exporter
