@@ -5,3 +5,8 @@ cluster:
   scheduler:
     extraArgs:
       bind-address: 0.0.0.0
+  etcd:
+    extraArgs:
+      # listener dedicado de métricas em HTTP puro, sem mTLS.
+      # MUITO mais limpo que extrair cert de cliente do etcd.
+      listen-metrics-urls: http://0.0.0.0:2381
