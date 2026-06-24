@@ -11,6 +11,15 @@ spec:
     group_wait: 30s
     group_interval: 5m
     repeat_interval: 4h
+    routes:
+      # Alertas de plumbing do kube-prometheus/VM — NUNCA notificam humano.
+      # Watchdog: sempre firing (prova de vida do pipeline).
+      # InfoInhibitor: existe só para inibir severity=info (regra abaixo).
+      - receiver: blackhole
+        matchers:
+          - alertname =~ "Watchdog|InfoInhibitor"
+        continue: false
+
   receivers:
     - name: slack
       slack_configs:
@@ -24,3 +33,23 @@ spec:
             {{ range .Alerts }}{{ .Annotations.summary }}
             {{ .Annotations.description }}
             {{ end }}
+
+    # Null receiver: sem nenhuma config = alerta é engolido silenciosamente.
+    - name: blackhole
+
+  inhibit_rules:
+    # 1) warning/critical inibem os info do MESMO namespace.
+    #    (quando há problema real, o ruído info some)
+    - source_matchers:
+        - severity =~ "warning|critical"
+      target_matchers:
+        - severity = "info"
+      equal: ["namespace"]
+
+    # 2) InfoInhibitor inibe os info do MESMO namespace quando NÃO há
+    #    warning/critical (é o "guarda" dos info-level isolados).
+    - source_matchers:
+        - alertname = "InfoInhibitor"
+      target_matchers:
+        - severity = "info"
+      equal: ["namespace"]
