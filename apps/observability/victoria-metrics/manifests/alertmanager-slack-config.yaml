@@ -1,0 +1,26 @@
+# manifests/alertmanager-slack-config.yaml
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlertmanagerConfig
+metadata:
+  name: slack
+  namespace: observability
+spec:
+  route:
+    receiver: slack
+    groupBy: ["alertname", "namespace"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+  receivers:
+    - name: slack
+      slack_configs:
+        - api_url:
+            name: alertmanager-slack
+            key: slack-url
+          channel: "#alerts"
+          send_resolved: true
+          title: "{{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})"
+          text: >-
+            {{ range .Alerts }}{{ .Annotations.summary }}
+            {{ .Annotations.description }}
+            {{ end }}

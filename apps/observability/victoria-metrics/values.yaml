@@ -54,27 +54,12 @@ vmalert:
 alertmanager:
   enabled: true
   spec:
+    selectAllByDefault: true
+    disableNamespaceMatcher: true
     resources:
       requests:
         cpu: 50m
         memory: 64Mi
-  config:
-    global:
-      resolve_timeout: 5m
-    route:
-      group_by: ["alertname", "namespace"]
-      group_wait: 30s
-      group_interval: 5m
-      repeat_interval: 12h
-      receiver: "blackhole"
-    receivers:
-      - name: "blackhole"
-    inhibit_rules:
-      - source_matchers:
-          - severity="critical"
-        target_matchers:
-          - severity="warning"
-        equal: ["alertname", "namespace"]
 
 # Grafana gerenciado como app separado (apps/observability/grafana/)
 grafana:
