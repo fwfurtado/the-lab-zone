@@ -18,6 +18,7 @@ spec:
     metadata:
       labels:
         app: ollama
+        app.kubernetes.io/name: ollama
     spec:
       runtimeClassName: nvidia # injeta nodeSelector + toleration + runtime GPU (via RuntimeClass scheduling)
       containers:
