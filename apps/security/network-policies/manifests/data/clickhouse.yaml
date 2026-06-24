@@ -32,7 +32,6 @@ spec:
             app.kubernetes.io/name: analytics-etl
       toPorts:
         - ports:
-        - ports:
             - port: "9000"
               protocol: TCP
             - port: "8123"
