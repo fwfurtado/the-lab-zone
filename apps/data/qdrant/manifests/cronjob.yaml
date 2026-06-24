@@ -12,6 +12,9 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: qdrant-backup
         spec:
           restartPolicy: OnFailure
           initContainers:
