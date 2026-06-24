@@ -57,8 +57,8 @@ hubble:
   metrics:
     enableOpenMetrics: true
     enabled:
-      - drop
-      - flow
+      - drop:labelsContext=source_namespace,destination_namespace,traffic_direction
+      - flow:labelsContext=source_namespace,destination_namespace
       - tcp
       - dns
 
