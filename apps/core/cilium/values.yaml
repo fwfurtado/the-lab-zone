@@ -56,6 +56,11 @@ hubble:
     enabled: true
   metrics:
     enableOpenMetrics: true
+    enabled:
+      - drop
+      - flow
+      - tcp
+      - dns
 
 
 gatewayAPI:
