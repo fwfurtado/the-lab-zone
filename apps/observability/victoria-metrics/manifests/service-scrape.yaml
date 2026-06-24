@@ -53,9 +53,7 @@ spec:
   selector:
     matchLabels:
       k8s-app: hubble
-  namespaceSelector:
-    matchNames:
-      - kube-system
   endpoints:
     - port: hubble-metrics
       path: /metrics
+      interval: 30s
