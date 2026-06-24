@@ -19,5 +19,22 @@ variable "buckets" {
     "the-lab-zone-authentik-backup" = {
       retention_days = 30 # script do Authentik mantém 14; isto é só o backstop
     }
+    # --- Fase 10 (DR) -----------------------------------------------------
+    # Espelho offsite de TODOS os backups que hoje só vivem no Garage (on-site,
+    # no próprio T630). O CronWorkflow `offsite-sync` faz `rclone copy/sync`
+    # Garage -> b2:the-lab-zone-dr/<bucket>, preservando o layout 1:1 (o path
+    # interno é idêntico ao do Garage; só muda o endpoint no restore).
+    #
+    # 60d > poda do Garage (cnpg-wal 7d): de propósito. O off-site guarda MAIS
+    # histórico que o tier on-site — é a tábua de salvação do D4b/D4c.
+    "the-lab-zone-dr" = {
+      retention_days = 60
+    }
+
+    # Bucket dedicado do Velero (o BSL gerencia o próprio layout: backups/,
+    # restores/, kopia/...). Separado do espelho pra não misturar dono de path.
+    "the-lab-zone-velero" = {
+      retention_days = 60
+    }
   }
 }
