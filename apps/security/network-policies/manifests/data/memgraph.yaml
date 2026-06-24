@@ -8,4 +8,11 @@ spec:
     matchLabels:
       app.kubernetes.io/name: memgraph
   ingress:
-    - {}
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: lightrag
+      toPorts:
+        - ports:
+            - port: "7687"
+              protocol: TCP
