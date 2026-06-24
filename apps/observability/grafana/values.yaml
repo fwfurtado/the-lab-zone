@@ -69,6 +69,8 @@ datasources:
         url: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428
         isDefault: true
         access: proxy
+        jsonData:
+          manageAlerts: true
 
       - name: VictoriaLogs
         type: victoriametrics-logs-datasource
