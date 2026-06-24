@@ -1,0 +1,23 @@
+# kube-etcd (2381/http puro) — control plane do Talos
+#
+# VMStaticScrape: alvos estáticos por ip:porta, sem service discovery.
+# etcd expõe listener DEDICADO de métricas em HTTP puro, sem mTLS — sem bearer
+# token, sem TLS. Path default /metrics.
+# Pré-requisito (machine config): cluster.etcd.extraArgs.listen-metrics-urls: http://0.0.0.0:2381
+#
+# IMPORTANTE: definir kubeEtcd.enabled: false no values.yaml do chart, senão o
+# chart recria o scrape antigo (2379/https com cert) que vai brigar com este.
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: kube-etcd
+  namespace: observability
+spec:
+  jobName: kube-etcd
+  targetEndpoints:
+    - targets:
+        - "10.40.6.11:2381"
+        - "10.40.6.12:2381"
+        - "10.40.6.13:2381"
+      scheme: http

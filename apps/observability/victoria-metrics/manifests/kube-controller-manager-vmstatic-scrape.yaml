@@ -1,0 +1,24 @@
+# kube-controller-manager (10257/https) — control plane do Talos
+#
+# VMStaticScrape: alvos estáticos por ip:porta, sem service discovery.
+# Evita Service+Endpoints (Endpoints é excluído no argocd-cm) — um CRD só.
+# TLS: cert do CM no Talos vale só para localhost, não para o IP do nó →
+# insecureSkipVerify (tráfego interno ao cluster).
+# Pré-requisito (machine config): cluster.controllerManager.extraArgs.bind-address: 0.0.0.0
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: kube-controller-manager
+  namespace: observability
+spec:
+  jobName: kube-controller-manager
+  targetEndpoints:
+    - targets:
+        - "10.40.6.11:10257"
+        - "10.40.6.12:10257"
+        - "10.40.6.13:10257"
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true

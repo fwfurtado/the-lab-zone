@@ -1,0 +1,23 @@
+# kube-scheduler (10259/https) — control plane do Talos
+#
+# VMStaticScrape: alvos estáticos por ip:porta, sem service discovery.
+# Evita Service+Endpoints (Endpoints é excluído no argocd-cm) — um CRD só.
+# TLS: cert vale só para localhost no Talos → insecureSkipVerify (tráfego interno).
+# Pré-requisito (machine config): cluster.scheduler.extraArgs.bind-address: 0.0.0.0
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: kube-scheduler
+  namespace: observability
+spec:
+  jobName: kube-scheduler
+  targetEndpoints:
+    - targets:
+        - "10.40.6.11:10259"
+        - "10.40.6.12:10259"
+        - "10.40.6.13:10259"
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true
