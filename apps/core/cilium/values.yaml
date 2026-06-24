@@ -55,7 +55,7 @@ hubble:
   ui:
     enabled: true
   metrics:
-    enabled: true
+    enableOpenMetrics: true
 
 
 gatewayAPI:
