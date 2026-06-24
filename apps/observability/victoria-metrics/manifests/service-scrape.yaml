@@ -43,3 +43,19 @@ spec:
       scheme: https
       tlsConfig:
         insecureSkipVerify: true
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: hubble-metrics
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      k8s-app: hubble
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  endpoints:
+    - port: hubble-metrics
+      path: /metrics
