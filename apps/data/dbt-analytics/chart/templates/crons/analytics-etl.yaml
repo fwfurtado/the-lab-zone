@@ -16,4 +16,4 @@ spec:
   failedJobsHistoryLimit: 5           # mantém os falhos por perto pra debug
   workflowSpec:
     workflowTemplateRef:
-      name: analytics-elt
+      name: analytics-etl

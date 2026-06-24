@@ -1,11 +1,11 @@
-# DAG do ELT: migrate (goose, reusa clickhouse-migrate) -> dbt build.
+# DAG do ETL: migrate (goose, reusa clickhouse-migrate) -> dbt build.
 # VERRUGA REMOVIDA: não há mais `spec.volumes` aqui. O goose-up agora recebe as migrations
 # por git artifact (inputs.artifacts), que É herdado via templateRef — então o `migrate`
 # (templateRef -> clickhouse-migrate/main) traz tudo que precisa sozinho. Sem acoplamento.
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
-  name: analytics-elt
+  name: analytics-etl
   namespace: {{ .Release.Namespace }}
 spec:
   entrypoint: dag
@@ -20,13 +20,13 @@ spec:
   # Métricas custom emitidas no fim do run (prefixo final na VM: argo_workflows_*).
   metrics:
     prometheus:
-      - name: analytics_elt_duration_seconds
-        help: "Duração da última execução do ELT analytics"
+      - name: analytics_etl_duration_seconds
+        help: "Duração da última execução do ETL analytics"
         gauge:
           realtime: false
           value: "{{`{{workflow.duration}}`}}"
-      - name: analytics_elt_runs_total
-        help: "Execuções do ELT por status final"
+      - name: analytics_etl_runs_total
+        help: "Execuções do ETL por status final"
         labels:
           - key: status
             value: "{{`{{workflow.status}}`}}"
