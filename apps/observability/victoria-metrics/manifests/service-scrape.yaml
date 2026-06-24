@@ -48,7 +48,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: hubble-metrics
-  namespace: observability
+  namespace: kube-system
 spec:
   selector:
     matchLabels:
