@@ -1,0 +1,104 @@
+# Backup do ClickHouse — dispara o sidecar clickhouse-backup (porta 7171), agora via Argo.
+#
+# Arquitetura (importa pra CNP):
+#   Quem fala com o Garage NÃO é este pod — é o SIDECAR clickhouse-backup, que roda DENTRO
+#   do pod do ClickHouse (label app.kubernetes.io/name: clickhouse) e já tem garage:3900
+#   liberado na garage-default-deny-ingress. Este Workflow só TRIGGA o sidecar via HTTP 7171.
+#
+# IDENTIDADE / CNP (o ponto pedido):
+#   podMetadata.labels fixa app.kubernetes.io/name: clickhouse-backup.
+#     - clickhouse-default-deny-ingress : clickhouse-backup -> clickhouse:7171   OK (já existe)
+#     - garage-default-deny-ingress     : clickhouse-backup -> garage:3900       <- PRECISA ADD
+#
+#   *** NOVO requisito introduzido pela migração ***: o CronJob não tocava o Garage. Mas como
+#   Workflow, o sidecar `wait` do Argo arquiva os logs no artifact repo (Garage:3900, porque
+#   artifact-repositories tem archiveLogs: true). Logo o pod clickhouse-backup PRECISA de
+#   garage:3900 — senão, em enforce, o archiveLogs é dropado (o backup em si funciona, mas o
+#   log some). Por isso a edição na garage.yaml. Mesmo motivo vale pro analytics-etl, que hoje
+#   NÃO está na CNP do garage (gap latente que só morde quando o garage sair do audit mode).
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: clickhouse-backup
+  namespace: data
+spec:
+  entrypoint: backup
+  serviceAccountName: argo-workflow
+  podMetadata:
+    labels:
+      app.kubernetes.io/name: clickhouse-backup   # <- identidade Cilium preservada
+  metrics:
+    prometheus:
+      - name: clickhouse_backup_duration_seconds
+        help: "Duração do último backup do ClickHouse"
+        gauge:
+          realtime: false
+          value: "{{workflow.duration}}"
+      - name: clickhouse_backup_runs_total
+        help: "Execuções do backup do ClickHouse por status final"
+        labels:
+          - key: status
+            value: "{{workflow.status}}"
+        counter:
+          value: "1"
+        when: "{{workflow.status}} != Running"
+  templates:
+    - name: backup
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError
+        backoff:
+          duration: "30s"
+          factor: "2"
+          maxDuration: "5m"
+      container:
+        image: curlimages/curl:8.20.0   # pinar por digest
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            SIDECAR="http://chi-clickhouse-default-0-0.data.svc.cluster.local:7171"
+            BACKUP_NAME="backup-$(date +%Y-%m-%dT%H-%M-%S)"
+
+            # Substitui o `sleep 30` cego do CronJob por polling real do status do sidecar.
+            # /backup/status retorna as operações; "in progress" = ainda rodando; "error" = falha.
+            wait_idle() {
+              for i in $(seq 1 120); do          # teto ~10min (120 * 5s)
+                STATUS=$(curl -sf "$SIDECAR/backup/status" || echo "")
+                echo "$STATUS" | grep -q '"in progress"' || break
+                sleep 5
+              done
+              if echo "$STATUS" | grep -q '"error"'; then
+                echo "Backup operation reported error:"; echo "$STATUS"; exit 1
+              fi
+            }
+
+            echo "Creating backup: $BACKUP_NAME"
+            curl -sf -X POST "$SIDECAR/backup/create?name=$BACKUP_NAME"
+            wait_idle
+
+            echo "Uploading backup: $BACKUP_NAME"
+            curl -sf -X POST "$SIDECAR/backup/upload/$BACKUP_NAME"
+            wait_idle
+
+            echo "Done: $BACKUP_NAME"
+        resources:
+          requests: { cpu: 10m, memory: 32Mi }
+          limits: { memory: 64Mi }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: clickhouse-backup
+  namespace: data
+spec:
+  schedules:
+    - "0 3 * * *"
+  timezone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  workflowSpec:
+    workflowTemplateRef:
+      name: clickhouse-backup

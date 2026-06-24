@@ -1,0 +1,155 @@
+# Backup do Qdrant — snapshot diário → Garage S3, agora via Argo Workflows.
+#
+# Por que containerSet (e não DAG com artifacts):
+#   O CronJob original era initContainer(snapshot) + container(upload) num MESMO pod,
+#   compartilhando emptyDir. O equivalente fiel em Argo é um `containerSet`: 2 containers,
+#   1 pod, 1 volume compartilhado. Isso importa pra CNP: 1 pod = 1 identidade Cilium =
+#   1 label. A alternativa (DAG com 2 steps + artifact passing) geraria 2 pods e mandaria
+#   o snapshot pro bucket argo-workflows só pra baixar de novo — desperdício e sujeira.
+#
+# IDENTIDADE / CNP (o ponto pedido):
+#   podMetadata.labels fixa app.kubernetes.io/name: qdrant-backup no pod. Com isso as CNPs
+#   EXISTENTES continuam casando SEM alteração:
+#     - qdrant-default-deny-ingress  : qdrant-backup -> qdrant:6333   (snapshot)   OK
+#     - garage-default-deny-ingress  : qdrant-backup -> garage:3900   (upload rclone E
+#                                       archiveLogs do wait sidecar)               OK
+#   (mesma jogada do analytics-etl, que já é referenciado na CNP do clickhouse.)
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: qdrant-backup
+  namespace: data
+spec:
+  entrypoint: backup
+  serviceAccountName: argo-workflow        # criada no ns data pelo chart argo-workflows
+  podMetadata:
+    labels:
+      app.kubernetes.io/name: qdrant-backup   # <- identidade Cilium preservada (CNPs intactas)
+  # Volume compartilhado entre os 2 containers do set. Aqui é spec-level e É herdado pelo
+  # workflowTemplateRef do CronWorkflow (a verruga do `templateRef` não se aplica a esse caso).
+  volumes:
+    - name: workspace
+      emptyDir: {}
+  # Métricas custom emitidas pelo controller no fim do run (prefixo final: argo_workflows_*).
+  metrics:
+    prometheus:
+      - name: qdrant_backup_duration_seconds
+        help: "Duração do último backup do Qdrant"
+        gauge:
+          realtime: false
+          value: "{{workflow.duration}}"
+      - name: qdrant_backup_runs_total
+        help: "Execuções do backup do Qdrant por status final"
+        labels:
+          - key: status
+            value: "{{workflow.status}}"
+        counter:
+          value: "1"
+        when: "{{workflow.status}} != Running"
+  templates:
+    - name: backup
+      # Substitui o restartPolicy: OnFailure do CronJob.
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError
+        backoff:
+          duration: "30s"
+          factor: "2"
+          maxDuration: "5m"
+      containerSet:
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        containers:
+          # Step 1: cria snapshot de storage (full) via API e baixa local.
+          - name: snapshot
+            image: curlimages/curl:8.20.0   # pinar por digest
+            env:
+              - name: QDRANT_API_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: qdrant-apikey
+                    key: apiKey
+            command: [sh, -c]
+            args:
+              - |
+                set -e
+                QDRANT_URL="http://qdrant.data.svc.cluster.local:6333"
+
+                echo "Creating full storage snapshot..."
+                RESPONSE=$(curl -sf -X POST \
+                  -H "api-key: $QDRANT_API_KEY" \
+                  "$QDRANT_URL/snapshots")
+                echo "Response: $RESPONSE"
+
+                SNAPSHOT=$(echo "$RESPONSE" | grep -o '"name":"[^"]*"' | cut -d'"' -f4)
+                echo "Snapshot name: $SNAPSHOT"
+                echo "$SNAPSHOT" > /workspace/snapshot_name
+
+                echo "Downloading snapshot..."
+                curl -sf \
+                  -H "api-key: $QDRANT_API_KEY" \
+                  "$QDRANT_URL/snapshots/$SNAPSHOT" \
+                  -o /workspace/snapshot.tar.gz
+                echo "Download complete."
+          # Step 2: upload pro Garage via rclone (depende do snapshot).
+          - name: upload
+            image: rclone/rclone:1.69.0     # pinar por digest
+            dependencies: [snapshot]
+            env:
+              - name: S3_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: qdrant-backup-credentials
+                    key: accessKeyId
+              - name: S3_SECRET_KEY
+                valueFrom:
+                  secretKeyRef:
+                    name: qdrant-backup-credentials
+                    key: secretKey
+            command: [sh, -c]
+            args:
+              - |
+                set -e
+                SNAPSHOT=$(cat /workspace/snapshot_name)
+                SNAPSHOT_DATE=$(date +%Y-%m-%d)
+
+                mkdir -p /root/.config/rclone
+                cat > /root/.config/rclone/rclone.conf << RCLONE
+                [garage]
+                type = s3
+                provider = Other
+                access_key_id = $S3_ACCESS_KEY
+                secret_access_key = $S3_SECRET_KEY
+                endpoint = http://garage.data.svc.cluster.local:3900
+                region = garage
+                force_path_style = true
+                no_check_bucket = true
+                RCLONE
+
+                echo "Uploading $SNAPSHOT to Garage..."
+                rclone copyto /workspace/snapshot.tar.gz \
+                  "garage:qdrant-snapshots/$SNAPSHOT_DATE/$SNAPSHOT"
+                echo "Backup completed: $SNAPSHOT_DATE/$SNAPSHOT"
+            resources:
+              requests: { cpu: 50m, memory: 64Mi }
+              limits: { memory: 256Mi }
+---
+# CronWorkflow: nome fixo (GitOps; ArgoCD gerencia, ele gera os Workflows com sufixo).
+# workflowTemplateRef herda o spec INTEIRO do qdrant-backup (volumes, metrics, SA, podMetadata).
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: qdrant-backup
+  namespace: data
+spec:
+  schedules:
+    - "0 3 * * *"           # mesma janela do CronJob original (03:00)
+  timezone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  workflowSpec:
+    workflowTemplateRef:
+      name: qdrant-backup
