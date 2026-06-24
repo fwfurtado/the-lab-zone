@@ -40,6 +40,11 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: argo-workflows
             app.kubernetes.io/name: argo-workflows-server
+        # offsite-sync (Fase 10): LÊ todos os buckets de backup via S3 (3900) pra espelhar
+        # no B2. Sem isso, em enforce, o sync é dropado e o off-site nunca enche.
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app.kubernetes.io/name: offsite-sync
       toPorts:
         - ports:
             - port: "3900"

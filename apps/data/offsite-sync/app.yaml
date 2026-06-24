@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: offsite-sync
+  namespace: argocd
+  annotations:
+    # depois do garage (wave 1) e dos stores (wave 2); só lê buckets já existentes
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: data
+  source:
+    repoURL: https://github.com/fwfurtado/the-lab-zone.git
+    targetRevision: main
+    path: apps/data/offsite-sync/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=false

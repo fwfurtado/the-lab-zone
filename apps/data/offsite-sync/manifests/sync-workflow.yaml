@@ -1,0 +1,131 @@
+# Espelho off-site Garage -> B2. Fecha o ciclo da Fase 10: até aqui TODO backup
+# stateful (cnpg-wal incluído) vivia só no Garage, no próprio T630. Se o T630 for,
+# vai tudo junto. Este Workflow é a única coisa que põe o backup fora do nó.
+#
+# ESTRATÉGIA POR BUCKET (importa pro restore):
+#   copy (aditivo): cnpg-wal, clickhouse-backup, qdrant-snapshots — append-only por
+#     natureza. O B2 ACUMULA mais que o Garage (que poda em 7d) → mais pontos de
+#     restore off-site. O envelhecimento fica por conta do lifecycle do B2 (60d).
+#   sync (mirror): langfuse — dado vivo/mutável; mirror fiel evita ressuscitar blob
+#     deletado.
+#
+# LAYOUT 1:1: o path dentro de b2:the-lab-zone-dr/<bucket>/ é idêntico ao de
+#   garage:<bucket>/. No restore, o config só troca o endpoint (Garage -> B2):
+#     CNPG  barmanObjectStore.destinationPath: s3://the-lab-zone-dr/cnpg-wal/
+#     CH    clickhouse-backup remote_storage apontando o prefixo clickhouse-backup/
+#
+# RPO off-site = intervalo deste cron. Pra Postgres isso é PIOR que o archiving
+#   contínuo on-site — de propósito (o on-site cobre o RPO curto; o B2 cobre o
+#   "o T630 morreu"). Aperte o schedule se quiser RPO off-site menor.
+#
+# IDENTIDADE / CNP: podMetadata fixa app.kubernetes.io/name: offsite-sync. Esse
+#   label PRECISA estar liberado pra garage:3900 na garage-default-deny-ingress
+#   (ver patch em apps/security/network-policies/manifests/data/garage.yaml).
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: offsite-sync
+  namespace: data
+spec:
+  entrypoint: sync
+  serviceAccountName: argo-workflow
+  podMetadata:
+    labels:
+      app.kubernetes.io/name: offsite-sync   # <- identidade Cilium (garage:3900 + B2 egress)
+  metrics:
+    prometheus:
+      - name: offsite_sync_duration_seconds
+        help: "Duração do último espelho Garage->B2"
+        gauge:
+          realtime: false
+          value: "{{workflow.duration}}"
+      - name: offsite_sync_runs_total
+        help: "Execuções do espelho off-site por status final"
+        labels:
+          - key: status
+            value: "{{workflow.status}}"
+        counter:
+          value: "1"
+        when: "{{workflow.status}} != Running"
+  templates:
+    - name: sync
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError
+        backoff:
+          duration: "1m"
+          factor: "2"
+          maxDuration: "10m"
+      container:
+        image: rclone/rclone:1.69.0   # pinar por digest
+        env:
+          - name: RCLONE_CONFIG_GARAGE_TYPE
+            value: s3
+          - name: RCLONE_CONFIG_GARAGE_PROVIDER
+            value: Other
+          - name: RCLONE_CONFIG_GARAGE_ENDPOINT
+            value: http://garage.data.svc.cluster.local:3900
+          - name: RCLONE_CONFIG_GARAGE_REGION
+            value: garage
+          - name: RCLONE_CONFIG_GARAGE_FORCE_PATH_STYLE
+            value: "true"
+          - name: RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: { name: dr-offsite-credentials, key: GARAGE_ACCESS_KEY_ID }
+          - name: RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: { name: dr-offsite-credentials, key: GARAGE_SECRET_KEY }
+          - name: RCLONE_CONFIG_B2_TYPE
+            value: s3
+          - name: RCLONE_CONFIG_B2_PROVIDER
+            value: Other
+          - name: RCLONE_CONFIG_B2_ENDPOINT
+            value: https://s3.us-east-005.backblazeb2.com
+          - name: RCLONE_CONFIG_B2_REGION
+            value: us-east-005
+          - name: RCLONE_CONFIG_B2_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: { name: dr-offsite-credentials, key: B2_ACCESS_KEY_ID }
+          - name: RCLONE_CONFIG_B2_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: { name: dr-offsite-credentials, key: B2_SECRET_KEY }
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            DST="b2:the-lab-zone-dr"
+            FLAGS="--fast-list --transfers 8 --checkers 16 --s3-no-check-bucket"
+
+            # append-only: B2 acumula além da poda do Garage (não deleta no destino)
+            for b in cnpg-wal clickhouse-backup qdrant-snapshots; do
+              echo ">> copy garage:$b -> $DST/$b"
+              rclone copy "garage:$b" "$DST/$b" $FLAGS
+            done
+
+            # dado vivo: mirror fiel
+            echo ">> sync garage:langfuse -> $DST/langfuse"
+            rclone sync "garage:langfuse" "$DST/langfuse" $FLAGS
+
+            echo "off-site sync OK"
+        resources:
+          requests: { cpu: 100m, memory: 128Mi }
+          limits: { memory: 512Mi }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: offsite-sync
+  namespace: data
+spec:
+  # a cada 2h: cnpg-wal chega ao B2 com RPO off-site <= 2h; os demais (backup
+  # diário ~03:00) são no-op barato nas demais janelas graças ao --fast-list.
+  schedules:
+    - "0 */2 * * *"
+  timezone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  workflowSpec:
+    workflowTemplateRef:
+      name: offsite-sync
