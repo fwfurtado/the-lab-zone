@@ -50,5 +50,5 @@ spec:
             severity: warning
             component: velero
           annotations:
-            summary: "Velero node-agent indisponível"
-            description: "Sem node-agent não há File System Backup — os órfãos param de ser salvos."
+            summary: "Velero node-agent indisponível em {{ $labels.pod }}"
+            description: "node-agent {{ $labels.pod }} está down — FSB dos PVs nesse nó parou."
