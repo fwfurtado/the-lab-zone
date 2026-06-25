@@ -7,17 +7,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "2"
 spec:
   project: data
-  sources:
-    - repoURL: https://cloudnative-pg.github.io/charts
-      chart: cluster
-      targetRevision: 0.6.1
-      helm:
-        releaseName: cnpg-cluster
-        valueFiles:
-          - $values/apps/data/cnpg-cluster/values.yaml
-    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
-      targetRevision: main
-      ref: values
+  source:
     - repoURL: https://github.com/fwfurtado/the-lab-zone.git
       targetRevision: main
       path: apps/data/cnpg-cluster/manifests

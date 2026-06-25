@@ -1,0 +1,55 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-cluster
+  namespace: data
+spec:
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.3-standard-trixie
+
+  storage:
+    size: 20Gi
+    storageClass: openebs-hostpath
+
+  postgresql:
+    parameters:
+      timezone: "UTC"
+      log_timezone: "UTC"
+      max_connections: "200"
+      shared_buffers: "256MB"
+      effective_cache_size: "1GB"
+      maintenance_work_mem: "64MB"
+      checkpoint_completion_target: "0.9"
+      wal_buffers: "16MB"
+
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+      secret:
+        name: cnpg-app-user
+
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: cnpg-superuser
+
+  managed:
+    roles:
+      - { name: langfuse,  ensure: present, login: true, superuser: false, inherit: true, connectionLimit: -1, passwordSecret: { name: cnpg-role-langfuse } }
+      - { name: litellm,   ensure: present, login: true, superuser: false, inherit: true, connectionLimit: -1, passwordSecret: { name: cnpg-role-litellm } }
+      - { name: openwebui, ensure: present, login: true, superuser: false, inherit: true, connectionLimit: -1, passwordSecret: { name: cnpg-role-openwebui } }
+      - { name: lightrag,  ensure: present, login: true, superuser: false, inherit: true, connectionLimit: -1, passwordSecret: { name: cnpg-role-lightrag } }
+
+  monitoring:
+    enablePodMonitor: false
+
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits:   { memory: 2Gi }
+
+  # A peça que o chart não sabia expressar: WAL archiving + backup via plugin (sidecar)
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: cnpg-garage-store
