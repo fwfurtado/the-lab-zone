@@ -51,3 +51,18 @@ TF_VAR_oidc_secret_open_webui="op://the-lab-zone/oidc-open-webui/client_secret"
 TF_VAR_oidc_secret_langfuse="op://the-lab-zone/oidc-langfuse/client_secret"
 TF_VAR_oidc_secret_harbor="op://the-lab-zone/oidc-harbor/client_secret"
 TF_VAR_oidc_secret_forgejo="op://the-lab-zone/oidc-forgejo/client_secret"
+
+# rclone
+# B2
+RCLONE_CONFIG_B2_TYPE=b2
+RCLONE_CONFIG_B2_ACCOUNT="op://the-lab-zone/b2-dr-sync/accessKeyId"
+RCLONE_CONFIG_B2_KEY="op://the-lab-zone/b2-dr-sync/secretKey"
+
+# Garage
+RCLONE_CONFIG_GARAGE_TYPE=s3
+RCLONE_CONFIG_GARAGE_PROVIDER=Other
+RCLONE_CONFIG_GARAGE_ENDPOINT=https://s3.lab.the-lab.zone
+RCLONE_CONFIG_GARAGE_REGION=garage
+RCLONE_CONFIG_GARAGE_FORCE_PATH_STYLE=true
+RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID="op://the-lab-zone/garage-dr-sync/accessKeyId"
+RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY="op://the-lab-zone/garage-dr-sync/secretKey"
