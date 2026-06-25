@@ -4,7 +4,7 @@ metadata:
   name: cnpg-garage-store
   namespace: data
   annotations:
-      argocd.argoproj.io/sync-wave: "10"
+    argocd.argoproj.io/sync-wave: "10"
 spec:
   retentionPolicy: "7d"
   instanceSidecarConfiguration:
@@ -32,7 +32,7 @@ spec:
         key: ACCESS_SECRET_KEY
     wal:
       compression: gzip
-      maxParallel: 2   # SEM encryption (Garage não faz SSE)
+      maxParallel: 2 # SEM encryption (Garage não faz SSE)
     data:
       compression: gzip
       jobs: 2

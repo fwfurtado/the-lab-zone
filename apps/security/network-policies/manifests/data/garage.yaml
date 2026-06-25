@@ -51,6 +51,10 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: data
             app.kubernetes.io/name: offsite-sync
+        # Barman precisa de acesso ao cluster CNPG para ler os backups
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            cnpg.io/cluster: cnpg-cluster
       toPorts:
         - ports:
             - port: "3900"
