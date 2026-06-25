@@ -44,7 +44,7 @@ spec:
 
         # node-agent down = FSB dos órfãos não roda (Memgraph fica sem backup).
         - alert: VeleroNodeAgentDown
-          expr: up{namespace="velero", pod=~"node-agent.*"} == 0
+          expr: kube_daemonset_status_desired_number_scheduled{daemonset="node-agent", namespace="velero"} - kube_daemonset_status_number_ready{daemonset="node-agent", namespace="velero"} > 0
           for: 10m
           labels:
             severity: warning
