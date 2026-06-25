@@ -11,3 +11,9 @@ spec:
     matchExpressions:
       - key: node-role.kubernetes.io/control-plane
         operator: DoesNotExist
+      # Fase 10: worker-3-gpu usa enp7s0 (não casa ^ens) e é o nó de manutenção
+      # frequente (driver/GPU). Fora do pool de anúncio L2 do gateway.
+      - key: kubernetes.io/hostname
+        operator: NotIn
+        values:
+          - worker-3-gpu
