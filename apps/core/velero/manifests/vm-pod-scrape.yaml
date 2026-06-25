@@ -12,11 +12,6 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: velero
-    matchExpressions:
-      # exclui os jobs de manutenção do kopia (sem porta de métrica)
-      - key: app.kubernetes.io/component
-        operator: NotIn
-        values: [repo-maintenance]
   podMetricsEndpoints:
     - port: http-monitoring
       path: /metrics
