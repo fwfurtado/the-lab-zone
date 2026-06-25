@@ -63,25 +63,6 @@ cluster:
       superuser: false
       passwordSecret:
         name: cnpg-role-lightrag
-  # WAL archiving para Garage via barman-object-store
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://cnpg-wal/
-      endpointURL: http://garage.data.svc.cluster.local:3900
-      s3Credentials:
-        accessKeyId:
-          name: cnpg-garage-creds
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: cnpg-garage-creds
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-        maxParallel: 2
-      data:
-        compression: gzip
-        jobs: 2
-    retentionPolicy: "7d"
 
   # Usuário app criado no bootstrap — cada app cria seu próprio database depois
   initdb:
@@ -103,9 +84,33 @@ cluster:
     limits:
       memory: 2Gi
 
-# Backup diário às 02:00 UTC
-scheduledBackup:
+backups:
   enabled: true
-  schedule: "0 2 * * *"
-  backupOwnerReference: self
-  immediate: true
+  provider: s3
+  endpointURL: http://garage.data.svc.cluster.local:3900
+  destinationPath: s3://cnpg-wal/
+  s3:
+    region: garage
+    bucket: cnpg-wal
+    path: /
+    # o chart 0.6.1 quer os valores; aponta pro secret existente NÃO é suportado
+    # nativamente aqui — ver nota abaixo sobre a env do path-style e creds.
+    accessKey: ""      # ver nota: preenchido via secret.name, não inline
+    secretKey: ""
+  secret:
+    create: false
+    name: cnpg-garage-creds   # secret que o ESO já materializa
+  wal:
+    compression: gzip
+    encryption: ""            # Garage não faz SSE; "" evita header x-amz-...
+    maxParallel: 2
+  data:
+    compression: gzip
+    encryption: ""            # idem — NÃO deixar o default AES256
+    jobs: 2
+  scheduledBackups:
+    - name: daily-backup
+      schedule: "0 0 2 * * *" # 6 campos no CNPG (seg min hora ...) — 02:00 UTC
+      backupOwnerReference: self
+      method: barmanObjectStore
+  retentionPolicy: "7d"
