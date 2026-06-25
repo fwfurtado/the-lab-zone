@@ -44,7 +44,7 @@ spec:
 
         # node-agent down = FSB dos órfãos não roda (Memgraph fica sem backup).
         - alert: VeleroNodeAgentDown
-          expr: absent(up{namespace="velero", pod=~"node-agent.*"} == 1)
+          expr: up{namespace="velero", pod=~"node-agent.*"} == 0
           for: 10m
           labels:
             severity: warning
