@@ -3167,6 +3167,489 @@ em timeout/threshold/limits. Só tratar como falso-positivo crônico (afrouxar
 `scrape_timeout` do job ou threshold da regra) se persistir com o target saudável.
 
 ---
+
+# Fase 10 — DR (Disaster Recovery)
+
+> **Objetivo:** backup/restore validado de ponta a ponta. Fecha o ciclo de
+> resiliência aberto na Fase 0 — sai de "tenho backup" para "sei que restauro".
+>
+> **Lição transversal da fase (vale relê-la antes de confiar em qualquer
+> dashboard de backup):** *status verde é promessa; a prova é ler o destino.*
+> Apareceu literalmente em cada incidente — `bucket info` (não
+> `ContinuousArchiving`), `arping`/`nc` (não o lease migrar), target em
+> `/api/v1/targets` (não o CR `operational`), série no banco (não o "0
+> differences" do check).
+
+---
+
+## Visão geral
+
+Três pilares construídos nesta fase:
+
+1. **Perna off-site Garage→B2** — até aqui TODO backup stateful vivia só no
+   Garage (single-node, no próprio T630). Sem isto, "o T630 morreu" = perda
+   total. `CronWorkflow` de `rclone` espelha Garage→B2, layout 1:1.
+2. **Velero** — backup dos objetos K8s + File System Backup (FSB) dos PVs sem
+   backup nativo, destino B2 off-site.
+3. **CNPG backup real** — o achado da fase: o Postgres estava sem backup
+   nenhum desde 15/06 (ver incidente 10.1). Migrado pro Barman Cloud Plugin.
+
+Destino de DR é **sempre B2** (off-site, fora do T630). Garage é tier on-site.
+
+---
+
+## Decisões de arquitetura
+
+| Decisão | Escolha | Porquê |
+|---|---|---|
+| Destino de DR | B2 (`the-lab-zone-dr`, `the-lab-zone-velero`) | off-site; Garage morre com o T630 |
+| Espelho Garage→B2 | `rclone` em CronWorkflow (Argo) | reusa Argo Workflows (Fase 8); sem mexer nos apps |
+| copy vs sync | `copy` p/ append-only, `sync` só p/ langfuse | B2 guarda mais histórico que a poda do Garage; langfuse é dado vivo |
+| Layout B2 | 1:1 com Garage (mesmo path) | restore só troca endpoint, não estrutura |
+| Velero uploader | Kopia (FSB), sem VolumeSnapshot | LocalPV hostpath não tem CSI snapshot (Fase 4) |
+| Velero FSB | opt-in; nunca PV de banco com backup nativo | FSB de banco vivo é inconsistente |
+| CNPG backup | Barman Cloud Plugin (sidecar) | imagem `-standard` não tem barman; in-tree morre no 1.30 |
+| CNPG Cluster | manifesto cru (sem chart) | chart `cluster` (≤0.7.0) não expressa `.spec.plugins` |
+| App keys B2 | criadas no console, no 1Password | one-way `op→repo`, sem key material no state |
+
+---
+
+## Pré-requisitos manuais (one-way `op → repo`)
+
+### Buckets B2 (Terraform)
+`infra/prod/buckets/b2/variables.tf` — adicionar `the-lab-zone-dr` (retention 60d)
+e `the-lab-zone-velero` (60d). `cd infra/prod/buckets/b2 && just tf-apply`.
+
+### App keys B2 (console → 1Password, vault `the-lab-zone`)
+| Item 1Password | Escopo B2 | Capabilities |
+|---|---|---|
+| `b2-dr-sync` (accessKeyId, secretKey) | `the-lab-zone-dr` | list/read/write/delete |
+| `b2-velero` (accessKeyId, secretKey) | `the-lab-zone-velero` | list/read/write/delete |
+
+> `keyName` no console = `accessKeyId`; `applicationKey` = `secretKey` (só aparece uma vez).
+
+### Garage read key (espelho)
+```fish
+just garage generate-key --keyname=dr-sync   # par -> 1Password item `garage-dr-sync`
+for bucket in cnpg-wal clickhouse-backup qdrant-snapshots langfuse
+    kubectl exec -n data garage-0 -c garage -- /garage bucket allow $bucket --read --key <KEY_ID>
+end
+# confirma SÓ read (sem W): kubectl exec ... -- /garage key info <KEY_ID>
+```
+
+---
+
+## 10.A — Perna off-site Garage→B2
+
+Arquivos: `apps/data/offsite-sync/{app.yaml,manifests/external-secret.yaml,manifests/sync-workflow.yaml}`.
+
+- **ExternalSecret `dr-offsite-credentials`** (ns `data`): combina `garage-dr-sync`
+  (read) + `b2-dr-sync` (write), 4 chaves.
+- **WorkflowTemplate + CronWorkflow `offsite-sync`** (a cada 2h): `rclone copy`
+  pros append-only (`cnpg-wal`, `clickhouse-backup`, `qdrant-snapshots`) e
+  `rclone sync` pro `langfuse`. `podMetadata.labels: app.kubernetes.io/name: offsite-sync`
+  (identidade Cilium). Métricas `offsite_sync_runs_total{status}`.
+- **CNP do Garage** (`apps/security/network-policies/manifests/data/garage.yaml`):
+  adicionar `offsite-sync` aos `fromEndpoints` do `:3900`:
+  ```yaml
+  - matchLabels:
+      io.kubernetes.pod.namespace: data
+      app.kubernetes.io/name: offsite-sync
+  ```
+
+RPO off-site do Postgres = intervalo do cron (2h). O on-site cobre RPO curto; o
+B2 cobre "o T630 morreu".
+
+---
+
+## 10.B — Velero
+
+Arquivos: `apps/core/velero/{app.yaml,values.yaml,manifests/*}`. Projeto `core`,
+ns `velero`. Chart `vmware-tanzu/velero` 8.7.2 (Velero 1.15.2).
+
+Pontos críticos do `values.yaml`:
+- `upgradeCRDs: false` — o job `upgradeCRDs` puxa `docker.io/bitnami/kubectl`,
+  que **sumiu do Docker Hub** (deprecation Bitnami 28/08/2025). O ArgoCD já aplica
+  os CRDs do diretório `crds/` do chart; o job é redundante. (incidente de
+  `ImagePullBackOff`)
+- `initContainers: velero-plugin-for-aws:v1.11.1` — casa Velero 1.15.2 (o v1.12.x
+  é pra Velero 1.16; mismatch quebra o plugin).
+- `uploaderType: kopia`, `defaultVolumesToFsBackup: false`, `volumeSnapshotLocation: []`.
+- BSL `b2`: region `us-east-005`, `s3ForcePathStyle: "true"`,
+  `s3Url: https://s3.us-east-005.backblazeb2.com`, bucket `the-lab-zone-velero`.
+- `metrics.serviceMonitor.enabled: false` (usamos VMPodScrape).
+- Schedules: `cluster-meta` (objetos K8s, sem FSB) e `stateful-orphans` (FSB só
+  Memgraph).
+
+Outros manifestos:
+- `namespace.yaml` — label `pod-security.kubernetes.io/enforce: privileged` (o
+  node-agent precisa de hostPath/privileged; mesma classe da isenção do DCGM,
+  Fase 7).
+- `external-secret.yaml` — `velero-b2-creds`, templa a chave `cloud` (ini AWS) do
+  item `b2-velero`.
+- `vm-pod-scrape.yaml` — **só `matchLabels`, SEM `matchExpressions`** (ver 10.4).
+- `vmrule.yaml` — BackupFailed / PartialFailure / Stale / NodeAgentDown (KSM).
+
+---
+
+## 10.C — CNPG: backup via Barman Cloud Plugin
+
+O backup do Postgres estava quebrado desde o dia 1 (incidente 10.1). Fix final:
+migrar do in-tree (`.spec.backup.barmanObjectStore`, que a imagem `-standard` não
+suporta) pro plugin.
+
+### Plugin
+`apps/core/barman-cloud-plugin/` — Application apontando pro manifesto do release
+**v0.5.0** (commitado, não `kubectl apply` de URL). Instala no ns `cnpg-system`
+(MESMO ns do operator — requisito). Pré-req: cert-manager (Fase 3).
+
+```fish
+kubectl get crd objectstores.barmancloud.cnpg.io          # tem que existir
+kubectl -n cnpg-system rollout status deploy/barman-cloud  # Running
+```
+
+### ObjectStore (`apps/data/cnpg-cluster/manifests/object-store.yaml`)
+As 4 envs do Garage são **obrigatórias** — sem elas, `exit status 4` silencioso:
+```yaml
+spec:
+  retentionPolicy: "7d"
+  instanceSidecarConfiguration:
+    env:
+      - { name: BARMAN_S3_USE_PATH_STYLE, value: "true" }        # Garage root_domain=""
+      - { name: AWS_DEFAULT_REGION, value: "garage" }            # boto3 ignora s3Credentials.region
+      - { name: AWS_REQUEST_CHECKSUM_CALCULATION, value: "when_required" }   # checksum sha256
+      - { name: AWS_RESPONSE_CHECKSUM_VALIDATION, value: "when_required" }
+  configuration:
+    destinationPath: s3://cnpg-wal/
+    endpointURL: http://garage.data.svc.cluster.local:3900
+    s3Credentials:
+      accessKeyId:     { name: cnpg-garage-creds, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: cnpg-garage-creds, key: ACCESS_SECRET_KEY }
+    wal:  { compression: gzip, maxParallel: 2 }   # SEM encryption (Garage não faz SSE)
+    data: { compression: gzip, jobs: 2 }
+```
+> `instanceSidecarConfiguration` só propaga em **rollout do cluster**. O sidecar
+> do plugin é um `initContainer` nativo (restartPolicy: Always) — filtrar
+> `.spec.containers` no jsonpath não o acha; usar `.spec.initContainers`.
+
+### Cluster (manifesto cru — `apps/data/cnpg-cluster/manifests/cluster.yaml`)
+Substitui o chart. Replica o values antigo (instances, storage, postgresql.parameters,
+`managed.roles`, `bootstrap.initdb`, superuserSecret, monitoring, resources),
+**sem** `.spec.backup`, **com**:
+```yaml
+plugins:
+  - name: barman-cloud.cloudnative-pg.io
+    isWALArchiver: true
+    parameters:
+      barmanObjectName: cnpg-garage-store
+```
+O app `cnpg-cluster` vira path-only (`syncOptions: ServerSideApply, CreateNamespace=false,
+SkipDryRunOnMissingResource=true`). `values.yaml` descartado. Mesmo nome de Cluster
+= update in-place (SSA), sem perda de dado; espera rolling restart pra anexar o sidecar.
+
+### ScheduledBackup (`method: plugin`)
+```yaml
+spec:
+  schedule: "0 0 2 * * *"   # 6 campos no CNPG
+  method: plugin
+  pluginConfiguration: { name: barman-cloud.cloudnative-pg.io }
+  cluster: { name: cnpg-cluster }
+  backupOwnerReference: self
+```
+
+### CNP do Garage (sidecar precisa de `:3900`)
+```yaml
+- matchLabels:
+    io.kubernetes.pod.namespace: data
+    cnpg.io/cluster: cnpg-cluster
+```
+
+### Pós-deploy: restart do operator
+O operator descobre plugins no startup. Como ele rodava há dias e o plugin é novo,
+precisa de `kubectl -n cnpg-system rollout restart deploy/cnpg-operator-cloudnative-pg`
+pra redescobrir (senão: `wal archive plugin is not available`).
+
+---
+
+## 10.D — Observabilidade dos backups
+
+- VMPodScrape `velero` (porta `http-monitoring`/8085), VMRule `velero`.
+- VMRule `offsite-sync` (`OffsiteSyncFailed` em `offsite_sync_runs_total{status="Failed"}`).
+- `VeleroNodeAgentDown` usa **KSM** (`kube_daemonset_status_desired - ready > 0`),
+  não a métrica `velero_node_agent_collector_up` (inexistente no chart 8.7.2).
+- Reusa a cadeia vmalert → vmalertmanager → Slack da Fase 9.
+
+---
+
+## Validação — gate "B2 tem tudo" (critério de saída)
+
+```fish
+# paridade real (bucket NÃO-vazio — ver 10.3):
+just buckets::rclone-check cnpg-wal           # 0 diff + N matching files (50)
+# idem clickhouse-backup (403), qdrant-snapshots (12), langfuse (1076)
+
+# CNPG: archiving real + base+WAL no bucket
+kubectl -n data get cluster cnpg-cluster -o jsonpath='{.status.conditions}' | jq '.[]|select(.type=="ContinuousArchiving")'  # True
+just buckets::rclone-ls cnpg-wal | rg 'base|wals'   # base/ E wals/ presentes
+
+# Velero
+velero backup-location get                     # b2 -> Available
+kubectl -n velero get pods                     # velero + node-agent + sidecar Running
+
+# alerta -> Slack (cadeia provada)
+```
+
+Checklist final:
+- [x] espelho rodou ciclo limpo; `rclone check` 0 diff nos 4 (bucket não-vazio)
+- [x] 4 stores presentes no B2
+- [x] CNPG archiving True; base+WAL no Garage e espelhados no B2
+- [x] Velero BSL Available
+- [x] leitura isolada do B2 (de rede sem rota à LAN — testado via 5G)
+- [x] cadeia de alerta entrega no Slack
+- [ ] **D4b** (rebuild paralelo restaurando de B2) — pendente, ver runbook
+
+---
+
+## Incidentes (Sintoma → Causa → Diagnóstico → Fix → Lição)
+
+## Incidente 10.1 — CNPG: backup fantasma desde o dia 1 (quatro camadas)
+
+**Severidade:** crítica (o banco de Langfuse/LiteLLM/OpenWebUI/LightRAG ficou sem
+backup nenhum — nem on-site — de 15/06 a 25/06, ~10 dias).
+
+### Sintoma
+Ao validar a paridade off-site (Fase 10), o `rclone check garage:cnpg-wal` deu
+"0 differences" — mas o bucket `cnpg-wal` estava **vazio** (`Objects: 0`),
+enquanto o cluster reportava `ContinuousArchiving: True` e `pg_stat_archiver`
+mostrava `archived_count` subindo com `failed_count=0`. WAL "arquivado com
+sucesso", bucket a zero.
+
+### Causa (quatro camadas empilhadas, cada uma escondia a seguinte)
+1. **Config no lugar errado no chart.** O `values.yaml` (Fase 6) tinha o backup
+   sob `cluster.backup.barmanObjectStore`. O chart `cloudnative-pg/cluster`
+   espera `backups:` **top-level**. Chave inexistente → ignorada em silêncio →
+   `.spec.backup` vazio → `archive_command` virou no-op → exit 0 mentiroso,
+   `.done` em cima de nada.
+2. **Imagem sem barman.** Após corrigir (1), o `.spec.backup` passou a existir,
+   mas a imagem `ghcr.io/cloudnative-pg/postgresql:18.3-standard-trixie` **não
+   embarca `barman-cloud-*`** (extraído pro plugin no CNPG 1.26+; in-tree some no
+   1.30). `exec: "barman-cloud-wal-archive": executable file not found in $PATH`.
+3. **Plugin não-descoberto pelo operator.** Migrado pro Barman Cloud Plugin
+   (sidecar), o operator (rodando há 9d) não redescobriu o plugin (instalado há
+   9h): `wal archive plugin is not available: barman-cloud.cloudnative-pg.io`.
+4. **CNP dropando o sidecar.** Resolvido (3), o barman executava mas dava
+   `Connect timeout on garage:3900`. A `garage-default-deny-ingress` nunca teve
+   o CNPG na allow-list do `:3900` — porque até então o CNPG nunca tinha chegado
+   tão longe pra exercer a policy. O tráfego saía agora do sidecar (identidade do
+   pod `cnpg-cluster`), e a CNP o dropava.
+
+### Diagnóstico (o que efetivamente revelou cada camada)
+- `bucket info` pelo **ID físico** (`/garage bucket info 60e093...`), não por
+  alias — descartou a falsa pista de "alias divergente".
+- `pg_switch_wal` + `bucket info`: WAL forçado e bucket seguia 0 → archiving não
+  persiste (separou "sem tráfego" de "falha real").
+- `kubectl get cluster -o jsonpath='{.spec.backup}'` **vazio** → camada 1.
+- `SHOW archive_command` + `ls /usr/bin/barman*` (ausente) → camada 2.
+- Condition `ContinuousArchiving.message` → camadas 3 e 4 (a mensagem mudou de
+  "plugin not available" pra "Connect timeout", marcando o avanço).
+- `hubble observe --to-label app.kubernetes.io/name=garage --port 3900` /
+  `Connect timeout` no log do sidecar → camada 4.
+- **Prova final de sucesso:** `rclone ls garage:cnpg-wal` listando
+  `base/.../data.tar.gz` + `wals/.../*.gz` — base + cadeia contígua = PITR real
+  (independente do `firstRecoverabilityPoint`, que atrasa).
+
+### Fix
+1. `backups:` top-level no values (depois abandonado junto com o chart).
+2. Barman Cloud Plugin: `apps/core/barman-cloud-plugin/` (manifest do release
+   v0.5.0 commitado, não `kubectl apply` de URL).
+3. **Cluster vira manifesto cru** — o chart `cluster` (até 0.7.0, o HEAD) **não
+   expressa `.spec.plugins`**. `ObjectStore` CR + `plugins: [barman-cloud...]` no
+   Cluster + `ScheduledBackup` com `method: plugin`.
+4. Envs do Garage no `ObjectStore.spec.instanceSidecarConfiguration.env`:
+   `BARMAN_S3_USE_PATH_STYLE=true`, `AWS_DEFAULT_REGION=garage`,
+   `AWS_REQUEST_CHECKSUM_CALCULATION=when_required`,
+   `AWS_RESPONSE_CHECKSUM_VALIDATION=when_required` (path-style do Garage +
+   workaround do checksum sha256 do boto3, issues #9724 e #393).
+5. Restart do operator pra redescobrir o plugin.
+6. CNP do Garage: adicionar `cnpg.io/cluster: cnpg-cluster` ao `fromEndpoints`
+   do `:3900`.
+
+### Lição
+- **Backup status é promessa, bucket é prova.** `ContinuousArchiving: True` +
+  `failed_count=0` conviveram com zero bytes por 10 dias. A única verificação
+  válida é ler o destino.
+- **Chave de Helm inexistente falha em silêncio.** `cluster.backup` num chart que
+  só lê `backups:` não dá erro — só não faz nada. Sempre `helm template | rg` o
+  campo crítico antes de confiar.
+- **Imagem `-standard`/`-minimal` do CNPG não tem barman.** Plugin é o caminho;
+  in-tree morre no 1.30.
+- **Sidecar herda a identidade do pod, mas a CNP precisa conhecê-la.** Caminho de
+  rede novo (plugin) = nova entrada de allow-list, mesmo "sendo o mesmo pod".
+- **`instanceSidecarConfiguration` só propaga em rollout do cluster**, e o sidecar
+  do plugin é um `initContainer` nativo (restartPolicy: Always) — filtrar
+  `.spec.containers` no jsonpath não o encontra; usar `.spec.initContainers`.
+
+---
+
+## Incidente 10.2 — Gateway some intermitente: nó GPU vira anunciante L2 quebrado
+
+**Severidade:** alta (perda total de acesso a tudo atrás do Gateway — ArgoCD,
+Hubble, argo-server, todos os HTTPRoutes — de forma intermitente).
+
+### Sintoma
+Tudo que passa pelo Gateway/VIP `10.40.7.10` ficou inacessível, mas `kubectl`
+respondia normal (control plane são). `arping 10.40.7.10` → timeout; nós em
+`10.40.6.x` pingavam normal. Intermitente: voltava sozinho às vezes.
+
+### Causa
+A `CiliumL2AnnouncementPolicy` (`lab-l2`) seleciona interfaces por
+`^ens[0-9]+$`. O `worker-3-gpu` (adicionado depois, hardware diferente) usa
+**`enp7s0`** — não casa o regex. O Cilium **elegia** o nó GPU como holder do
+lease L2 (o `nodeSelector` só excluía control-plane, não o GPU), mas não tinha
+interface pra emitir o GARP → VIP anunciado por ninguém → ARP mudo. Intermitente
+porque só quebrava quando o lease calhava de migrar pro GPU.
+
+### Diagnóstico
+- Control plane vs data plane: `kubectl` ok + `arping` timeout → falha só no
+  caminho do VIP.
+- `kubectl get gateway` Programmed=True, `cilium-gateway-main` com EXTERNAL-IP,
+  Cilium/Envoy todos Running → cluster impecável; falha entre anunciante e LAN.
+- `kubectl -n kube-system get leases` → holder = `worker-3-gpu` (AGE 22h, tinha
+  migrado).
+- `kubectl delete lease` forçando re-eleição: caiu em `worker-1` → `arping`
+  respondeu (MAC `bc:24:11:da:45:2a`). Confirmou: holder anterior (GPU) não
+  anunciava.
+- `ip -br addr` no cilium do GPU → `enp7s0` (não casa `^ens`). Causa cravada.
+
+### Fix
+Excluir o nó GPU do pool de anúncio (não ampliar o regex — o GPU é nó de
+manutenção frequente; não se quer o VIP crítico dependendo dele). No
+`CiliumL2AnnouncementPolicy.spec.nodeSelector.matchExpressions`:
+```yaml
+- key: kubernetes.io/hostname
+  operator: NotIn
+  values: [worker-3-gpu]
+```
+Commit no Git (não só no cluster — senão volta no próximo reconcile/failover).
+
+### Validação (failover real, não só lease migrar)
+`cordon worker-1` + `delete lease` → lease caiu no `worker-2`, `arping` respondeu
+(MAC `bc:24:11:2c:90:e8`), `nc -vz :443` conectou. `uncordon worker-1`.
+Confirmou redundância genuína entre worker-1/2, GPU fora.
+
+### Lição
+- **Lease migrar não prova que o novo holder anuncia.** Validar no `arping` +
+  `nc`, não no `get lease`. (Mesmo padrão "destino é a prova" do 10.1.)
+- **Nó heterogêneo quebra seleção por nome de interface.** `enp` vs `ens` num
+  homelab com hardware misto torna um nó anunciante-fantasma silenciosamente. Ou
+  o regex cobre todos os padrões, ou exclui-se o nó explicitamente.
+- **Nó de manutenção frequente (GPU/driver) não deve segurar VIP crítico.**
+  Decisão de design, declarada no `nodeSelector`.
+
+---
+
+## Incidente 10.3 — `rclone check` "0 differences" enganoso (vazio-vs-vazio)
+
+**Severidade:** média (falso positivo que quase validou um gate de DR vazio).
+
+### Sintoma
+`rclone check garage:cnpg-wal b2:.../cnpg-wal --size-only` → "0 differences
+found" — interpretado como "espelho OK". Na verdade ambos os lados estavam
+**vazios** (o cnpg-wal nunca teve dado — ver 10.1).
+
+### Causa
+`rclone check` compara conjuntos. Vazio vs vazio = 0 diferenças = "sucesso"
+sintático, sem significado de DR. Sem olhar a **contagem de objetos**, o "0 diff"
+mente.
+
+### Fix / verificação correta
+Confirmar contagem não-zero junto com a paridade. Após o 10.1 resolvido:
+`50 matching files, 0 differences` (não-vazio batendo). Os outros stores idem:
+clickhouse-backup 403, qdrant-snapshots 12, langfuse 1076.
+
+### Lição
+- **"0 differences" só vale com contagem > 0.** Num check de DR, sempre olhar
+  `matching files`. Vazio-vs-vazio é o falso-verde mais traiçoeiro porque parece
+  exatamente com sucesso.
+
+---
+
+## Incidente 10.4 — VMPodScrape `operational` mas sem target (matchExpressions)
+
+**Severidade:** média (o alerta de backup do Velero não podia disparar — métrica nunca coletada).
+
+### Sintoma
+Ao montar o teste do alerta de falha, `velero_backup_failure_total` não existia
+no banco. O `VMPodScrape velero` mostrava `operational` (coluna do `get -A`),
+selector casava os pods, a porta `http-monitoring:8085` existia nomeada, o
+vmagent era `selectAllByDefault: true`, RBAC ok (`can-i list pods -n velero` =
+yes) — e mesmo assim **zero target** em `/api/v1/targets`. Sem erro em lugar
+nenhum.
+
+### Causa
+O VMPodScrape tinha `selector.matchLabels` + `selector.matchExpressions` (um
+`NotIn repo-maintenance` adicionado pra excluir os jobs de manutenção do Kopia).
+A combinação fazia o operator do VictoriaMetrics aceitar o objeto (status
+`operational`) mas **não gerar o target** — silêncio total, sem evento de erro.
+
+### Diagnóstico
+- `get vmpodscrape -A` (não o `get` singular) mostrou `STATUS: operational` —
+  provou que o operator processou, descartando RBAC/selector/selectAllByDefault.
+- `diff` contra o VMPodScrape do `garage` (que funciona): a única diferença
+  estrutural era o `matchExpressions` (garage só tem `matchLabels`).
+- Após remover o `matchExpressions` + `rollout restart` do operator do VM, o
+  target apareceu (`scrapePool: podScrape/observability/velero/0`, `health: up`).
+
+### Fix
+VMPodScrape só com `matchLabels` (alinhado ao garage). Os jobs do Kopia não têm
+a porta `http-monitoring`, então não viram target de qualquer forma — o
+`matchExpressions` era prevenção inútil que quebrava a geração.
+
+### Lição
+- **Objeto `operational` não prova target gerado.** Mesma família do 10.1/10.2:
+  a prova é o target em `/api/v1/targets` (`health: up`) e a série no banco
+  (`up{namespace="velero"}`), não o status do CR.
+- **Diff contra um irmão que funciona** é o atalho mais rápido pra achar a
+  diferença estrutural que o operator não digere.
+- Ferramenta engana: `get vmpodscrape velero` (singular, jsonpath errado) e
+  `rg` no JSON cru esconderam o que `get -A` e `jq -r '.scrapePool'` revelaram.
+
+---
+
+## Incidente 10.5 — selfHeal do ArgoCD revertendo patches de teste
+
+**Severidade:** baixa (teste de alerta dava falso-sucesso; nenhum impacto em prod).
+
+### Sintoma
+Ao tentar forçar uma falha de backup do Velero (corromper o secret B2 / apontar o
+BSL pra bucket inexistente), o backup teimava em sair `Completed`. O patch parecia
+aplicar (`secret patched`, `bsl patched`) mas o backup não falhava.
+
+### Causa
+O Application `velero` tem `syncPolicy.automated.selfHeal: true`. Todo patch
+manual (secret ou BSL) era **revertido pelo ArgoCD em segundos**, antes do backup
+executar. O BSL mostrava `generation: 1436` (ArgoCD lutando com os patches) e o
+bucket sempre de volta no valor correto. O ESO reforçava no caso do secret.
+
+### Diagnóstico
+`kubectl get bsl b2 -o yaml`: `argocd.argoproj.io/tracking-id` presente,
+`generation` altíssima, valor sempre revertido ao do Git.
+
+### Fix
+Pra testar falha num app com selfHeal: `argocd app set velero --self-heal=false`
+durante o teste, aplicar o patch (agora persiste), rodar o backup (falha de
+verdade), e religar `--self-heal=true` (ArgoCD restaura sozinho).
+
+### Lição
+- **selfHeal corre mais rápido que a janela de teste.** Em GitOps, "quebrar de
+  propósito" exige pausar a reconciliação, senão o teste dá falso-verde.
+- **O alerta já estava provado de outra forma:** durante o debug, um
+  `VeleroNodeAgentDown` (falso-positivo, ver 10.4/regra) chegou no Slack —
+  validando a cadeia VMPodScrape→vmagent→vmalert→vmalertmanager→Slack de ponta a
+  ponta, que era o objetivo real do item do gate.
+
+---
+
 ## Apêndice A — Rollback da fase 1
 
 `just talos tf-destroy` remove as 5 VMs e a ISO. Estado externo criado e que
