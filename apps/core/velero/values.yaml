@@ -7,7 +7,7 @@
 # Plugin S3 (B2 fala S3). initContainer copia o binário do plugin pro /plugins.
 initContainers:
   - name: velero-plugin-for-aws
-    image: velero/velero-plugin-for-aws:v1.12.1
+    image: velero/velero-plugin-for-aws:v1.11.1   # casa Velero 1.15.2 (chart 8.7.2)
     imagePullPolicy: IfNotPresent
     volumeMounts:
       - mountPath: /target
@@ -17,6 +17,12 @@ initContainers:
 credentials:
   useSecret: true
   existingSecret: velero-b2-creds
+
+# CRDs: o ArgoCD já aplica o diretório crds/ do chart (--include-crds por padrão).
+# O job upgradeCRDs é um Helm hook imperativo, redundante AQUI, e ainda arrasta
+# docker.io/bitnami/kubectl — que sumiu do Docker Hub (deprecation Bitnami de
+# 28/08/2025) e causa ImagePullBackOff. Desligado: CRDs ficam sob ArgoCD+SSA.
+upgradeCRDs: false
 
 configuration:
   # Uploader de FSB. Kopia é default desde 1.12; restic está deprecado.
@@ -100,8 +106,3 @@ schedules:
             values:
               - memgraph
               # - valkey   # descomente se Valkey passar a persistir algo que importe
-
-# CRDs: o ArgoCD já aplica o diretório crds/ do chart (--include-crds por padrão).
-# O job upgradeCRDs é redundante AQUI e ainda arrasta docker.io/bitnami/kubectl,
-# que sumiu do Docker Hub (deprecation Bitnami de 28/08/2025). Desligado.
-upgradeCRDs: false
