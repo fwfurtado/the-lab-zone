@@ -8,6 +8,12 @@ spec:
     matchLabels:
       app.kubernetes.io/name: litellm
   ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "4000"
+              protocol: TCP
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
