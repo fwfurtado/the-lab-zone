@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: qa-indexer
+  namespace: ai
+spec:
+  schedules: ["0 4 * * *"]          # 04:00, depois do backup das 03:00
+  timezone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  workflowSpec:
+    workflowTemplateRef:
+      name: qa-indexer

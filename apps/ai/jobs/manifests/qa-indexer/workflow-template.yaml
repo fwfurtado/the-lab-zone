@@ -1,0 +1,75 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: qa-indexer
+  namespace: ai
+spec:
+  entrypoint: index
+  serviceAccountName: argo-workflow
+  podMetadata:
+    labels:
+      app.kubernetes.io/name: qa-indexer
+  volumes:
+    - name: workspace
+      emptyDir: {}
+  metrics:
+    prometheus:
+      - name: qdrant_index_duration_seconds
+        help: "Duração da última indexação"
+        gauge: { realtime: false, value: "{{workflow.duration}}" }
+      - name: qdrant_index_runs_total
+        help: "Execuções do indexador por status"
+        labels: [{ key: status, value: "{{workflow.status}}" }]
+        counter: { value: "1" }
+        when: "{{workflow.status}} != Running"
+      - name: qdrant_index_documents
+        help: "Chunks indexados na última execução"
+        gauge:
+          { realtime: false, value: "{{workflow.outputs.parameters.indexed}}" }
+  templates:
+    - name: index
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError
+        backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
+      outputs:
+        parameters:
+          - name: indexed
+            valueFrom: { path: /workspace/indexed_count }
+      containerSet:
+        archiveLogs: false
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        containers:
+          - name: clone
+            image: alpine/git:2.45.2
+            args:
+              [
+                "clone",
+                "--depth",
+                "1",
+                "https://github.com/fwfurtado/the-lab-zone.git",
+                "/workspace/repo",
+              ]
+          - name: index
+            image: ofwfurtado/qdrant-indexer:0.1.0
+            dependencies: [clone]
+            env:
+              - name: QDRANT_URL
+                value: "http://qdrant.data.svc.cluster.local:6333"
+              - name: QDRANT_API_KEY
+                valueFrom:
+                  { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
+              - name: COLLECTION_NAME
+                value: "qa_docs"
+              - name: EMBEDDING_MODEL
+                value: "intfloat/multilingual-e5-large"
+              - name: DOC_GLOBS
+                value: "**/*.md"
+            resources:
+              requests:
+                cpu: "100m"
+                memory: "512Mi"
+              limits:
+                memory: "2Gi"
