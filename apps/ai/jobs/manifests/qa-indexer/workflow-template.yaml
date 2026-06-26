@@ -52,7 +52,7 @@ spec:
                 "https://github.com/fwfurtado/the-lab-zone.git",
                 "/workspace/repo",
               ]
-          - name: index
+          - name: main
             image: ofwfurtado/qdrant-indexer:0.1.0
             dependencies: [clone]
             env:
