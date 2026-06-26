@@ -18,8 +18,7 @@ spec:
     namespace: data
   ignoreDifferences:
     # CNPG rotaciona o campo managed passwords — ignora drift no secret
-    - group: ""
-      kind: Secret
+    - kind: Secret
       namespace: data
       jsonPointers:
         - /data
