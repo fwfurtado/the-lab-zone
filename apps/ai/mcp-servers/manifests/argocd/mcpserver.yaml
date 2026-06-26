@@ -1,0 +1,30 @@
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: argocd
+  namespace: ai
+spec:
+  image: ofwfurtado/mcp-for-argocd:v0.8.0
+  transport: streamable-http
+  proxyPort: 8080
+  mcpPort: 3000
+  args: ["http", "--stateless"]
+  env:
+    - name: MCP_READ_ONLY
+      value: "true"
+    - name: ARGOCD_BASE_URL
+      value: "http://argocd-server.argocd.svc.cluster.local"
+  secrets:
+    - name: argocd-mcp-token
+      key: token
+      targetEnvName: ARGOCD_API_TOKEN
+  permissionProfile:
+    type: builtin
+    name: network
+  resources:
+    limits:
+      cpu: "250m"
+      memory: "128Mi"
+    requests:
+      cpu: "25m"
+      memory: "32Mi"

@@ -21,15 +21,25 @@ spec:
       value: "fastembed"
     - name: EMBEDDING_MODEL
       value: "intfloat/multilingual-e5-large"
-    - name: QDRANT_READ_ONLY         # <-- confere o nome no teu build; o que importa é o toggle
+    - name: QDRANT_READ_ONLY
       value: "true"
-  secrets:                            # <-- API key vem daqui, não inline
+  secrets:
     - name: qdrant-apikey-ai
       key: apiKey
       targetEnvName: QDRANT_API_KEY
   permissionProfile:
     type: builtin
     name: network
+  podTemplateSpec:
+    spec:
+      containers:
+        - name: mcp
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
   resources:
     limits:
       cpu: "500m"
