@@ -11,6 +11,8 @@ spec:
   env:
     - name: FASTMCP_SERVER_HOST
       value: "0.0.0.0"
+    - name: FASTEMBED_CACHE_PATH
+      value: "/opt/models"
     - name: QDRANT_URL
       value: "http://qdrant.data.svc.cluster.local:6333"
     - name: COLLECTION_NAME
@@ -30,8 +32,8 @@ spec:
     name: network
   resources:
     limits:
-      cpu: "250m"
-      memory: "4Gi"
+      cpu: "500m"
+      memory: "2Gi"
     requests:
-      cpu: "25m"
-      memory: "1Gi"
+      cpu: "50m"
+      memory: "512Mi"
