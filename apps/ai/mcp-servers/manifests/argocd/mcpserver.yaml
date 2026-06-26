@@ -8,7 +8,6 @@ spec:
   transport: streamable-http
   proxyPort: 8080
   mcpPort: 3000
-  args: ["http", "--stateless"]
   env:
     - name: MCP_READ_ONLY
       value: "true"
