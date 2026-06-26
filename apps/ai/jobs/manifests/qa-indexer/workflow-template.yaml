@@ -67,9 +67,11 @@ spec:
                 value: "intfloat/multilingual-e5-large"
               - name: DOC_GLOBS
                 value: "**/*.md"
+              - name: EMBED_BATCH
+                value: "8"
             resources:
               requests:
                 cpu: "100m"
-                memory: "512Mi"
-              limits:
                 memory: "2Gi"
+              limits:
+                memory: "4Gi"
