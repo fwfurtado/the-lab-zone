@@ -1,0 +1,40 @@
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: qdrant-mcp
+  namespace: ai
+spec:
+  image: ofwfurtado/mcp-server-qdrant:0.1.0
+  transport: sse
+  mcpPort: 8000
+  proxyPort: 8080
+  args:
+    - --transport
+    - sse
+  env:
+    - name: FASTMCP_SERVER_HOST
+      value: "0.0.0.0"
+    - name: QDRANT_URL
+      value: "http://qdrant.data.svc.cluster.local:6333"
+    - name: COLLECTION_NAME
+      value: "qa_docs"
+    - name: EMBEDDING_PROVIDER
+      value: "fastembed"
+    - name: EMBEDDING_MODEL
+      value: "BAAI/bge-m3"
+    - name: QDRANT_READ_ONLY         # <-- confere o nome no teu build; o que importa é o toggle
+      value: "true"
+  secrets:                            # <-- API key vem daqui, não inline
+    - name: qdrant-apikey-ai
+      key: apiKey
+      targetEnvName: QDRANT_API_KEY
+  permissionProfile:
+    type: builtin
+    name: network
+  resources:
+    limits:
+      cpu: "250m"
+      memory: "4Gi"
+    requests:
+      cpu: "25m"
+      memory: "1Gi"
