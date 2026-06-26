@@ -1,0 +1,31 @@
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: victoria-metrics
+  namespace: ai
+spec:
+  image: ghcr.io/victoriametrics/mcp-victoriametrics:1.20.2
+  transport: sse
+  proxyPort: 8080
+  mcpPort: 8080
+  env:
+    - name: VM_INSTANCE_ENTRYPOINT
+      value: "http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428"
+    - name: VM_INSTANCE_TYPE
+      value: "single"
+    - name: MCP_SERVER_MODE
+      value: "sse"
+    - name: MCP_LISTEN_ADDR
+      value: "0.0.0.0:8080"
+    - name: MCP_LOG_FORMAT
+      value: "json"
+  permissionProfile:
+    type: builtin
+    name: network
+  resources:
+    limits:
+      cpu: "250m"
+      memory: "1Gi"
+    requests:
+      cpu: "25m"
+      memory: "64Mi"
