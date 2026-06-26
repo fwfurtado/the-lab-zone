@@ -8,9 +8,6 @@ spec:
   transport: sse
   mcpPort: 8000
   proxyPort: 8080
-  args:
-    - --transport
-    - sse
   env:
     - name: FASTMCP_SERVER_HOST
       value: "0.0.0.0"
