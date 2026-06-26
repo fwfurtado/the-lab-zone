@@ -10,6 +10,7 @@ controller:
   # Só `data` por enquanto; somar `ai` etc. conforme o data plane crescer.
   workflowNamespaces:
     - data
+    - ai
 
   metricsConfig:
     enabled: true
