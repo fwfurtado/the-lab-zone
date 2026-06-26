@@ -20,7 +20,7 @@ spec:
             app.kubernetes.io/name: qdrant-backup
         - matchLabels:
             io.kubernetes.pod.namespace: ai
-            app: qdrant-mcp
+            toolhive-name: qdrant-mcp
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: qa-indexer
