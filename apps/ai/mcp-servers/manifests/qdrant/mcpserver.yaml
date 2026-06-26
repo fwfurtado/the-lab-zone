@@ -4,7 +4,7 @@ metadata:
   name: qdrant-mcp
   namespace: ai
 spec:
-  image: ofwfurtado/mcp-server-qdrant:0.1.0
+  image: ofwfurtado/mcp-server-qdrant:0.2.0
   transport: sse
   mcpPort: 8000
   proxyPort: 8080
@@ -18,7 +18,7 @@ spec:
     - name: EMBEDDING_PROVIDER
       value: "fastembed"
     - name: EMBEDDING_MODEL
-      value: "BAAI/bge-m3"
+      value: "intfloat/multilingual-e5-large"
     - name: QDRANT_READ_ONLY         # <-- confere o nome no teu build; o que importa é o toggle
       value: "true"
   secrets:                            # <-- API key vem daqui, não inline
