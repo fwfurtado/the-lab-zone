@@ -1,10 +1,5 @@
-apiVersion: toolhive.stacklok.dev/v1beta1
-kind: MCPServer
-metadata:
-  name: qdrant-mcp
-  namespace: ai
 spec:
-  image: ofwfurtado/mcp-server-qdrant:0.2.1
+  image: ofwfurtado/mcp-server-qdrant:0.2.2
   transport: sse
   mcpPort: 8000
   proxyPort: 8080
@@ -12,7 +7,7 @@ spec:
     - name: FASTMCP_SERVER_HOST
       value: "0.0.0.0"
     - name: FASTEMBED_CACHE_PATH
-      value: "/opt/models"
+      value: "/cache"
     - name: QDRANT_URL
       value: "http://qdrant.data.svc.cluster.local:6333"
     - name: COLLECTION_NAME
@@ -32,13 +27,24 @@ spec:
     name: network
   podTemplateSpec:
     spec:
+      initContainers:
+        - name: seed-cache
+          image: ofwfurtado/mcp-server-qdrant:0.2.2
+          command: ["sh", "-c", "cp -r /opt/models/. /cache/ || true"]
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
       containers:
         - name: mcp
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: cache
+              mountPath: /cache
       volumes:
         - name: tmp
+          emptyDir: {}
+        - name: cache
           emptyDir: {}
   resources:
     limits:
