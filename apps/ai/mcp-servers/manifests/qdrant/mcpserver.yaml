@@ -5,9 +5,13 @@ metadata:
   namespace: ai
 spec:
   image: ofwfurtado/mcp-server-qdrant:0.2.2
-  transport: sse
+  transport: streamable-http
   mcpPort: 8000
   proxyPort: 8080
+  args:
+    - mcp-server-qdrant
+    - --transport
+    - streamable-http
   env:
     - name: FASTMCP_SERVER_HOST
       value: "0.0.0.0"
