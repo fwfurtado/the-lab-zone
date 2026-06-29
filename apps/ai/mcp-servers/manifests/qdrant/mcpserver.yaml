@@ -27,6 +27,13 @@ spec:
       value: "intfloat/multilingual-e5-large"
     - name: QDRANT_READ_ONLY
       value: "true"
+    - name: TOOL_FIND_DESCRIPTION
+      value: >-
+        Busca na base de conhecimento da infra do homelab the-lab-zone:
+        documentação, runbooks, decisões de arquitetura (BOOTSTRAP.md),
+        incidentes e configurações. Use SEMPRE que a pergunta for sobre
+        como/por que algo está configurado, como um componente funciona,
+        ou o histórico/decisões da infraestrutura.
   secrets:
     - name: qdrant-apikey-ai
       key: apiKey
