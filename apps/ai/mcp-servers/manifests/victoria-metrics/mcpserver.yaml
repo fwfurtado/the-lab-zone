@@ -14,7 +14,7 @@ spec:
     - name: VM_INSTANCE_TYPE
       value: "single"
     - name: MCP_SERVER_MODE
-      value: "streamable-http"
+      value: "http"
     - name: MCP_LISTEN_ADDR
       value: "0.0.0.0:8080"
     - name: MCP_LOG_FORMAT
