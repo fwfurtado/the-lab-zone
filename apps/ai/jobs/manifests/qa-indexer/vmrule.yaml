@@ -1,0 +1,56 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: qa-indexer
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: qa-indexer
+spec:
+  groups:
+    - name: qa-indexer
+      rules:
+        # 1) Última execução falhou
+        - alert: QaIndexerRunFailed
+          expr: |
+            increase(qdrant_index_runs_total{status="Failed"}[1h]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: qa-indexer
+          annotations:
+            summary: "Indexador do Qdrant falhou"
+            description: >-
+              O CronWorkflow qa-indexer registrou execução com status Failed
+              na última hora. Verifique: argo logs -n ai @latest
+
+        # 2) Não rodou na janela esperada (cron é 0 4 * * * -> diário)
+        #    Sem incremento de runs_total em 26h = pulou a janela.
+        - alert: QaIndexerNotRunning
+          expr: |
+            increase(qdrant_index_runs_total[26h]) == 0
+          for: 10m
+          labels:
+            severity: warning
+            component: qa-indexer
+          annotations:
+            summary: "Indexador do Qdrant não executou na janela diária"
+            description: >-
+              Nenhuma execução de qa-indexer registrada em 26h (esperado diário
+              às 04:00 UTC). O CronWorkflow pode estar suspenso ou com erro de
+              agendamento. Verifique: kubectl -n ai get cronworkflow qa-indexer
+
+        # 3) Indexou zero documentos (silent failure de conteúdo)
+        #    Só dispara se a métrica de documentos existir e vier 0.
+        - alert: QaIndexerNoDocuments
+          expr: |
+            qdrant_index_documents == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: qa-indexer
+          annotations:
+            summary: "Indexador do Qdrant rodou mas indexou 0 documentos"
+            description: >-
+              A última execução do qa-indexer indexou 0 chunks. Pode indicar
+              repo vazio, glob errado, ou clone falho. Verifique o conteúdo de
+              /workspace/repo no run e o DOC_GLOBS.
