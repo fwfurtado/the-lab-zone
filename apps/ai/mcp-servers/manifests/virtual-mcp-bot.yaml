@@ -1,3 +1,4 @@
+---
 apiVersion: toolhive.stacklok.dev/v1alpha1
 kind: VirtualMCPServer
 metadata:
@@ -22,3 +23,32 @@ spec:
   # Se um dia quiser plugar no Authentik, troca pra type: oidc + oidcConfigRef.
   incomingAuth:
     type: anonymous
+---
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: lab-vmcp
+  namespace: ai
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: main
+      namespace: gateway
+      sectionName: https-wildcard
+  hostnames:
+    - "mcp-readonly.lab.the-lab.zone"
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: vmcp-lab-vmcp
+          port: 4483
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
