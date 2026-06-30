@@ -27,6 +27,9 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: qa-indexer
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: slack-qa-bot
       toPorts:
         - ports:
             - port: "4000"
