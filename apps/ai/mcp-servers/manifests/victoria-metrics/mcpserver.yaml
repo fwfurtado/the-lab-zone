@@ -8,7 +8,8 @@ spec:
   transport: streamable-http
   proxyPort: 8080
   mcpPort: 8080
-  groupRef: lab-readonly
+  groupRef:
+    name: lab-readonly
   env:
     - name: VM_INSTANCE_ENTRYPOINT
       value: "http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428"

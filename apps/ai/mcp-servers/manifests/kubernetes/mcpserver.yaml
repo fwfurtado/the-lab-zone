@@ -14,7 +14,8 @@ spec:
   transport: streamable-http
   mcpPort: 8080      # casa com --port abaixo
   proxyPort: 8080
-  groupRef: lab-readonly
+  groupRef:
+    name: lab-readonly
   # Campo nativo v1beta1: usa a SA ja existente (com a ClusterRole/view amarrada no core).
   serviceAccount: kubernetes-mcp
   args:

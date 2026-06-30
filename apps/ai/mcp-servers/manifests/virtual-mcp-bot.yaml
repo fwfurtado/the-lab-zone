@@ -4,9 +4,9 @@ metadata:
   name: lab-vmcp
   namespace: ai
 spec:
+  groupRef:
+    name: lab-readonly
   config:
-    groupRef: lab-readonly
-
     # Prefixo evita colisão de tools entre os três backends
     # (ex. um "search" no qdrant vs outro). O bot vê k8s-ro_*, vm-mcp_*, etc.
     aggregation:

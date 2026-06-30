@@ -9,7 +9,8 @@ spec:
   transport: streamable-http
   mcpPort: 8000
   proxyPort: 8080
-  groupRef: lab-readonly
+  groupRef:
+    name: lab-readonly
   args:
     - --transport
     - streamable-http
