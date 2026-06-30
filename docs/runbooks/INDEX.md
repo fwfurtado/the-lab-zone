@@ -7,7 +7,7 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 
 | Domínio | Arquivo | Cobre |
 |---|---|---|
-| Talos | [talos/control-plane-etcd-gpu-taints.md](talos/control-plane-etcd-gpu-taints.md) | control plane sem métricas, etcd não hot-reload, taint de nó joinado |
+| Talos | [talos/control-plane-etcd-gpu-taints.md](talos/control-plane-etcd-gpu-taints.md) | control plane sem métricas, etcd não hot-reload, leader changes/latência de commit, taint de nó joinado |
 | ArgoCD | [gitops-argocd/adocao-sync-drift.md](gitops-argocd/adocao-sync-drift.md) | server-side apply, app.yaml silencioso, AppProject, sync travado, selfHeal, ignoreDifferences |
 | Secrets/ESO | [secrets-eso/connect-replica-stale.md](secrets-eso/connect-replica-stale.md) | réplica do 1Password Connect congelada |
 | Cilium (rede) | [cilium-rede/mtu-l2-gatewayapi.md](cilium-rede/mtu-l2-gatewayapi.md) | MTU do VXLAN, L2 announcement, operator CrashLoop (Gateway API) |
@@ -54,6 +54,9 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 
 **Pod GPU/DaemonSet `Pending`/`Unschedulable` ou DaemonSet `RolloutStuck`**
 → gpu (RuntimeClass scheduling tarde; taint trava telemetria já agendada).
+
+**etcd perde líder / `context deadline exceeded` / `slow fdatasync` / `ReadIndex took too long`**
+→ talos (leader changes recorrentes; diagnóstico cruzado Talos + VictoriaMetrics + Proxmox).
 
 **Alerta fira mas não chega no Slack**
 → network-policies (`useManagedConfig:true`; snake_case; `disableNamespaceMatcher`).
