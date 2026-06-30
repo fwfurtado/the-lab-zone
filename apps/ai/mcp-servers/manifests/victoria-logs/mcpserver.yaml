@@ -1,0 +1,18 @@
+apiVersion: toolhive.stacklok.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: victoria-logs
+  namespace: ai
+spec:
+  image: ghcr.io/victoriametrics/mcp-victorialogs:v1.9.0
+  transport: streamable-http      # isto é o transport do ToolHive (correto)
+  proxyPort: 8080
+  groupRef:
+    name: lab-readonly
+  env:
+    - name: VL_INSTANCE_ENTRYPOINT
+      value: http://victoria-logs-vls-server.observability.svc.cluster.local:9428
+    - name: MCP_SERVER_MODE
+      value: http                  # isto é o env do mcp-victorialogs (= Streamable HTTP)
+    - name: MCP_LISTEN_ADDR
+      value: :8080                 # casa com o proxyPort que o ToolHive espera
