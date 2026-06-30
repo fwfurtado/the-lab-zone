@@ -8,6 +8,7 @@ spec:
   transport: streamable-http
   mcpPort: 8000
   proxyPort: 8080
+  groupRef: lab-readonly
   args:
     - mcp-server-qdrant
     - --transport

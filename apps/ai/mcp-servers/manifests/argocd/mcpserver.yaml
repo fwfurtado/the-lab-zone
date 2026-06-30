@@ -8,6 +8,7 @@ spec:
   transport: streamable-http
   proxyPort: 8080
   mcpPort: 3000
+  groupRef: lab-readonly
   env:
     - name: MCP_READ_ONLY
       value: "true"

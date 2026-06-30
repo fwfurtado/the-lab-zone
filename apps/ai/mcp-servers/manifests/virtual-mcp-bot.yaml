@@ -1,0 +1,24 @@
+apiVersion: toolhive.stacklok.dev/v1alpha1
+kind: VirtualMCPServer
+metadata:
+  name: lab-vmcp
+  namespace: ai
+spec:
+  config:
+    groupRef: lab-readonly
+
+    # Prefixo evita colisão de tools entre os três backends
+    # (ex. um "search" no qdrant vs outro). O bot vê k8s-ro_*, vm-mcp_*, etc.
+    aggregation:
+      conflictResolution: prefix
+      conflictResolutionConfig:
+        prefixFormat: "{workload}_"
+
+    operational:
+      failureHandling:
+        healthCheckInterval: 30s
+
+  # Q&A interno, sem auth de cliente (o boundary read-only está nos backends).
+  # Se um dia quiser plugar no Authentik, troca pra type: oidc + oidcConfigRef.
+  incomingAuth:
+    type: anonymous

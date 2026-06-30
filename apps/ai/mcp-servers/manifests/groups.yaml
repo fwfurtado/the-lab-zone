@@ -1,0 +1,7 @@
+apiVersion: toolhive.stacklok.dev/v1alpha1
+kind: MCPGroup
+metadata:
+  name: lab-readonly
+  namespace: ai
+spec:
+  description: "MCP servers read-only do the-lab-zone agregados pelo vMCP (ADR-0015)"
