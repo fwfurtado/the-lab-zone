@@ -1,0 +1,56 @@
+# apps/ai/slack-qa-bot/manifests/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-qa-bot
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: slack-qa-bot
+spec:
+  replicas: 1                      # Socket Mode: 1 réplica (2 abririam 2 conexões)
+  strategy:
+    type: Recreate                 # sem sentido rolar 2 sockets simultâneos
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: slack-qa-bot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: slack-qa-bot
+    spec:
+      containers:
+        - name: bot
+          image: ofwfurtado/the-lab-zone-slack-bot:0.1.0
+          ports:
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: TOOLHIVE_VMCP_URL
+              value: http://vmcp-lab-vmcp.ai.svc.cluster.local:4483/mcp
+            - name: LITELLM_BASE_URL
+              value: http://litellm.ai.svc.cluster.local:4000/v1
+            - name: MODEL_NAME
+              value: gpt-oss-120b
+            - name: LOG_LEVEL
+              value: "INFO"
+          envFrom:
+            - secretRef:
+                name: slack-qa-bot
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

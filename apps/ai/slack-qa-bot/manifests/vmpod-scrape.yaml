@@ -1,0 +1,13 @@
+# apps/ai/slack-qa-bot/manifests/vmpodscrape.yaml
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: slack-qa-bot
+  namespace: ai
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: slack-qa-bot
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
