@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: bot
-          image: ofwfurtado/the-lab-zone-slack-bot:0.1.0
+          image: ofwfurtado/the-lab-zone-slack-bot:0.1.1
           ports:
             - name: metrics
               containerPort: 9090
