@@ -17,11 +17,11 @@ spec:
     - name: PROXMOX_URL
       value: "https://pve.mgmt.the-lab.zone:8006/api2/json"
   secrets:
-    - name: proxmox-mcp-secret
-      key: token-id
+    - name: proxmox-mcp-token-id
+      key: value
       targetEnvName: PROXMOX_TOKEN_ID
-    - name: proxmox-mcp-secret
-      key: token-secret
+    - name: proxmox-mcp-token-secret
+      key: value
       targetEnvName: PROXMOX_TOKEN_SECRET
   permissionProfile:
     type: builtin
