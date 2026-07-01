@@ -9,7 +9,7 @@ spec:
 
   storage:
     size: 20Gi
-    storageClass: openebs-hostpath
+    storageClass: openebs-hostpath-ssd
 
   postgresql:
     parameters:
