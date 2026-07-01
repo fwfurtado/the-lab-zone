@@ -1,0 +1,35 @@
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: proxmox
+  namespace: ai
+spec:
+  image: ghcr.io/fwfurtado/proxmox-mcp-server:0.1.0
+  transport: streamable-http
+  proxyPort: 8080
+  mcpPort: 8080
+  groupRef:
+    name: lab-readonly
+  args:
+    - --transport
+    - streamable-http
+  env:
+    - name: PROXMOX_URL
+      value: "https://pve.mgmt.the-lab.zone:8006/api2/json"
+  secrets:
+    - name: proxmox-mcp-secret
+      key: token-id
+      targetEnvName: PROXMOX_TOKEN_ID
+    - name: proxmox-mcp-secret
+      key: token-secret
+      targetEnvName: PROXMOX_TOKEN_SECRET
+  permissionProfile:
+    type: builtin
+    name: network
+  resources:
+    limits:
+      cpu: "250m"
+      memory: "128Mi"
+    requests:
+      cpu: "25m"
+      memory: "32Mi"
