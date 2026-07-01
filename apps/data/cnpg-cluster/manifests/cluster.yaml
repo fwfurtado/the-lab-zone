@@ -22,12 +22,6 @@ spec:
       checkpoint_completion_target: "0.9"
       wal_buffers: "16MB"
 
-  bootstrap:
-    recovery:
-      source: origin
-      recoveryTarget:
-        backupID: "20260701T211627"
-
   enableSuperuserAccess: true
   superuserSecret:
     name: cnpg-superuser
