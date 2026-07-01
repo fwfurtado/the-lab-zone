@@ -6,7 +6,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: openebs-hostpath
+  storageClassName: openebs-hostpath-ssd
   resources:
     requests:
       # Com Qdrant/Memgraph/CNPG externos, /app/data guarda sobretudo os
