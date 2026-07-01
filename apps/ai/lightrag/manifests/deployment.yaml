@@ -87,7 +87,7 @@ spec:
               value: "memgraph"
             # Memgraph community senha via ESO
             - name: MEMGRAPH_USERNAME
-              value: "lightrag"
+              value: "admin"
 
             # --- LLM (extracao/query) via LiteLLM ---
             - name: LLM_BINDING
