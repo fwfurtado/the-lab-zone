@@ -12,7 +12,7 @@ apiKey:
 
 persistence:
   size: 50Gi
-  storageClassName: openebs-hostpath
+  storageClassName: openebs-hostpath-ssd
   accessModes:
     - ReadWriteOnce
 
