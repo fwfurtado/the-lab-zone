@@ -26,7 +26,7 @@ valkeyConfig: |
 dataStorage:
   enabled: true
   requestedSize: 2Gi
-  className: openebs-hostpath
+  className: openebs-hostpath-ssd
   accessModes:
     - ReadWriteOnce
 
