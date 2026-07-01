@@ -19,7 +19,7 @@ vmsingle:
       vmalert.proxyURL: "http://vmalert-victoria-metrics-vmks.observability.svc.cluster.local:8080"
     retentionPeriod: "30d"
     storage:
-      storageClassName: openebs-hostpath
+      storageClassName: openebs-hostpath-ssd
       resources:
         requests:
           storage: 50Gi
