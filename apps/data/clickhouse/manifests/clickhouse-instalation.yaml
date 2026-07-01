@@ -165,7 +165,7 @@ spec:
           resources:
             requests:
               storage: 100Gi
-          storageClassName: openebs-hostpath
+          storageClassName: openebs-hostpath-ssd
 
       - name: clickhouse-log
         spec:
@@ -174,4 +174,4 @@ spec:
           resources:
             requests:
               storage: 1Gi
-          storageClassName: openebs-hostpath
+          storageClassName: openebs-hostpath-ssd
