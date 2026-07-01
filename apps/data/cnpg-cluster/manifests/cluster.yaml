@@ -46,11 +46,3 @@ spec:
   resources:
     requests: { cpu: 200m, memory: 512Mi }
     limits:   { memory: 2Gi }
-
-  # A peça que o chart não sabia expressar: WAL archiving + backup via plugin (sidecar)
-  plugins:
-    - name: barman-cloud.cloudnative-pg.io
-      isWALArchiver: true
-      enabled: true
-      parameters:
-        barmanObjectName: cnpg-garage-store
