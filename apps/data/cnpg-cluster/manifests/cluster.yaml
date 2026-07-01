@@ -24,8 +24,9 @@ spec:
 
   bootstrap:
     recovery:
-      backup:
-        name: cnpg-pre-ssd-migration-20260701
+      source: origin
+      recoveryTarget:
+        backupID: "20260701T211627"
 
   enableSuperuserAccess: true
   superuserSecret:
@@ -44,3 +45,11 @@ spec:
   resources:
     requests: { cpu: 200m, memory: 512Mi }
     limits:   { memory: 2Gi }
+
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: cnpg-garage-store
+          serverName: cnpg-cluster
