@@ -1,0 +1,17 @@
+# Cache do HuggingFace pro vLLM. openebs-hostpath e node-local (RWO) -> provisiona
+# no worker-3-gpu (onde o pod GPU pousa via RuntimeClass), pesos ficam locais ao card.
+# Prune=false: nao apaga os pesos baixados se o app for removido/re-sincronizado.
+# zeta-2 (8B) em bf16 ~16GB + overhead do cache -> 40Gi folgado.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: next-edit-models
+  namespace: ai
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: openebs-hostpath
+  resources:
+    requests:
+      storage: 40Gi
