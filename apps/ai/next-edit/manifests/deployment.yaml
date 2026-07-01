@@ -1,0 +1,106 @@
+# vLLM servindo zed-industries/zeta-2 (next-edit prediction) 100% residente na 3090.
+# runtimeClassName: nvidia -> injeta nodeSelector (nvidia.com/gpu.present) + toleration
+# do taint + runtime GPU. Com o Ollama em replicas:0, a 3090 esta livre e inteira.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: next-edit
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: next-edit
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # PVC RWO: nunca dois pods montando o mesmo volume no rollout
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: next-edit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: next-edit
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: vllm
+          # ATENCAO: pin a versao ESTAVEL atual do vLLM (nao use :latest).
+          # Confira em github.com/vllm-project/vllm/releases. O tag abaixo e placeholder.
+          image: vllm/vllm-openai:v0.24.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --model=zed-industries/zeta-2
+            # served-model-name = o que o Zed manda em "model". Com prompt_format:infer
+            # o Zed detecta o formato zeta2 a partir desse nome.
+            - --served-model-name=zeta2
+            # 3090 (Ampere) NAO tem FP8 tensor cores -> bf16 nativo. Nada de fp8/fp8_e4m3.
+            - --dtype=bfloat16
+            # Contexto do edit-predict (edits recentes + janela do arquivo). 16k e folgado;
+            # ajuste se quiser mais KV cache livre.
+            - --max-model-len=16384
+            # Card inteiro livre -> 0.90 seguro (~21.6GB pro modelo + KV pool).
+            - --gpu-memory-utilization=0.90
+            # Prompt reuse alto no edit-predict -> prefix caching ajuda muito.
+            - --enable-prefix-caching
+            - --host=0.0.0.0
+            - --port=8000
+            # --- Speculative decoding (ngram): grande ganho de latencia p/ edit-predict,
+            # pois a maioria dos tokens ja esta no prompt (so gera o diff). MAS a sintaxe
+            # do flag VARIA por versao do vLLM. Habilite SO depois do boot baseline OK, e
+            # valide contra a tua tag pinada. Forma recente (vLLM novo):
+            #   - --speculative-config={"method":"ngram","num_speculative_tokens":8,"prompt_lookup_max":4,"prompt_lookup_min":2}
+          env:
+            # Cache do HF no PVC -> baixa o modelo uma vez, reusa em todo restart.
+            - name: HF_HOME
+              value: /data/hf
+            # Modelo e publico (open-weights); token so ajuda contra rate limit anonimo.
+            # Descomente + crie a ExternalSecret se bater em 429 no pull:
+            # - name: HF_TOKEN
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: next-edit-hf
+            #       key: HF_TOKEN
+          ports:
+            - name: http
+              containerPort: 8000
+          # vLLM usa /dev/shm; o default de 64Mi do container estoura mesmo em 1 GPU.
+          volumeMounts:
+            - name: models
+              mountPath: /data/hf
+            - name: dshm
+              mountPath: /dev/shm
+          # 1o boot baixa ~16GB do HF + carrega na VRAM -> startupProbe generoso
+          # (nao deixa o liveness matar o pod durante o download).
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 90 # ~15min de folga pro 1o pull
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: "16Gi"
+            requests:
+              cpu: "1"
+              memory: "4Gi"
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: next-edit-models
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi

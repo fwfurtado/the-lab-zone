@@ -1,0 +1,15 @@
+# vLLM expoe metricas Prometheus em /metrics na propria porta http (8000).
+# Com o dcgm-exporter no worker-3-gpu voce ja tem GPU util/mem; isto adiciona
+# latencia de inferencia, throughput e ocupacao do KV cache do vLLM.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: next-edit
+  namespace: ai
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: next-edit
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics

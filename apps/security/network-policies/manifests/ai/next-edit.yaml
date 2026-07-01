@@ -1,0 +1,19 @@
+# Libera o Gateway (Cilium ingress/Envoy) a alcancar o vLLM na 8000 -> caminho do
+# HTTPRoute. Mesma forma do litellm (fromEntities: ingress). Sem regra pra clientes
+# in-cluster: quem consome e o Zed, de fora, via Gateway.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: next-edit-default-deny-ingress
+  namespace: ai
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: next-edit
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP

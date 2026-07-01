@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: next-edit
+  namespace: argocd
+  annotations:
+    # GPU workload (como o ollama, wave 5), depois do core (gateway, device-plugin,
+    # netpol). Nao depende do litellm — Zed bate direto via HTTPRoute.
+    argocd.argoproj.io/sync-wave: "5"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: ai
+  source:
+    repoURL: https://github.com/fwfurtado/the-lab-zone
+    targetRevision: main
+    path: apps/ai/next-edit/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ai
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
