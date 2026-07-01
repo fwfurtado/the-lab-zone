@@ -19,6 +19,7 @@ persistentVolumeClaim:
   storageClassName: openebs-hostpath-ssd
   storageSize: 50Gi
   libStorageAccessMode: ReadWriteOnce
+  logStorageClassName: openebs-hostpath-ssd
 
 # Flags do Memgraph — durabilidade habilitada
 memgraphConfig:
