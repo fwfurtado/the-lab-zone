@@ -16,7 +16,7 @@ secrets:
 
 persistentVolumeClaim:
   createStorageClaim: true
-  storageClassName: openebs-hostpath
+  storageClassName: openebs-hostpath-ssd
   storageSize: 50Gi
   libStorageAccessMode: ReadWriteOnce
 
