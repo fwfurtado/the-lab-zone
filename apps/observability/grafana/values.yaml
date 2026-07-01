@@ -54,7 +54,7 @@ envValueFrom:
 
 persistence:
   enabled: true
-  storageClassName: openebs-hostpath
+  storageClassName: openebs-hostpath-ssd
   size: 5Gi
   accessModes:
     - ReadWriteOnce
