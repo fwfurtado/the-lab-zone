@@ -23,11 +23,9 @@ spec:
       wal_buffers: "16MB"
 
   bootstrap:
-    initdb:
-      database: app
-      owner: app
-      secret:
-        name: cnpg-app-user
+    recovery:
+      backup:
+        name: cnpg-pre-ssd-migration-20260701
 
   enableSuperuserAccess: true
   superuserSecret:
