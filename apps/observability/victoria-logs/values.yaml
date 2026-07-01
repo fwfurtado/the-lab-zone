@@ -17,7 +17,7 @@ server:
 
   persistentVolume:
     enabled: true
-    storageClassName: openebs-hostpath
+    storageClassName: openebs-hostpath-ssd
     size: 30Gi
 
   resources:
