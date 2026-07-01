@@ -68,7 +68,7 @@ persistence:
     storageClass: "openebs-hostpath"
     size: 5Gi
   data:
-    storageClass: "openebs-hostpath"
+    storageClass: "openebs-hostpath-ssd"
     size: 100Gi
 
 image:
