@@ -1,0 +1,15 @@
+# Talos user volume: seleciona o disco dedicado de PV do tier SSD,
+# formata em xfs e monta em /var/mnt/pv-data-ssd. Aplica so nos workers.
+#
+# O layout padrao usa 200GiB em virtio2/local-ssd. Usamos /dev/vdc +
+# transport=virtio, confirmados nos workers via `talosctl get disks`.
+apiVersion: v1alpha1
+kind: UserVolumeConfig
+name: pv-data-ssd
+provisioning:
+  diskSelector:
+    match: '!system_disk && disk.transport == "virtio" && disk.dev_path == "/dev/vdc"'
+  minSize: 100GiB
+  grow: true
+filesystem:
+  type: xfs

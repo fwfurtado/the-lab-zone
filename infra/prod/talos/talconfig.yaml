@@ -19,6 +19,7 @@ controlPlane:
 worker:
   patches:
     - "@patches/workers/user-volume-config.yaml"
+    - "@patches/workers/user-volume-config-ssd.yaml"
 
 patches:
   - "@patches/all/registry-mirrors.yaml"

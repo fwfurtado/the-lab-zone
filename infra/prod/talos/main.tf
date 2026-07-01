@@ -42,6 +42,19 @@ resource "proxmox_virtual_environment_vm" "talos" {
     }
   }
 
+  # disco de PV no tier SSD — coexistente com o tier atual para migracao gradual
+  dynamic "disk" {
+    for_each = try(each.value.pv_ssd_disk_size, null) != null ? [1] : []
+    content {
+      datastore_id = "local-ssd"
+      interface    = "virtio2"        # ← virtio2 → /dev/vdc
+      size         = each.value.pv_ssd_disk_size
+      iothread     = true
+      discard      = "on"
+      backup       = false
+    }
+  }
+
   network_device {
     bridge = "vmbr0"                  # ajuste se usar VLAN: vlan_id = 30
   }

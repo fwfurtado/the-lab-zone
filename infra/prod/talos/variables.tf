@@ -22,13 +22,14 @@ variable "nodes" {
     memory = number #| MB
     disk   = number #| GB
     pv_disk_size = optional(number) #| GB
+    pv_ssd_disk_size = optional(number) #| GB
   }))
 
   default = {
     "cp-1"     = { vcpus = 4, memory = 8192, disk = 60 }
     "cp-2"     = { vcpus = 4, memory = 8192, disk = 60 }
     "cp-3"     = { vcpus = 4, memory = 8192, disk = 60 }
-    "worker-1" = { vcpus = 8, memory = 32768, disk = 100, pv_disk_size = 400 }
-    "worker-2" = { vcpus = 8, memory = 32768, disk = 100, pv_disk_size = 400 }
+    "worker-1" = { vcpus = 8, memory = 32768, disk = 100, pv_disk_size = 400, pv_ssd_disk_size = 200 }
+    "worker-2" = { vcpus = 8, memory = 32768, disk = 100, pv_disk_size = 400, pv_ssd_disk_size = 200 }
   }
 }

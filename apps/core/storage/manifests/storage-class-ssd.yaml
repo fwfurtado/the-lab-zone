@@ -1,0 +1,17 @@
+# StorageClass opcional para o tier SSD dos workers.
+# Usa o segundo user volume do Talos (/var/mnt/pv-data-ssd), separado do tier
+# legado em /var/mnt/pv-data. Nao e default para permitir migracao controlada.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-hostpath-ssd
+  annotations:
+    openebs.io/cas-type: local
+    cas.openebs.io/config: |
+      - name: StorageType
+        value: "hostpath"
+      - name: BasePath
+        value: "/var/mnt/pv-data-ssd/openebs"
+provisioner: openebs.io/local
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
