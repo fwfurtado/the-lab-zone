@@ -46,15 +46,15 @@ proxyConfigMap:
   create: true
 proxy_config:
   model_list:
-    # --- local (self-hosted, RTX 3090 @ worker-3-gpu — free + privado) ---
-    - model_name: qwen3-coder-30b-local
-      litellm_params:
-        # MoE: 30B total / 3B ativos. q4_K_M = 19GB -> cabe na 3090.
-        model: ollama_chat/qwen3-coder:30b-a3b-q4_K_M
-        api_base: http://ollama.ai.svc.cluster.local:11434
-        num_ctx: 32768 # capa o contexto p/ nao estourar os 24GB (19GB peso + KV)
-      model_info:
-        mode: chat
+    # # --- local (self-hosted, RTX 3090 @ worker-3-gpu — free + privado) ---
+    # - model_name: qwen3-coder-30b-local
+    #   litellm_params:
+    #     # MoE: 30B total / 3B ativos. q4_K_M = 19GB -> cabe na 3090.
+    #     model: ollama_chat/qwen3-coder:30b-a3b-q4_K_M
+    #     api_base: http://ollama.ai.svc.cluster.local:11434
+    #     num_ctx: 32768 # capa o contexto p/ nao estourar os 24GB (19GB peso + KV)
+    #   model_info:
+    #     mode: chat
 
     - model_name: lightrag
       litellm_params:
