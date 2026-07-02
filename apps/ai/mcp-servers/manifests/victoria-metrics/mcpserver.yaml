@@ -15,18 +15,8 @@ spec:
     - name: VM_INSTANCE_TYPE
       value: "single"
     - name: MCP_SERVER_MODE
-      value: "http"
+      value: http
     - name: MCP_LISTEN_ADDR
-      value: "0.0.0.0:8080"
+      value: :8080
     - name: MCP_LOG_FORMAT
       value: "json"
-  permissionProfile:
-    type: builtin
-    name: network
-  resources:
-    limits:
-      cpu: "250m"
-      memory: "1Gi"
-    requests:
-      cpu: "25m"
-      memory: "64Mi"
