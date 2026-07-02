@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-callback-files
+  namespace: ai
+data:
+  # Shim: o LiteLLM proxy resolve callbacks custom no formato "arquivo.instancia"
+  # e exige uma INSTÂNCIA nomeada. O headroom-ai só exporta a CLASSE
+  # HeadroomCallback, então este arquivo cria a instância que o
+  # litellm_settings.callbacks referencia (custom_callbacks.headroom_callback).
+  # Montado via subPath em /etc/litellm/custom_callbacks.py (dir do --config),
+  # onde o resolver de callback do LiteLLM procura.
+  custom_callbacks.py: |
+    from headroom.integrations.litellm_callback import HeadroomCallback
+
+    headroom_callback = HeadroomCallback()

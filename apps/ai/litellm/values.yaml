@@ -43,6 +43,19 @@ migrationJob:
 serviceMonitor:
   enabled: false
 
+# Monta o shim custom_callbacks.py NO dir do config (/etc/litellm) via subPath,
+# pra não esconder o config.yaml. ConfigMap em manifests/callback-configmap.yaml.
+# O chart faz append destes em .Values.volumeMounts / .Values.volumes.
+volumeMounts:
+  - name: callback-files
+    mountPath: /etc/litellm/custom_callbacks.py
+    subPath: custom_callbacks.py
+
+volumes:
+  - name: callback-files
+    configMap:
+      name: litellm-callback-files
+
 proxyConfigMap:
   create: true
 proxy_config:
@@ -134,11 +147,13 @@ proxy_config:
     user_header_name: X-OpenWebUI-User-Id
 
   litellm_settings:
-    # headroom: comprime tool outputs/logs no pre_call_hook, antes
-    # de irem ao provedor. Roda in-process no LiteLLM; requer a imagem custom.
+    # headroom: comprime tool outputs/logs no pre_call_hook, antes de irem ao
+    # provedor. In-process no LiteLLM; requer a imagem custom (headroom-ai) +
+    # o shim custom_callbacks.py (ConfigMap litellm-callback-files montado em
+    # /etc/litellm). O LiteLLM exige uma INSTÂNCIA nomeada, não a classe.
     # NOTA: comprime TODO o tráfego do gateway (inclui embeddings do LightRAG).
     callbacks:
-      - "headroom.integrations.litellm_callback.HeadroomCallback"
+      - "custom_callbacks.headroom_callback"
     success_callback:
       - "langfuse"
     num_retries: 2
