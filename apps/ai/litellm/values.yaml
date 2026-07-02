@@ -152,8 +152,7 @@ proxy_config:
     # o shim custom_callbacks.py (ConfigMap litellm-callback-files montado em
     # /etc/litellm). O LiteLLM exige uma INSTÂNCIA nomeada, não a classe.
     # NOTA: comprime TODO o tráfego do gateway (inclui embeddings do LightRAG).
-    callbacks:
-      - "custom_callbacks.headroom_callback"
+    callbacks: "custom_callbacks.headroom_callback"
     success_callback:
       - "langfuse"
     num_retries: 2
