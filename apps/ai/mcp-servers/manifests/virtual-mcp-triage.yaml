@@ -1,0 +1,64 @@
+apiVersion: toolhive.stacklok.dev/v1alpha1
+kind: VirtualMCPServer
+metadata:
+  name: triage-vmcp
+  namespace: ai
+spec:
+  groupRef:
+    name: lab-readonly
+  config:
+    aggregation:
+      conflictResolution: prefix
+      conflictResolutionConfig:
+        prefixFormat: "{workload}_"
+      excludeAllTools: true
+      tools:
+        # --- estado k8s ---
+        - workload: kubernetes
+          filter:
+            - events_list
+            - namespaces_list
+            - pods_list
+            - pods_list_in_namespace
+            - pods_get
+            - pods_log
+            - pods_top
+            - nodes_top
+            - nodes_stats_summary
+            - nodes_log
+            - resources_get
+            - resources_list
+        # --- métricas (MetricsQL) ---
+        - workload: victoria-metrics
+          filter:
+            - active_queries
+            - alerts
+            - documentation
+            - explain_query
+            - label_values
+            - labels
+            - metric_statistics
+            - metrics
+            - metrics_metadata
+            - prettify_query
+            - query
+            - query_range
+            - rules
+            - series
+            - top_queries
+            - tsdb_status
+        # --- logs (LogsQL) ---
+        - workload: victoria-logs
+          filter:
+            - query
+            - hits
+            - facets
+            - stats_query_range
+            - streams
+            - field_names
+            - field_values
+    operational:
+      failureHandling:
+        healthCheckInterval: 30s
+  incomingAuth:
+    type: anonymous
