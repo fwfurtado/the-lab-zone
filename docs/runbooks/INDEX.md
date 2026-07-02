@@ -58,6 +58,10 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 **etcd perde líder / `context deadline exceeded` / `slow fdatasync` / `ReadIndex took too long`**
 → talos (leader changes recorrentes; diagnóstico cruzado Talos + VictoriaMetrics + Proxmox).
 
+**Argo mostra `Unable to create Service resource` / webhook `connection refused` / pod `Pending` sem evento**
+→ talos (cascata de control plane: scheduler/operator/webhook perdendo lease) e storage
+(migracao stateful em curso pode mascarar a raiz).
+
 **Alerta fira mas não chega no Slack**
 → network-policies (`useManagedConfig:true`; snake_case; `disableNamespaceMatcher`).
 

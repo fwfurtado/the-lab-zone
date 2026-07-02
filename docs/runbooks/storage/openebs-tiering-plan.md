@@ -90,3 +90,62 @@ Esses dois devem continuar node-local no worker GPU.
 - `pv-data-ssd` montado nos workers
 - workloads mais ruidosos fora do `local-nvme`
 - menos oscillacao de etcd/apiserver sob carga de apps
+
+## Incidente real de migracao para SSD (2026-07-01)
+
+**Escopo:** migracao online/offline de workloads stateful do tier legado `openebs-hostpath`
+(`local-nvme`) para `openebs-hostpath-ssd`, em paralelo a um incidente de control plane.
+
+### O que realmente aconteceu
+
+1. O storage novo (`local-ssd` + `openebs-hostpath-ssd`) foi criado corretamente.
+2. As migracoes de PVC reduziram pressao no `local-nvme`, mas durante a janela houve
+   oscilacao do control plane (`etcdserver: leader changed`, scheduler/operator perdendo lease).
+3. O caso mais sensivel foi o `data/cnpg-cluster`:
+   - PVC antigo foi copiado para um PVC temporario de seguranca (`cnpg-cluster-migration`);
+   - o restore do CNPG no PVC novo chegou a travar varias vezes por sintomas **secundarios**
+     do control plane: Kyverno webhook indisponivel, `barman-cloud` flapping, pod do recovery
+     preso em `Pending` sem evento;
+   - depois que o restore completou, o `cnpg-operator` ainda falhou na extracao de status por
+     mismatch de certificado entre `cnpg-cluster-server` e `cnpg-cluster-ca`;
+   - a correcao foi rotacionar `cnpg-cluster-server` e `cnpg-cluster-replication`, validar o
+     par com `openssl verify`, e so entao retomar a reconciliacao.
+
+### Sinais que distinguiram problema de storage vs problema de control plane
+
+**Parecia storage/localpv:**
+- pods de recovery e do banco presos em `Pending`;
+- PVC novo em `initializing` por varios loops;
+- apps do Argo em `Unknown`/`Processing`.
+
+**Era control plane/operator em cascata:**
+- `kube-scheduler` em `CrashLoopBackOff`/perda de lease;
+- pod `Pending` sem `FailedScheduling`;
+- `cnpg-webhook-service` sem endpoint pronto;
+- `cnpg-operator` perdendo lease e falhando em plugin/webhook;
+- `kubectl` intermitente com `etcdserver: leader changed` e `request timed out`.
+
+### Mitigacao que funcionou
+
+- manter sempre um PVC temporario/copia offline antes da troca definitiva de `storageClass`;
+- para restore CNPG:
+  - usar backup valido confirmado (`backupId`);
+  - pausar autosync do app durante o DR;
+  - recriar job/pod de recovery quando o scheduler destravava;
+  - usar bind explicito do pod ao node quando o scheduler ficou preso sem evento;
+  - rotacionar os certs do CNPG se o operator reportar
+    `tls: failed to verify certificate` ao ler `/pg/status`.
+- para o cluster em geral:
+  - so considerar a migracao encerrada quando Argo voltar a `Synced/Healthy`,
+    `cnpg-operator`/webhook estiverem `Running`, e o workload responder funcionalmente.
+
+### Licoes especificas
+
+- trocar `storageClass` nao migra dado; copia offline ou backup/restore continua obrigatorio;
+- numa migracao stateful, `Pending` sem evento quase sempre e scheduler/control plane, nao PVC;
+- para CNPG, o estado funcional do banco (`pg_is_in_recovery() = false`, service `rw`
+  apontando pro pod) vale mais do que o `status.phase` durante a oscilacao do operator;
+- mismatch de cert do CNPG pode aparecer **depois** do restore e mascarar um cluster ja
+  funcional;
+- separar os stores ruidosos do `local-nvme` continua correto; o que prolongou o incidente
+  foi a instabilidade do control plane, nao o tiering em si.

@@ -115,6 +115,50 @@ suporta os discos dos control planes no Proxmox. A evidência principal foi:
 - Quando os 3 control planes compartilham o mesmo pool, erro sistêmico do etcd tende a
   ser investigado primeiro no backend compartilhado, não dentro das VMs.
 
+## Cascata no GitOps/data plane: `Unable to create Service resource`, scheduler flapping, webhook/operator caindo
+
+**Sintoma:** durante a migracao dos stores para `openebs-hostpath-ssd`, o ArgoCD mostrou
+apps `Degraded`/`Unknown` e o Gateway apareceu como degradado com `Unable to create Service resource`.
+No mesmo periodo, pods do CNPG ficaram `Pending` sem evento, o `cnpg-operator` e o
+`kube-scheduler` entraram em `CrashLoopBackOff`, e webhooks (`cnpg-webhook-service`,
+Kyverno) alternaram entre `connection refused`, `no route to host`, `etcdserver: leader changed`
+e `context deadline exceeded`.
+
+**Causa:** a falha primaria continuou sendo a mesma classe do incidente acima: oscilacao do
+control plane por perda de lease/latencia no apiserver-etcd. Os sintomas no plano de apps
+foram secundarios:
+- scheduler perde lease -> pod fica `Pending` sem `FailedScheduling`;
+- operator perde lease -> webhook fica sem endpoint pronto;
+- mutating/validating webhooks indisponiveis -> updates/creates falham no Argo;
+- controllers de apps reportam degradacao que parece local, mas a raiz e o control plane.
+
+**Diagnostico prático:**
+- `kubectl -n kube-system get pod -l component=kube-scheduler -o wide`
+- `kubectl -n kube-system logs kube-scheduler-<cp> --previous`
+- `kubectl -n cnpg-system get deploy,pod,svc,endpoints`
+- `kubectl -n cnpg-system logs deploy/cnpg-operator-cloudnative-pg --since=5m`
+- `kubectl -n argocd get applications.argoproj.io`
+
+Sinais fortes desta classe:
+- `Leaderelection lost` em scheduler/operator;
+- Service de webhook com apenas `notReadyAddresses`;
+- pod `Pending` com PVC `Bound` e sem evento de scheduling;
+- retries do Argo com erro de webhook, nao de spec invalida.
+
+**Mitigacao usada no incidente real (2026-07-01):**
+- tratar primeiro como incidente de control plane, nao como bug isolado do app;
+- pausar autosync/self-heal dos apps mais sensiveis enquanto o webhook estava flapping;
+- so usar patch/delete pontual em pods/jobs quando a raiz era conhecida e o runtime precisava
+  destravar;
+- retomar reconciliacao so depois de:
+  - schedulers `1/1 Running`;
+  - operator/webhook com endpoint pronto;
+  - apps do Argo voltando para `Synced`/`Healthy`.
+
+**Licao:** `Unable to create Service resource` no Argo, sozinho, e diagnostico fraco. Quando vier
+junto de `leader changed`, `context deadline exceeded`, webhook `connection refused` e
+operators/schedulers reiniciando, a raiz esta no control plane ate prova em contrario.
+
 ## Lição transversal
 
 No Talos, mudança de runtime do control plane (métricas, taint) é sempre via machine
