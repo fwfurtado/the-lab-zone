@@ -20,3 +20,29 @@ subjects:
   - kind: ServiceAccount
     name: kubernetes-mcp
     namespace: ai
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubernetes-mcp-node-stats
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes/stats     # kubernetes_nodes_stats_summary (PSI, cpu/mem/fs)
+      - nodes/proxy     # acesso ao kubelet via API server proxy (stats + logs)
+      - nodes/metrics
+      - nodes/log       # kubernetes_nodes_log
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-mcp-node-stats
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubernetes-mcp-node-stats
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-mcp
+    namespace: ai
