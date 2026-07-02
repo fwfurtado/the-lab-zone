@@ -28,6 +28,7 @@ metadata:
 rules:
   - apiGroups: [""]
     resources:
+      - nodes
       - nodes/stats     # kubernetes_nodes_stats_summary (PSI, cpu/mem/fs)
       - nodes/proxy     # acesso ao kubelet via API server proxy (stats + logs)
       - nodes/metrics
