@@ -11,50 +11,44 @@ spec:
       conflictResolution: prefix
       conflictResolutionConfig:
         prefixFormat: "{workload}_"
-      excludeAllTools: true
+      # SEM excludeAllTools. Listo só o que ESCONDER.
       tools:
-        # --- estado k8s ---
-        - workload: kubernetes
-          filter:
-            - events_list
-            - namespaces_list
-            - pods_list
-            - pods_list_in_namespace
-            - pods_get
-            - pods_log
-            - pods_top
-            - nodes_top
-            - nodes_stats_summary
-            - nodes_log
-            - resources_get
-            - resources_list
-        # --- métricas (MetricsQL) ---
+        # --- workloads fora do escopo: zerados ---
+        - workload: argocd
+          excludeAll: true
+        - workload: grafana
+          excludeAll: true
+        - workload: proxmox
+          excludeAll: true
+        - workload: qdrant-mcp
+          excludeAll: true
+        # --- kubernetes: passa inteiro (todas as 13 servem à triagem) ---
+        #   (não listado de propósito)
+        # --- victoria-metrics: poda autoria/otimização, mantém investigação ---
         - workload: victoria-metrics
           filter:
-            - active_queries
-            - alerts
-            - documentation
-            - explain_query
-            - label_values
-            - labels
-            - metric_statistics
-            - metrics
-            - metrics_metadata
-            - prettify_query
             - query
             - query_range
-            - rules
+            - labels
+            - label_values
             - series
-            - top_queries
+            - metrics
+            - metrics_metadata
+            - metric_statistics
+            - rules
+            - alerts
             - tsdb_status
-        # --- logs (LogsQL) ---
+        # --- victoria-logs: poda documentation (RAG) e flags ---
         - workload: victoria-logs
           filter:
             - query
             - hits
             - facets
+            - stats_query
             - stats_query_range
             - streams
+            - stream_field_names
+            - stream_field_values
             - field_names
             - field_values
     operational:
