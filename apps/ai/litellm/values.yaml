@@ -1,6 +1,7 @@
 image:
-  repository: ghcr.io/berriai/litellm-database
-  tag: "" # segue o appVersion do chart
+  # Imagem CUSTOM = litellm-database + headroom-ai (ver docker/litellm-headroom/Dockerfile).
+  repository: ofwfurtado/litellm-headroom
+  tag: "v1.90.2-headroom-0.28.0"
 
 replicaCount: 1
 
@@ -133,6 +134,11 @@ proxy_config:
     user_header_name: X-OpenWebUI-User-Id
 
   litellm_settings:
+    # headroom: comprime tool outputs/logs no pre_call_hook, antes
+    # de irem ao provedor. Roda in-process no LiteLLM; requer a imagem custom.
+    # NOTA: comprime TODO o tráfego do gateway (inclui embeddings do LightRAG).
+    callbacks:
+      - "headroom.integrations.litellm_callback.HeadroomCallback"
     success_callback:
       - "langfuse"
     num_retries: 2
