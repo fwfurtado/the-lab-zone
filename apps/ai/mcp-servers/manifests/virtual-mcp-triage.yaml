@@ -18,13 +18,13 @@ spec:
           excludeAll: true
         - workload: grafana
           excludeAll: true
-        - workload: proxmox
-          excludeAll: true
         - workload: qdrant-mcp
           excludeAll: true
-        # --- kubernetes: passa inteiro (todas as 13 servem à triagem) ---
-        #   (não listado de propósito)
-        # --- victoria-metrics: poda autoria/otimização, mantém investigação ---
+
+        - workload: proxmox
+          excludeAll: false
+        - workload: kubernetes
+          excludeAll: false
         - workload: victoria-metrics
           filter:
             - query
