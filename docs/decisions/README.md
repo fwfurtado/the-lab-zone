@@ -20,6 +20,7 @@ Decisões registradas no formato Nygard (contexto → decisão → consequência
 | [0013](0013-argo-workflows-git-artifact-elt.md) | Argo Workflows + git artifact (ELT) | 8 | Imagens genéricas; código por git artifact, sem rebuild |
 | [0014](0014-dr-destino-sempre-b2.md) | Destino de DR sempre B2 (off-site) | 10 | Garage morre com o T630; B2 é off-site |
 | [0015](0015-agentes-readonly-via-pr.md) | Agentes read-only, mudanças só via PR | 11 | Nunca mutam o cluster; coerente com GitOps puro |
+| [0016](0016-headroom-descartado-cap-de-contexto-proprio.md) | Headroom descartado; cap de contexto próprio | 11 | 0% de compressão no estado k8s heterogêneo; cap determinístico resolve sem latência |
 
 ## Não-decisões documentadas
 
