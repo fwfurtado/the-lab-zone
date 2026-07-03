@@ -83,6 +83,15 @@ defaultRules:
     kubernetesStorage: true
     kubernetesSystem: true
     node: true
+    # Opt-in de triagem por agente (ADR-0017): o label entra na REGRA, então
+    # TODA instância de TargetDown (qualquer job/namespace) vira candidata a
+    # triagem. Escopo deliberado: target down é exatamente a classe de sintoma
+    # que o agente investiga bem (scrape, CNP, pod, rede). O merge do chart
+    # preserva severity e adiciona triage.
+    TargetDown:
+      spec:
+        labels:
+          triage: "true"
 
 # ArgoCD: dashboards ConfigMaps grandes estouram annotation de 256KB no client-side apply
 defaultDashboards:
