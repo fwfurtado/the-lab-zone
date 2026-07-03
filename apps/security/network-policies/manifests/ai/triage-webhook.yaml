@@ -1,0 +1,38 @@
+# Borda da triagem (Fase B, ADR-0017). Duas origens, cada uma na sua porta:
+# - vmalertmanager (observability) -> 8080: entrega do webhook
+# - vmagent (observability)        -> 9090/9091: scrape da borda e do núcleo
+# O núcleo Python (8081) NÃO aparece aqui de propósito: bind em 127.0.0.1,
+# não existe na rede do cluster.
+#
+# NOTA pré-merge: validar os labels reais do pod do Alertmanager com
+#   kubectl get pod -n observability --show-labels | grep alertmanager
+# O vm-operator aplica app.kubernetes.io/name=vmalertmanager nos pods do CR;
+# se o cluster divergir, ajustar o matchLabels abaixo.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: triage-webhook-default-deny-ingress
+  namespace: ai
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: triage-webhook
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmalertmanager
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+            - port: "9091"
+              protocol: TCP

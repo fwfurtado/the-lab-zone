@@ -20,6 +20,32 @@ spec:
           - alertname =~ "Watchdog|InfoInhibitor"
         continue: false
 
+      # Triagem por agente (Fase B, ADR-0017). OPT-IN: só alertas cujo VMRule
+      # carrega o label triage="true". continue: true para o alerta seguir
+      # descendo e TAMBÉM notificar o Slack (rota catch-all abaixo).
+      #
+      # Agrupamento próprio, mais largo que o default: a triagem quer o
+      # CONTEXTO do namespace inteiro, não um webhook por alertname.
+      # - group_wait 2m: espera alertas correlatos chegarem antes de triar.
+      # - group_interval 10m: alerta novo no grupo => webhook novo => a borda
+      #   re-tria com contexto mais completo (a chave de dedup muda).
+      # - repeat_interval 12h: reenvio sem mudança. DEVE ser MAIOR que o
+      #   DEDUP_TTL da borda (6h), senão nunca há re-triagem de incidente
+      #   longo. Relação registrada no ADR-0017.
+      - receiver: triage-webhook
+        matchers:
+          - triage = "true"
+        continue: true
+        group_by: ["namespace"]
+        group_wait: 2m
+        group_interval: 10m
+        repeat_interval: 12h
+
+      # Catch-all EXPLÍCITO. Necessário por semântica de routing: quando um
+      # child route casa (a triagem acima), o receiver do route pai deixa de
+      # ser aplicado — sem esta rota, alerta triado sumiria do Slack.
+      - receiver: slack
+
   receivers:
     - name: slack
       slack_configs:
@@ -36,6 +62,15 @@ spec:
 
     # Null receiver: sem nenhuma config = alerta é engolido silenciosamente.
     - name: blackhole
+
+    # Borda Go da triagem (ai/triage-webhook). send_resolved false: triagem é
+    # sobre incidente aberto; resolved não dispara agente. max_alerts limita o
+    # payload — o contexto vai pro LLM, não queremos um grupo de 200 alertas.
+    - name: triage-webhook
+      webhook_configs:
+        - url: http://triage-webhook.ai.svc.cluster.local:8080/webhook
+          send_resolved: false
+          max_alerts: 20
 
   inhibit_rules:
     # 1) warning/critical inibem os info do MESMO namespace.

@@ -30,6 +30,10 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: slack-qa-bot
+        # Núcleo da triagem por alerta (sidecar no pod triage-webhook, ADR-0017)
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: triage-webhook
       toPorts:
         - ports:
             - port: "4000"

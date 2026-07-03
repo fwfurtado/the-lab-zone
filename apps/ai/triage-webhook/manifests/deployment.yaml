@@ -1,0 +1,136 @@
+# apps/ai/triage-webhook/manifests/deployment.yaml
+#
+# Triagem disparada por alerta (Fase B, ADR-0017): pod sidecar com a borda Go
+# (webhook do Alertmanager, dedup, fila, worker pool) e o núcleo Python de
+# triagem falando por localhost. O núcleo NÃO tem porta de serviço na rede do
+# cluster — só o Go o alcança (bind 127.0.0.1).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triage-webhook
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: triage-webhook
+spec:
+  replicas: 1                      # dedup in-memory: 1 réplica É o contrato (ADR-0017)
+  strategy:
+    type: Recreate                 # evita duas janelas de dedup coexistindo no rollout
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: triage-webhook
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: triage-webhook
+    spec:
+      # Deve exceder TRIAGE_TIMEOUT (10m): o shutdown drena a triagem em curso.
+      terminationGracePeriodSeconds: 630
+      containers:
+        # ---- Borda (Go): recebe o Alertmanager, deduplica, enfileira ----
+        - name: webhook
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.1.0
+          ports:
+            - name: webhook
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          env:
+            - name: CORE_URL
+              value: http://127.0.0.1:8081/triage
+            - name: CORE_HEALTH_URL
+              value: http://127.0.0.1:8081/healthz
+            - name: WORKERS
+              value: "2"           # teto de triagens concorrentes = teto de custo LLM
+            - name: QUEUE_SIZE
+              value: "16"
+            - name: DEDUP_TTL
+              value: 6h            # < repeat_interval (12h) da rota de triagem
+            - name: TRIAGE_TIMEOUT
+              value: 10m
+            - name: LOG_LEVEL
+              value: INFO
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: webhook
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz        # pronto = núcleo de pé; sem núcleo, não aceite webhook
+              port: webhook
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+
+        # ---- Núcleo (Python): o agente de triagem, mesmo da CLI/Slack ----
+        - name: core
+          image: ofwfurtado/the-lab-zone-slack-bot:0.4.0
+          command: ["triage-serve"]
+          ports:
+            - name: core-metrics
+              containerPort: 9091
+          env:
+            - name: TOOLHIVE_VMCP_URL
+              value: http://vmcp-triage-vmcp.ai.svc.cluster.local:4483/mcp
+            - name: LITELLM_BASE_URL
+              value: http://litellm.ai.svc.cluster.local:4000/v1
+            - name: MODEL_NAME
+              value: minimax-m3-paid   # eleito por A/B (ver histórico da Fase A)
+            # Orçamento do agente PARA TRIAGEM (caps do ADR-0016, tunados por
+            # processo — o QA do Slack mantém os defaults). O limite é
+            # CUMULATIVO da run: o histórico inteiro é reenviado a cada request,
+            # então tool result gordo no início compõe a cada turno.
+            # - total 1.5M: investigação de incidente é mais funda que QA;
+            #   observado 640k estourando o default de 600k no meio do caminho.
+            # - tool result 30k chars: ataca o termo quadrático (resultado de
+            #   60k ≈ 15k tokens re-entrando em TODA request seguinte). O
+            #   prompt já manda agregar antes de puxar linha crua.
+            # request/tool_calls limits ficam no default: não foram o gargalo.
+            - name: AGENT_TOTAL_TOKENS_LIMIT
+              value: "1500000"
+            - name: MAX_TOOL_RESULT_CHARS
+              value: "30000"
+            - name: LOG_LEVEL
+              value: INFO
+            # Transporte do sidecar (defaults explícitos por legibilidade):
+            - name: TRIAGE_BIND_HOST
+              value: "127.0.0.1"
+            - name: TRIAGE_BIND_PORT
+              value: "8081"
+            - name: TRIAGE_METRICS_PORT
+              value: "9091"
+            - name: TRIAGE_SHUTDOWN_TIMEOUT
+              value: "600"         # coerente com TRIAGE_TIMEOUT e < grace period
+          envFrom:
+            - secretRef:
+                name: triage-webhook   # LITELLM_KEY via ESO
+          livenessProbe:
+            httpGet:
+              path: /metrics       # único bind não-loopback do processo
+              port: core-metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 768Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

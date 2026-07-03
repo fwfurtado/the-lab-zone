@@ -1,0 +1,18 @@
+# apps/ai/triage-webhook/manifests/vmpod-scrape.yaml
+# Dois endpoints: a borda Go (:9090) e o núcleo Python (:9091). O label de
+# container distingue as séries; os nomes não colidem (triage_webhook_* vs
+# lab_agent_*).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: triage-webhook
+  namespace: ai
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: triage-webhook
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+    - port: core-metrics
+      path: /metrics

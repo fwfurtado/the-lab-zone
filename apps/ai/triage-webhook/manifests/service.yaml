@@ -1,0 +1,17 @@
+# apps/ai/triage-webhook/manifests/service.yaml
+# DNS estável para o receiver do Alertmanager. Expõe SÓ a porta do webhook —
+# as métricas são scrapadas via VMPodScrape (pod IP) e o núcleo é localhost.
+apiVersion: v1
+kind: Service
+metadata:
+  name: triage-webhook
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: triage-webhook
+spec:
+  selector:
+    app.kubernetes.io/name: triage-webhook
+  ports:
+    - name: webhook
+      port: 8080
+      targetPort: webhook
