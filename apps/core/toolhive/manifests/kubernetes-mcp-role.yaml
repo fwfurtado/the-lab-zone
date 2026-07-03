@@ -47,3 +47,32 @@ subjects:
   - kind: ServiceAccount
     name: kubernetes-mcp
     namespace: ai
+---
+# CRDs do Cilium: a ClusterRole `view` NAO cobre CRDs, entao as network
+# policies reais do cluster (CiliumNetworkPolicy) eram INVISIVEIS pro agente.
+# Descoberto na calibracao da triagem do TargetDown ai/next-edit: o agente
+# consultou NetworkPolicy nativa (vazio), concluiu "sem policy" e descartou a
+# hipotese certa. Read-only, sem status de endpoint — so as policies.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubernetes-mcp-cilium-view
+rules:
+  - apiGroups: ["cilium.io"]
+    resources:
+      - ciliumnetworkpolicies
+      - ciliumclusterwidenetworkpolicies
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubernetes-mcp-cilium-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubernetes-mcp-cilium-view
+subjects:
+  - kind: ServiceAccount
+    name: kubernetes-mcp
+    namespace: ai
