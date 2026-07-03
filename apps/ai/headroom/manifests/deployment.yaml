@@ -20,9 +20,12 @@ spec:
           # Pinado + slim (SmartCrusher/JSON basta p/ triagem; sem [ml]) + nonroot.
           image: ghcr.io/chopratejas/headroom:0.27.0-slim-nonroot
           imagePullPolicy: IfNotPresent
-          # command explícito p/ não depender do ENTRYPOINT da imagem.
+          # ENTRYPOINT da imagem = ["python3","-m","headroom.cli","proxy"] (não há
+          # binário "headroom" no PATH — é módulo Python). Usamos args (que
+          # substituem o CMD e são anexados ao entrypoint), NÃO command.
+          # "proxy" já vem no entrypoint, então não repetir aqui.
           # --mode token: sessões curtas de triagem, maximiza compressão.
-          command: ["headroom", "proxy", "--host", "0.0.0.0", "--port", "8787", "--mode", "token"]
+          args: ["--host", "0.0.0.0", "--port", "8787", "--mode", "token"]
           ports:
             - name: http
               containerPort: 8787
