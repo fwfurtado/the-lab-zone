@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headroom
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: headroom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: headroom
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: headroom
+    spec:
+      containers:
+        - name: headroom
+          # Pinado + slim (SmartCrusher/JSON basta p/ triagem; sem [ml]) + nonroot.
+          image: ghcr.io/chopratejas/headroom:0.28.0-slim-nonroot
+          imagePullPolicy: IfNotPresent
+          # command explícito p/ não depender do ENTRYPOINT da imagem.
+          # --mode token: sessões curtas de triagem, maximiza compressão.
+          command: ["headroom", "proxy", "--host", "0.0.0.0", "--port", "8787", "--mode", "token"]
+          ports:
+            - name: http
+              containerPort: 8787
+          env:
+            - name: HEADROOM_HOST
+              value: "0.0.0.0"
+            - name: HEADROOM_PORT
+              value: "8787"
+            # Passthrough OpenAI comprimido → teu LiteLLM (que resolve o alias e roteia).
+            # O header Authorization (LITELLM_KEY) é encaminhado; o LiteLLM valida.
+            - name: OPENAI_TARGET_API_URL
+              value: http://litellm.ai.svc.cluster.local:4000/v1
+            # Telemetria anônima do headroom OFF (data-flywheel beacon, ≠ OTEL/metrics).
+            - name: HEADROOM_TELEMETRY
+              value: "off"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            # readOnlyRootFilesystem deixado OFF: o CCR do headroom pode escrever
+            # (store de originais). Endurecer depois de confirmar os paths de escrita
+            # (provável emptyDir em /tmp) — hardening TODO, não bloqueia o 1o deploy.
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: ["ALL"]

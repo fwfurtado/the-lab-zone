@@ -1,0 +1,16 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: headroom
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: headroom
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: headroom
+  podMetricsEndpoints:
+    # /metrics (Prometheus) no mesmo port http. Se vier vazio, confira se precisa
+    # de HEADROOM_OTEL_METRICS_ENABLED=1 no deployment.
+    - port: http
+      path: /metrics
