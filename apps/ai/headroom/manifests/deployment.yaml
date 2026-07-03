@@ -58,6 +58,12 @@ spec:
               memory: 1Gi
           securityContext:
             runAsNonRoot: true
+            # UID numérico: com runAsNonRoot o kubelet precisa PROVAR non-root
+            # antes de subir, e não resolve nome->UID. A imagem -nonroot declara
+            # USER "nonroot" (nome), daí o erro. 65532 é o nonroot padrão wolfi/
+            # Chainguard; confirme com `docker run ... id` e ajuste se diferir.
+            runAsUser: 65532
+            runAsGroup: 65532
             allowPrivilegeEscalation: false
             # readOnlyRootFilesystem deixado OFF: o CCR do headroom pode escrever
             # (store de originais). Endurecer depois de confirmar os paths de escrita
