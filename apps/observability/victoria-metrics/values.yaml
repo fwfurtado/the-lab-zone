@@ -57,6 +57,10 @@ alertmanager:
   spec:
     selectAllByDefault: true
     disableNamespaceMatcher: true
+    # URL que o AM anuncia de si mesmo: vira o {{ .ExternalURL }} dos templates
+    # de notificação (links do Slack) e a base dos paths da UI. Sem isto, o
+    # default é o hostname do pod — link morto fora do cluster.
+    externalURL: https://alertmanager.lab.the-lab.zone
     resources:
       requests:
         cpu: 50m
