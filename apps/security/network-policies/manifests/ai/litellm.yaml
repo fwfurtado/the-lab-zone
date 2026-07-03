@@ -30,6 +30,9 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: slack-qa-bot
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: headroom
       toPorts:
         - ports:
             - port: "4000"
