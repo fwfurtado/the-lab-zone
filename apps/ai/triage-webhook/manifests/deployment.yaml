@@ -28,7 +28,7 @@ spec:
       containers:
         # ---- Borda (Go): recebe o Alertmanager, deduplica, enfileira ----
         - name: webhook
-          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.1.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.2.0
           ports:
             - name: webhook
               containerPort: 8080
@@ -49,6 +49,15 @@ spec:
               value: 10m
             - name: LOG_LEVEL
               value: INFO
+            # Publicação B2: diagnóstico no #triage (mesmo markdown block do
+            # slack-qa-bot). Token ausente => publica só no log.
+            - name: SLACK_CHANNEL
+              value: "#triage"
+            - name: ALERTMANAGER_URL
+              value: https://alertmanager.lab.the-lab.zone
+          envFrom:
+            - secretRef:
+                name: triage-webhook   # SLACK_BOT_TOKEN via ESO
           livenessProbe:
             httpGet:
               path: /healthz
