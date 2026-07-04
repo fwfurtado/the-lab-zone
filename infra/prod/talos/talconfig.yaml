@@ -19,7 +19,6 @@ controlPlane:
 worker:
   patches:
     - "@patches/workers/user-volume-config.yaml"
-    - "@patches/workers/user-volume-config-ssd.yaml"
 
 patches:
   - "@patches/all/registry-mirrors.yaml"
@@ -79,6 +78,8 @@ nodes:
     talosImageURL: factory.talos.dev/installer/ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515
     installDiskSelector:
       size: ">= 90GB"
+    patches:
+      - "@patches/workers/user-volume-config-ssd.yaml"
     networkInterfaces:
       - deviceSelector:
           busPath: "0*"
@@ -94,6 +95,8 @@ nodes:
     talosImageURL: factory.talos.dev/installer/ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515
     installDiskSelector:
       size: ">= 90GB"
+    patches:
+      - "@patches/workers/user-volume-config-ssd.yaml"
     networkInterfaces:
       - deviceSelector:
           busPath: "0*"
