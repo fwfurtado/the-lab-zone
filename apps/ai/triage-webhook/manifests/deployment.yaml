@@ -134,6 +134,8 @@ spec:
               value: "600"         # coerente com TRIAGE_TIMEOUT e < grace period
             - name: HISTORY_COMPRESS_ENABLED
               value: "true"
+            - name: HISTORY_KEEP_RECENT_TOOL_RESULTS
+              value: "16"
           envFrom:
             - secretRef:
                 name: triage-webhook   # LITELLM_KEY via ESO
