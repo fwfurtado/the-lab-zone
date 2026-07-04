@@ -85,7 +85,7 @@ spec:
 
         # ---- Núcleo (Python): o agente de triagem, mesmo da CLI/Slack ----
         - name: core
-          image: ghcr.io/fwfurtado/the-lab-zone-agents:0.3.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents:0.4.0
           command: ["triage-serve"]
           ports:
             - name: core-metrics
