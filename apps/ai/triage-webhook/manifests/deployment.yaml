@@ -85,7 +85,7 @@ spec:
 
         # ---- Núcleo (Python): o agente de triagem, mesmo da CLI/Slack ----
         - name: core
-          image: ghcr.io/fwfurtado/the-lab-zone-agents-core:0.1.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-core:0.2.0
           command: ["triage-serve"]
           ports:
             - name: core-metrics
@@ -132,6 +132,8 @@ spec:
               value: "9091"
             - name: TRIAGE_SHUTDOWN_TIMEOUT
               value: "600"         # coerente com TRIAGE_TIMEOUT e < grace period
+            - name: HISTORY_COMPRESS_ENABLED
+              value: "true"
           envFrom:
             - secretRef:
                 name: triage-webhook   # LITELLM_KEY via ESO
