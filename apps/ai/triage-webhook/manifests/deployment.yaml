@@ -106,11 +106,21 @@ spec:
             # - tool result 30k chars: ataca o termo quadrático (resultado de
             #   60k ≈ 15k tokens re-entrando em TODA request seguinte). O
             #   prompt já manda agregar antes de puxar linha crua.
-            # request/tool_calls limits ficam no default: não foram o gargalo.
+            # - tool_calls 120 / request 60 (defaults 40/25): investigação de
+            #   incidente cruza mais superfícies que uma pergunta de QA (o
+            #   default foi pensado pro Slack bot). Uma triagem de drop de
+            #   policy estourou 40 tool_calls (42) cruzando CNPs dos dois
+            #   namespaces + endpoints + hubble + pods — trabalho legítimo,
+            #   não loop. Sobem em par: mais tool calls implica mais idas ao
+            #   modelo. O request_limit continua sendo o mata-loop (teto duro).
             - name: AGENT_TOTAL_TOKENS_LIMIT
               value: "1500000"
             - name: MAX_TOOL_RESULT_CHARS
               value: "30000"
+            - name: AGENT_TOOL_CALLS_LIMIT
+              value: "120"
+            - name: AGENT_REQUEST_LIMIT
+              value: "60"
             - name: LOG_LEVEL
               value: INFO
             # Transporte do sidecar (defaults explícitos por legibilidade):
