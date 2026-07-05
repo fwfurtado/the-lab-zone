@@ -48,30 +48,82 @@ subjects:
     name: kubernetes-mcp
     namespace: ai
 ---
-# CRDs do Cilium: a ClusterRole `view` NAO cobre CRDs, entao as network
-# policies reais do cluster (CiliumNetworkPolicy) eram INVISIVEIS pro agente.
-# Descoberto na calibracao da triagem do TargetDown ai/next-edit: o agente
-# consultou NetworkPolicy nativa (vazio), concluiu "sem policy" e descartou a
-# hipotese certa. Read-only, sem status de endpoint — so as policies.
+# CRDs + cluster-scoped que a ClusterRole `view` NAO cobre.
+# Bind exclusivo na SA kubernetes-mcp (ns ai). Mantem o invariante
+# "o LLM nao le secrets": aqui NAO ha `secrets` nem verbo de escrita.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: kubernetes-mcp-cilium-view
+  name: kubernetes-mcp-crd-view
 rules:
-  - apiGroups: ["cilium.io"]
-    resources:
-      - ciliumnetworkpolicies
-      - ciliumclusterwidenetworkpolicies
+  # 1) Definicoes dos CRDs + discovery de APIs agregadas (schema/lista de CRDs)
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apiregistration.k8s.io"]
+    resources: ["apiservices"]
+    verbs: ["get", "list"]
+
+  # 2) Instancias de CR de cada operator (resources: * por grupo, read-only)
+  - apiGroups: ["argoproj.io"]                # Application/AppProject/ApplicationSet + Workflows
+    resources: ["*"]
+    verbs: ["get", "list"]
+  - apiGroups: ["external-secrets.io", "generators.external-secrets.io"]
+    resources: ["*"]                          # ExternalSecret/SecretStore = metadados, NAO o secret gerado
+    verbs: ["get", "list"]
+  - apiGroups: ["operator.victoriametrics.com"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+  - apiGroups: ["gateway.networking.k8s.io"]  # Gateway/HTTPRoute/GatewayClass/ReferenceGrant
+    resources: ["*"]
+    verbs: ["get", "list"]
+  - apiGroups: ["cilium.io"]                  # amplia o cilium-view: endpoints/identities/ippools/l2announcements
+    resources: ["*"]
+    verbs: ["get", "list"]
+  - apiGroups: ["toolhive.stacklok.dev"]     # MCPServer/MCPToolConfig/MCPGroup/MCPRegistry
+    resources: ["*"]
+    verbs: ["get", "list"]
+  - apiGroups: ["postgresql.cnpg.io", "barmancloud.cnpg.io"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+  - apiGroups: ["cert-manager.io", "acme.cert-manager.io"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kyverno.io", "reports.kyverno.io", "wgpolicyk8s.io"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+  - apiGroups: ["clickhouse.altinity.com"]
+    resources: ["*"]
+    verbs: ["get", "list"]
+
+  # 3) Cluster-scoped nativos que a `view` deixa de fora (uteis p/ triagem)
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "csinodes", "csidrivers", "volumeattachments"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingressclasses"]
+    verbs: ["get", "list"]
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list"]
+  - apiGroups: ["node.k8s.io"]
+    resources: ["runtimeclasses"]            # voce usa runtimeClass nvidia
+    verbs: ["get", "list"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
     verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kubernetes-mcp-cilium-view
+  name: kubernetes-mcp-crd-view
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kubernetes-mcp-cilium-view
+  name: kubernetes-mcp-crd-view
 subjects:
   - kind: ServiceAccount
     name: kubernetes-mcp
