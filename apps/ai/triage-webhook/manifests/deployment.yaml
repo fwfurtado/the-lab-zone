@@ -28,7 +28,7 @@ spec:
       containers:
         # ---- Borda (Go): recebe o Alertmanager, deduplica, enfileira ----
         - name: webhook
-          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.5.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.5.1
           ports:
             - name: webhook
               containerPort: 8080
