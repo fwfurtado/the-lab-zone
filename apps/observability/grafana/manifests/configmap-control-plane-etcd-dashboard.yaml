@@ -169,7 +169,7 @@ data:
         },
         {
           "id": 6,
-          "title": "Trivy / worker-2 writes",
+          "title": "Trivy Scan Writes",
           "type": "stat",
           "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
           "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
@@ -192,7 +192,7 @@ data:
             }
           },
           "targets": [
-            { "expr": "sum(rate(container_blkio_device_usage_total{node=\"worker-2\",namespace=\"trivy-system\",operation=\"Write\",device=\"/dev/vda\"}[5m]))", "legendFormat": "write" }
+            { "expr": "sum(rate(container_blkio_device_usage_total{namespace=\"trivy-system\",operation=\"Write\"}[5m]))", "legendFormat": "write" }
           ]
         },
         {
@@ -395,8 +395,8 @@ data:
             }
           },
           "targets": [
-            { "expr": "sum by (node, device) (rate(container_blkio_device_usage_total{namespace=\"trivy-system\",operation=\"Write\"}[5m]))", "legendFormat": "{{node}} {{device}}" },
-            { "expr": "rate(node_disk_written_bytes_total{instance=\"10.40.6.22:9100\",device=\"vda\"}[5m])", "legendFormat": "worker-2 vda total" }
+            { "expr": "sum by (node, device) (rate(container_blkio_device_usage_total{namespace=\"trivy-system\",operation=\"Write\"}[5m]))", "legendFormat": "trivy {{node}} {{device}}" },
+            { "expr": "rate(node_disk_written_bytes_total{instance=~\"10.40.6.2[123]:9100\",device=~\"vd[a-z]\"}[5m])", "legendFormat": "total {{instance}} {{device}}" }
           ]
         },
         {
