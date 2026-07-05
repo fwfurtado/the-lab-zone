@@ -24,6 +24,11 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: qa-indexer
+        # triage-indexer (Fase D): reconcilia a memória de triagens para a
+        # collection triage_reports. Mesmo acesso 6333 do qa-indexer.
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: triage-indexer
       toPorts:
         - ports:
             - port: "6333"

@@ -62,6 +62,11 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: triage-webhook
+        # triage-indexer (Fase D, Fatia A): LÊ os relatórios do bucket
+        # triage-reports via rclone para embedar no Qdrant. Só leitura.
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: triage-indexer
       toPorts:
         - ports:
             - port: "3900"

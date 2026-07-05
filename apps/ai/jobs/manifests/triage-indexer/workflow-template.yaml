@@ -1,0 +1,119 @@
+# WorkflowTemplate do triage-indexer (Fase D, Fatia A).
+#
+# Reconcilia os relatórios de triagem do Garage (bucket triage-reports) para a
+# collection triage_reports do Qdrant. Espelha o qa-indexer, trocando o container
+# de origem: em vez de `git clone`, um `rclone copy` do Garage para o emptyDir.
+#
+# containerSet: o container `fetch` (rclone) baixa os .md; o `main` (Python,
+# FastEmbed local) parseia, corta o preâmbulo, embeda e faz upsert idempotente
+# com GC por run_id.
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: triage-indexer
+  namespace: ai
+spec:
+  entrypoint: index
+  serviceAccountName: argo-workflow
+  podMetadata:
+    labels:
+      app.kubernetes.io/name: triage-indexer
+  volumes:
+    - name: workspace
+      emptyDir: {}
+  metrics:
+    prometheus:
+      - name: triage_index_duration_seconds
+        help: "Duração da última indexação de triagens"
+        gauge: { realtime: false, value: "{{workflow.duration}}" }
+      - name: triage_index_runs_total
+        help: "Execuções do indexador de triagens por status"
+        labels: [{ key: status, value: "{{workflow.status}}" }]
+        counter: { value: "1" }
+        when: "{{workflow.status}} != Running"
+      - name: triage_index_documents
+        help: "Chunks de triagem indexados na última execução"
+        gauge:
+          { realtime: false, value: "{{workflow.outputs.parameters.indexed}}" }
+  templates:
+    - name: index
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError
+        backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
+      outputs:
+        parameters:
+          - name: indexed
+            valueFrom: { path: /workspace/indexed_count }
+      containerSet:
+        archiveLogs: false
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        containers:
+          # ---- fetch (rclone): baixa os .md do Garage para o emptyDir ----
+          # Mesmo padrão/credenciais do offsite-sync. `copy` (não `sync`): o
+          # workspace é efêmero, não há o que remover no destino.
+          - name: fetch
+            image: rclone/rclone:1.69.0
+            env:
+              - name: RCLONE_CONFIG_GARAGE_TYPE
+                value: s3
+              - name: RCLONE_CONFIG_GARAGE_PROVIDER
+                value: Other
+              - name: RCLONE_CONFIG_GARAGE_ENDPOINT
+                value: http://garage.data.svc.cluster.local:3900
+              - name: RCLONE_CONFIG_GARAGE_REGION
+                value: garage
+              - name: RCLONE_CONFIG_GARAGE_FORCE_PATH_STYLE
+                value: "true"
+              - name: RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID
+                valueFrom:
+                  secretKeyRef: { name: triage-indexer-garage, key: GARAGE_ACCESS_KEY }
+              - name: RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY
+                valueFrom:
+                  secretKeyRef: { name: triage-indexer-garage, key: GARAGE_SECRET_KEY }
+            command: [sh, -c]
+            args:
+              - |
+                set -eu
+                mkdir -p /workspace/repo
+                echo ">> rclone copy garage:triage-reports/triage -> /workspace/repo"
+                rclone copy "garage:triage-reports/triage" /workspace/repo \
+                  --fast-list --transfers 8 --checkers 16 --s3-no-check-bucket
+                echo "fetch OK ($(find /workspace/repo -name '*.md' | wc -l) arquivos)"
+            volumeMounts:
+              - name: workspace
+                mountPath: /workspace
+            resources:
+              requests: { cpu: 100m, memory: 128Mi }
+              limits: { memory: 256Mi }
+          # ---- main (Python): parseia, embeda (FastEmbed local) e upserta ----
+          - name: main
+            image: ghcr.io/fwfurtado/triage-indexer:0.1.0
+            dependencies: [fetch]
+            env:
+              - name: QDRANT_URL
+                value: "http://qdrant.data.svc.cluster.local:6333"
+              - name: QDRANT_API_KEY
+                valueFrom:
+                  { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
+              - name: COLLECTION_NAME
+                value: "triage_reports"
+              - name: EMBEDDING_MODEL
+                value: "intfloat/multilingual-e5-large"
+              - name: REPO_DIR
+                value: "/workspace/repo"
+              - name: CHUNK_CHARS
+                value: "2000"        # relatório é unidade coesa (calibrável)
+              - name: EMBED_BATCH
+                value: "8"
+            volumeMounts:
+              - name: workspace
+                mountPath: /workspace
+            resources:
+              requests:
+                cpu: "100m"
+                memory: "2Gi"        # FastEmbed/e5-large carrega o modelo em RAM
+              limits:
+                memory: "4Gi"

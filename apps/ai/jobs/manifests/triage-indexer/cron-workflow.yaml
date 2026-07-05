@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: triage-indexer
+  namespace: ai
+spec:
+  # 04:30: depois do qa-indexer (04:00), que carrega o mesmo modelo de embedding
+  # pesado — evita os dois competindo por CPU/RAM ao mesmo tempo. Staleness de
+  # até 24h é irrelevante para memória de incidentes (não é busca em tempo real).
+  schedules: ["30 4 * * *"]
+  timezone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  workflowSpec:
+    workflowTemplateRef:
+      name: triage-indexer
