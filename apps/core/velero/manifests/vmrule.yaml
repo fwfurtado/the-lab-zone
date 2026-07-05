@@ -16,6 +16,7 @@ spec:
           labels:
             severity: warning
             component: velero
+            triage: "true"
           annotations:
             summary: "Backup do Velero falhou"
             description: "Houve {{ $value }} falha(s) de backup do Velero nas últimas 6h."
@@ -27,6 +28,7 @@ spec:
           labels:
             severity: warning
             component: velero
+            triage: "true"
           annotations:
             summary: "Backup do Velero com falha parcial"
             description: "{{ $value }} backup(s) parcialmente falho(s) nas últimas 6h."
@@ -38,6 +40,7 @@ spec:
           labels:
             severity: warning
             component: velero
+            triage: "true"
           annotations:
             summary: "Backup do Velero envelhecido"
             description: "O schedule {{ $labels.schedule }} não tem sucesso há mais de 26h."
@@ -49,6 +52,7 @@ spec:
           labels:
             severity: warning
             component: velero
+            triage: "true"
           annotations:
             summary: "Velero node-agent indisponível em {{ $labels.pod }}"
             description: "node-agent {{ $labels.pod }} está down — FSB dos PVs nesse nó parou."
