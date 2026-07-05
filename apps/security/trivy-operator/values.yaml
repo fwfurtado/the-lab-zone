@@ -16,14 +16,27 @@ trivy:
   # Só reporta CVE COM fix disponível — corta o ruído de "unfixed" que não dá pra agir.
   ignoreUnfixed: true
 
+# Escopo inicial de estabilizacao: o objetivo operacional e saber o que esta
+# rodando agora, sem multiplicar scans por ReplicaSet/Job/CronJob historicos.
+targetWorkloads: "pod"
+
+# Top-level no chart. Manter fora do bloco operator; dentro dele a chave e
+# ignorada e OPERATOR_EXCLUDE_NAMESPACES fica vazio.
+excludeNamespaces: "kube-system,trivy-system"
+
 operator:
-  # Não escanear sistema nem o próprio namespace do trivy.
-  # (o operator escaneia todos os namespaces, menos os excluídos)
-  excludeNamespaces: "kube-system,trivy-system"
   # TTL dos relatórios: re-scan periódico mantém o retrato fresco.
   scannerReportTTL: "24h"
-  # Limita jobs simultâneos pra não competir com workload real no T630.
-  scanJobsConcurrentLimit: 2
+  # Limita jobs simultâneos pra não competir com workload real nem com o etcd
+  # enquanto os control planes ainda compartilham o pool local-nvme.
+  scanJobsConcurrentLimit: 1
+  # Fase de estabilizacao: manter apenas vulnerability scanning. Os scanners
+  # auxiliares aumentam CRs/reconciliacao e podem ser reabilitados um a um.
+  configAuditScannerEnabled: false
+  exposedSecretScannerEnabled: false
+  rbacAssessmentScannerEnabled: false
+  infraAssessmentScannerEnabled: false
+  clusterComplianceEnabled: false
 
 # Métricas: usamos VMServiceScrape próprio (manifests/), não o ServiceMonitor
 # do Prometheus que o chart oferece.
