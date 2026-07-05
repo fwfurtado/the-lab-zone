@@ -1,0 +1,447 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-control-plane-etcd
+  namespace: observability
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Platform"
+data:
+  control-plane-etcd.json: |
+    {
+      "title": "Control Plane / etcd",
+      "uid": "control-plane-etcd",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "30s",
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "panels": [
+        {
+          "id": 1,
+          "title": "etcd Has Leader",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "options": {
+            "reduceOptions": { "calcs": [ "lastNotNull" ] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "1": { "text": "Leader", "color": "green" },
+                    "0": { "text": "No Leader", "color": "red" }
+                  }
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "green", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "min(etcd_server_has_leader{job=\"kube-etcd\"})", "legendFormat": "cluster" }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Leader Changes / 1h",
+          "type": "stat",
+          "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "options": {
+            "reduceOptions": { "calcs": [ "lastNotNull" ] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "sum(increase(etcd_server_leader_changes_seen_total{job=\"kube-etcd\"}[1h]))", "legendFormat": "changes" }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "WAL fsync p99",
+          "type": "stat",
+          "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "options": {
+            "reduceOptions": { "calcs": [ "lastNotNull" ] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.1 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "max(histogram_quantile(0.99, sum by (instance, le) (rate(etcd_disk_wal_fsync_duration_seconds_bucket{job=\"kube-etcd\"}[5m]))))", "legendFormat": "p99" }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Backend Commit p99",
+          "type": "stat",
+          "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "options": {
+            "reduceOptions": { "calcs": [ "lastNotNull" ] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.1 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "max(histogram_quantile(0.99, sum by (instance, le) (rate(etcd_disk_backend_commit_duration_seconds_bucket{job=\"kube-etcd\"}[5m]))))", "legendFormat": "p99" }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Pending Proposals",
+          "type": "stat",
+          "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "options": {
+            "reduceOptions": { "calcs": [ "lastNotNull" ] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 1 },
+                  { "color": "red", "value": 10 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "max(etcd_server_proposals_pending{job=\"kube-etcd\"})", "legendFormat": "pending" }
+          ]
+        },
+        {
+          "id": 6,
+          "title": "Trivy / worker-2 writes",
+          "type": "stat",
+          "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "options": {
+            "reduceOptions": { "calcs": [ "lastNotNull" ] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 10000000 },
+                  { "color": "red", "value": 50000000 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "sum(rate(container_blkio_device_usage_total{node=\"worker-2\",namespace=\"trivy-system\",operation=\"Write\",device=\"/dev/vda\"}[5m]))", "legendFormat": "write" }
+          ]
+        },
+        {
+          "id": 7,
+          "title": "etcd Leader Changes",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 1 }
+            }
+          },
+          "targets": [
+            { "expr": "increase(etcd_server_leader_changes_seen_total{job=\"kube-etcd\"}[5m])", "legendFormat": "{{instance}}" }
+          ]
+        },
+        {
+          "id": 8,
+          "title": "etcd WAL fsync p99",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "lineWidth": 1 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.1 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "histogram_quantile(0.99, sum by (instance, le) (rate(etcd_disk_wal_fsync_duration_seconds_bucket{job=\"kube-etcd\"}[5m])))", "legendFormat": "{{instance}}" }
+          ]
+        },
+        {
+          "id": 9,
+          "title": "etcd Backend Commit p99",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "lineWidth": 1 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.1 },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "histogram_quantile(0.99, sum by (instance, le) (rate(etcd_disk_backend_commit_duration_seconds_bucket{job=\"kube-etcd\"}[5m])))", "legendFormat": "{{instance}}" }
+          ]
+        },
+        {
+          "id": 10,
+          "title": "etcd Proposals",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 1 }
+            }
+          },
+          "targets": [
+            { "expr": "max by (instance) (etcd_server_proposals_pending{job=\"kube-etcd\"})", "legendFormat": "pending {{instance}}" },
+            { "expr": "sum by (instance) (rate(etcd_server_proposals_failed_total{job=\"kube-etcd\"}[5m]))", "legendFormat": "failed/s {{instance}}" }
+          ]
+        },
+        {
+          "id": 11,
+          "title": "etcd MVCC Writes",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "custom": { "lineWidth": 1 }
+            }
+          },
+          "targets": [
+            { "expr": "sum(rate(etcd_mvcc_put_total{job=\"kube-etcd\"}[5m]))", "legendFormat": "puts replicated" },
+            { "expr": "sum(rate(etcd_mvcc_put_total{job=\"kube-etcd\"}[5m])) / count(etcd_mvcc_put_total{job=\"kube-etcd\"})", "legendFormat": "puts logical approx" },
+            { "expr": "sum(rate(etcd_mvcc_delete_total{job=\"kube-etcd\"}[5m]))", "legendFormat": "deletes replicated" }
+          ]
+        },
+        {
+          "id": 12,
+          "title": "apiserver Write Requests",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": { "lineWidth": 1 }
+            }
+          },
+          "targets": [
+            { "expr": "topk(10, sum by (resource, verb, subresource) (rate(apiserver_request_total{verb=~\"UPDATE|PATCH|POST|PUT|DELETE\"}[5m])))", "legendFormat": "{{resource}} {{verb}} {{subresource}}" }
+          ]
+        },
+        {
+          "id": 13,
+          "title": "Control Plane Disk Busy (vda)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": { "lineWidth": 1 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.25 },
+                  { "color": "red", "value": 0.5 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "rate(node_disk_io_time_seconds_total{instance=~\"10.40.6.1[123]:9100\",device=\"vda\"}[5m])", "legendFormat": "{{instance}}" }
+          ]
+        },
+        {
+          "id": 14,
+          "title": "Control Plane I/O PSI",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": { "lineWidth": 1 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 0.1 },
+                  { "color": "red", "value": 0.3 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "rate(node_pressure_io_stalled_seconds_total{instance=~\"10.40.6.1[123]:9100\"}[5m])", "legendFormat": "{{instance}}" }
+          ]
+        },
+        {
+          "id": 15,
+          "title": "Control Plane Disk Writes (vda)",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 36, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": { "lineWidth": 1 }
+            }
+          },
+          "targets": [
+            { "expr": "rate(node_disk_written_bytes_total{instance=~\"10.40.6.1[123]:9100\",device=\"vda\"}[5m])", "legendFormat": "{{instance}}" }
+          ]
+        },
+        {
+          "id": 16,
+          "title": "Trivy Scan I/O Pressure",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 36, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": { "lineWidth": 1 },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 10000000 },
+                  { "color": "red", "value": 50000000 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "sum by (node, device) (rate(container_blkio_device_usage_total{namespace=\"trivy-system\",operation=\"Write\"}[5m]))", "legendFormat": "{{node}} {{device}}" },
+            { "expr": "rate(node_disk_written_bytes_total{instance=\"10.40.6.22:9100\",device=\"vda\"}[5m])", "legendFormat": "worker-2 vda total" }
+          ]
+        },
+        {
+          "id": 17,
+          "title": "etcd DB Size",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 44, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "lineWidth": 1 }
+            }
+          },
+          "targets": [
+            { "expr": "etcd_mvcc_db_total_size_in_bytes{job=\"kube-etcd\"}", "legendFormat": "total {{instance}}" },
+            { "expr": "etcd_mvcc_db_total_size_in_use_in_bytes{job=\"kube-etcd\"}", "legendFormat": "in use {{instance}}" }
+          ]
+        },
+        {
+          "id": 18,
+          "title": "Stored Objects",
+          "type": "bargauge",
+          "gridPos": { "x": 12, "y": 44, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "options": {
+            "reduceOptions": { "calcs": [ "lastNotNull" ] },
+            "orientation": "horizontal",
+            "displayMode": "gradient"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "color": "blue", "value": null }
+                ]
+              }
+            }
+          },
+          "targets": [
+            { "expr": "topk(20, max by (resource) (apiserver_storage_objects))", "legendFormat": "{{resource}}" }
+          ]
+        }
+      ],
+      "templating": { "list": [] }
+    }
