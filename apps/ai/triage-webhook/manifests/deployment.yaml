@@ -28,7 +28,7 @@ spec:
       containers:
         # ---- Borda (Go): recebe o Alertmanager, deduplica, enfileira ----
         - name: webhook
-          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.4.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.5.0
           ports:
             - name: webhook
               containerPort: 8080
@@ -55,9 +55,22 @@ spec:
               value: "#triage"
             - name: ALERTMANAGER_URL
               value: https://alertmanager.lab.the-lab.zone
+            # Persistência da triagem no Garage (Fase D, ADR-0007). Endpoint é o
+            # service DNS interno (S3 API 3900), SEM esquema — minio-go monta o
+            # esquema a partir de GARAGE_USE_SSL. Não usa o HTTPRoute
+            # s3.lab.the-lab.zone: tráfego pod-a-pod não deve sair pro gateway.
+            # GARAGE_ENDPOINT vazio desligaria a persistência (degrada p/ log+Slack).
+            - name: GARAGE_ENDPOINT
+              value: garage.data.svc.cluster.local:3900
+            - name: GARAGE_BUCKET
+              value: triage-reports
+            - name: GARAGE_REGION
+              value: garage
+            - name: GARAGE_USE_SSL
+              value: "false"           # tráfego interno no cluster, sem TLS
           envFrom:
             - secretRef:
-                name: triage-webhook   # SLACK_BOT_TOKEN via ESO
+                name: triage-webhook   # SLACK_BOT_TOKEN + GARAGE_*_KEY via ESO
           livenessProbe:
             httpGet:
               path: /healthz

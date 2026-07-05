@@ -23,3 +23,7 @@ resource "aws_s3_bucket" "langfuse" {
 resource "aws_s3_bucket" "argo_workflows" {
   bucket = "argo-workflows"
 }
+
+resource "aws_s3_bucket" "triages" {
+  bucket = "triage-reports"
+}

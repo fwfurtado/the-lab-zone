@@ -55,6 +55,13 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: data
             cnpg.io/cluster: cnpg-cluster
+        # triage-webhook (Fase D, ADR-0007): a borda persiste os relatórios de
+        # triagem no Garage como fonte de verdade da memória. Sem esta regra o
+        # PUT é dropado quando o garage sair do audit mode — e o MultiPublisher
+        # best-effort só loga o erro, então a memória não persistiria em silêncio.
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: triage-webhook
       toPorts:
         - ports:
             - port: "3900"
