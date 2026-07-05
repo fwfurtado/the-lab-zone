@@ -58,9 +58,9 @@ nodeAgent:
 resources:
   requests:
     cpu: 100m
-    memory: 256Mi
+    memory: 1Gi
   limits:
-    memory: 512Mi
+    memory: 2Gi
 
 # Métricas: o lab usa VMPodScrape (manifests/vm-pod-scrape.yaml), não o
 # ServiceMonitor do Prometheus-operator. Desliga o do chart pra não gerar lixo.
