@@ -32,3 +32,12 @@
 
 @list-buckets:
     kubectl exec -n data garage-0 -c garage -- /garage bucket list
+
+[arg("keyid", long="keyid")]
+@info-key keyid:
+    kubectl exec -n data garage-0 -c garage -- /garage key info {{keyid}}
+
+
+[arg("bucket", long="bucket")]
+@info-bucket bucket:
+    kubectl exec -n data garage-0 -c garage -- /garage bucket key {{bucket}}
