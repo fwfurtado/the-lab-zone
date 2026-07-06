@@ -38,31 +38,6 @@ spec:
       value: "true"
     # 'section' é o filtro central desta collection: restringe a busca à faceta
     # desejada (evidence para linha de investigação, cause para diagnóstico...).
-    - name: FILTERABLE_FIELDS
-      value: |
-        [
-          {
-            "name": "metadata.section",
-            "description": "Faceta do relatório: 'symptom' (sintoma observado), 'evidence' (métricas/logs/eventos investigados — a LINHA DE RACIOCÍNIO), 'cause' (causa provável), 'next_step' (ação sugerida). Filtre por section para buscar dentro de uma faceta específica.",
-            "field_type": "keyword",
-            "condition": "==",
-            "required": false
-          },
-          {
-            "name": "metadata.namespace",
-            "description": "Namespace Kubernetes do incidente (ex.: data, observability, ai).",
-            "field_type": "keyword",
-            "condition": "==",
-            "required": false
-          },
-          {
-            "name": "metadata.confirmation",
-            "description": "Estado de confirmação do diagnóstico: unverified, confirmed ou refuted. Use '!= refuted' para excluir o que se provou errado.",
-            "field_type": "keyword",
-            "condition": "!=",
-            "required": false
-          }
-        ]
     - name: TOOL_FIND_DESCRIPTION
       value: >-
         Busca em FACETAS de triagens passadas (sintoma, evidência, causa, próximo
@@ -91,6 +66,11 @@ spec:
               mountPath: /cache
       containers:
         - name: mcp
+          # Campos filtráveis via envFrom (ConfigMap): injeta FILTERABLE_FIELDS
+          # direto pelo Kubernetes, sem passar pela validação de env do ToolHive.
+          envFrom:
+            - configMapRef:
+                name: triage-facets-filterable-fields
           volumeMounts:
             - name: tmp
               mountPath: /tmp

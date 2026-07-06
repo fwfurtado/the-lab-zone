@@ -41,31 +41,6 @@ spec:
     # Filtro nomeado: cada campo vira argumento guiado da tool. namespace e
     # confirmation com '=='; alertnames é lista no payload, então 'any'
     # ("contém"). Todos opcionais — o agente filtra quando fizer sentido.
-    - name: FILTERABLE_FIELDS
-      value: |
-        [
-          {
-            "name": "metadata.namespace",
-            "description": "Namespace Kubernetes do incidente (ex.: data, observability, ai). Use para restringir a incidentes do mesmo namespace.",
-            "field_type": "keyword",
-            "condition": "==",
-            "required": false
-          },
-          {
-            "name": "metadata.alertnames",
-            "description": "Nomes de alerta do incidente (ex.: CiliumPolicyDrop, TargetDown). Use para achar incidentes do mesmo tipo de alerta.",
-            "field_type": "keyword",
-            "condition": "any",
-            "required": false
-          },
-          {
-            "name": "metadata.confirmation",
-            "description": "Estado de confirmação do diagnóstico: unverified, confirmed ou refuted. Use '!= refuted' para excluir diagnósticos que se provaram errados.",
-            "field_type": "keyword",
-            "condition": "!=",
-            "required": false
-          }
-        ]
     - name: TOOL_FIND_DESCRIPTION
       value: >-
         Busca na MEMÓRIA DE INCIDENTES de triagem passados (relatório inteiro por
@@ -92,6 +67,11 @@ spec:
               mountPath: /cache
       containers:
         - name: mcp
+          # Campos filtráveis via envFrom (ConfigMap): injeta FILTERABLE_FIELDS
+          # direto pelo Kubernetes, sem passar pela validação de env do ToolHive.
+          envFrom:
+            - configMapRef:
+                name: triage-incidents-filterable-fields
           volumeMounts:
             - name: tmp
               mountPath: /tmp
