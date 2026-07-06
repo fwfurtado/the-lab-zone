@@ -1,16 +1,18 @@
 # WorkflowTemplate do triage-indexer (Fase D, duas collections).
 #
-# DAG: um downloader (rclone) baixa os relatórios do Garage uma vez para o
-# emptyDir; dois indexers em paralelo (fan-out) leem dele e populam collections
-# distintas do Qdrant:
+# DAG com pods separados: um downloader (rclone) baixa os relatórios do Garage
+# uma vez para um PVC efêmero; dois indexers em paralelo (fan-out) leem dele e
+# populam collections distintas do Qdrant:
 #   gestalt -> triage_incidents (1 ponto/relatório, busca por regressão)
 #   facets  -> triage_facets    (1 ponto/seção,     busca por sintoma/causa/hint)
 #
-# containerSet (mesmo pod): o emptyDir é compartilhado entre os três containers
-# sem PVC, e gestalt/facets aparecem como nós distintos no Argo UI — falha
-# isolada e visível por modo, que é o ponto da observabilidade separada. O custo
-# é o pod dimensionar para os dois modelos e5-large em paralelo (RAM), aceitável
-# com o headroom noturno.
+# Por que dag+PVC (e não containerSet): cada indexer é um pod/template próprio,
+# com seu `main` e seus outputs — o que satisfaz a regra do Argo (containerSet
+# com outputs exige um único container `main`, incompatível com dois produtores)
+# E devolve a métrica de contagem por template. O volumeClaimTemplate é um PVC
+# EFÊMERO (criado por run, deletado no fim) — não é estado durável a gerenciar,
+# é scratch que cruza pods. Como é LocalPV (openebs-hostpath-ssd, node-local,
+# RWO), os três pods co-locam no mesmo nó; ok, o headroom de RAM é por-nó.
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -22,9 +24,17 @@ spec:
   podMetadata:
     labels:
       app.kubernetes.io/name: triage-indexer
-  volumes:
-    - name: workspace
-      emptyDir: {}
+  # PVC efêmero de scratch: baixado uma vez pelo downloader, lido pelos indexers.
+  # LocalPV SSD, RWO — node-local, os pods co-locam. Deletado ao fim do run.
+  volumeClaimTemplates:
+    - metadata:
+        name: workspace
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: openebs-hostpath-ssd
+        resources:
+          requests:
+            storage: 2Gi
   metrics:
     prometheus:
       - name: triage_index_duration_seconds
@@ -35,113 +45,140 @@ spec:
         labels: [{ key: status, value: "{{workflow.status}}" }]
         counter: { value: "1" }
         when: "{{workflow.status}} != Running"
-      # Métrica por modo (observabilidade separada): cada indexer escreve seu
-      # próprio arquivo de contagem, e a métrica leva o label do modo.
-      - name: triage_index_documents
-        help: "Pontos indexados na última execução, por modo"
-        labels: [{ key: mode, value: "gestalt" }]
-        gauge:
-          { realtime: false, value: "{{workflow.outputs.parameters.indexed-gestalt}}" }
-      - name: triage_index_documents
-        help: "Pontos indexados na última execução, por modo"
-        labels: [{ key: mode, value: "facets" }]
-        gauge:
-          { realtime: false, value: "{{workflow.outputs.parameters.indexed-facets}}" }
   templates:
+    # ---- DAG: downloader -> (gestalt, facets) ----
     - name: index
+      dag:
+        tasks:
+          - name: downloader
+            template: downloader
+          - name: gestalt
+            template: gestalt
+            dependencies: [downloader]
+          - name: facets
+            template: facets
+            dependencies: [downloader]
+
+    # ---- downloader (rclone): baixa os .md do Garage para o PVC ----
+    - name: downloader
       retryStrategy:
         limit: "2"
         retryPolicy: OnError
         backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
-      outputs:
-        parameters:
-          - name: indexed-gestalt
-            valueFrom: { path: /workspace/indexed_count_gestalt }
-          - name: indexed-facets
-            valueFrom: { path: /workspace/indexed_count_facets }
-      containerSet:
-        archiveLogs: false
+      container:
+        name: main
+        image: rclone/rclone:1.69.0
+        env:
+          - name: RCLONE_CONFIG_GARAGE_TYPE
+            value: s3
+          - name: RCLONE_CONFIG_GARAGE_PROVIDER
+            value: Other
+          - name: RCLONE_CONFIG_GARAGE_ENDPOINT
+            value: http://garage.data.svc.cluster.local:3900
+          - name: RCLONE_CONFIG_GARAGE_REGION
+            value: garage
+          - name: RCLONE_CONFIG_GARAGE_FORCE_PATH_STYLE
+            value: "true"
+          - name: RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: { name: triage-indexer-garage, key: GARAGE_ACCESS_KEY }
+          - name: RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: { name: triage-indexer-garage, key: GARAGE_SECRET_KEY }
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            mkdir -p /workspace/repo
+            echo ">> rclone copy garage:triage-reports/triage -> /workspace/repo"
+            rclone copy "garage:triage-reports/triage" /workspace/repo \
+              --fast-list --transfers 8 --checkers 16 --s3-no-check-bucket
+            echo "downloader OK ($(find /workspace/repo -name '*.md' | wc -l) arquivos)"
         volumeMounts:
           - name: workspace
             mountPath: /workspace
-        containers:
-          # ---- fetch (rclone): baixa os .md do Garage para o emptyDir ----
-          # Mesmo padrão/credenciais do offsite-sync. `copy` (não `sync`): o
-          # workspace é efêmero, não há o que remover no destino.
-          - name: fetch
-            image: rclone/rclone:1.69.0
-            env:
-              - name: RCLONE_CONFIG_GARAGE_TYPE
-                value: s3
-              - name: RCLONE_CONFIG_GARAGE_PROVIDER
-                value: Other
-              - name: RCLONE_CONFIG_GARAGE_ENDPOINT
-                value: http://garage.data.svc.cluster.local:3900
-              - name: RCLONE_CONFIG_GARAGE_REGION
-                value: garage
-              - name: RCLONE_CONFIG_GARAGE_FORCE_PATH_STYLE
-                value: "true"
-              - name: RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID
-                valueFrom:
-                  secretKeyRef: { name: triage-indexer-garage, key: GARAGE_ACCESS_KEY }
-              - name: RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY
-                valueFrom:
-                  secretKeyRef: { name: triage-indexer-garage, key: GARAGE_SECRET_KEY }
-            command: [sh, -c]
-            args:
-              - |
-                set -eu
-                mkdir -p /workspace/repo
-                echo ">> rclone copy garage:triage-reports/triage -> /workspace/repo"
-                rclone copy "garage:triage-reports/triage" /workspace/repo \
-                  --fast-list --transfers 8 --checkers 16 --s3-no-check-bucket
-                echo "fetch OK ($(find /workspace/repo -name '*.md' | wc -l) arquivos)"
-            resources:
-              requests: { cpu: 100m, memory: 128Mi }
-              limits: { memory: 256Mi }
-          # ---- gestalt: 1 ponto/relatório -> triage_incidents ----
-          - name: gestalt
-            image: ghcr.io/fwfurtado/triage-indexer:0.3.0
-            command: [triage-index-gestalt]
-            dependencies: [fetch]
-            env:
-              - name: QDRANT_URL
-                value: "http://qdrant.data.svc.cluster.local:6333"
-              - name: QDRANT_API_KEY
-                valueFrom: { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
-              - name: COLLECTION_NAME
-                value: "triage_incidents"
-              - name: EMBEDDING_MODEL
-                value: "intfloat/multilingual-e5-large"
-              - name: REPO_DIR
-                value: "/workspace/repo"
-              - name: INDEXED_COUNT_PATH
-                value: "/workspace/indexed_count_gestalt"
-              - name: EMBED_BATCH
-                value: "8"
-            resources:
-              requests: { cpu: "100m", memory: "2Gi" }
-              limits: { memory: "4Gi" }
-          # ---- facets: 1 ponto/seção -> triage_facets ----
-          - name: facets
-            image: ghcr.io/fwfurtado/triage-indexer:0.3.0
-            command: [triage-index-facets]
-            dependencies: [fetch]
-            env:
-              - name: QDRANT_URL
-                value: "http://qdrant.data.svc.cluster.local:6333"
-              - name: QDRANT_API_KEY
-                valueFrom: { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
-              - name: COLLECTION_NAME
-                value: "triage_facets"
-              - name: EMBEDDING_MODEL
-                value: "intfloat/multilingual-e5-large"
-              - name: REPO_DIR
-                value: "/workspace/repo"
-              - name: INDEXED_COUNT_PATH
-                value: "/workspace/indexed_count_facets"
-              - name: EMBED_BATCH
-                value: "8"
-            resources:
-              requests: { cpu: "100m", memory: "2Gi" }
-              limits: { memory: "4Gi" }
+        resources:
+          requests: { cpu: 100m, memory: 128Mi }
+          limits: { memory: 256Mi }
+
+    # ---- gestalt: 1 ponto/relatório -> triage_incidents ----
+    - name: gestalt
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError
+        backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
+      metrics:
+        prometheus:
+          - name: triage_index_documents
+            help: "Pontos indexados na última execução, por modo"
+            labels: [{ key: mode, value: "gestalt" }]
+            gauge:
+              { realtime: false, value: "{{outputs.parameters.indexed}}" }
+      outputs:
+        parameters:
+          - name: indexed
+            valueFrom: { path: /workspace/indexed_count }
+      container:
+        name: main
+        image: ghcr.io/fwfurtado/triage-indexer:0.2.0
+        command: [triage-index-gestalt]
+        env:
+          - name: QDRANT_URL
+            value: "http://qdrant.data.svc.cluster.local:6333"
+          - name: QDRANT_API_KEY
+            valueFrom: { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
+          - name: COLLECTION_NAME
+            value: "triage_incidents"
+          - name: EMBEDDING_MODEL
+            value: "intfloat/multilingual-e5-large"
+          - name: REPO_DIR
+            value: "/workspace/repo"
+          - name: EMBED_BATCH
+            value: "8"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests: { cpu: "100m", memory: "2Gi" }
+          limits: { memory: "4Gi" }
+
+    # ---- facets: 1 ponto/seção -> triage_facets ----
+    - name: facets
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError
+        backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
+      metrics:
+        prometheus:
+          - name: triage_index_documents
+            help: "Pontos indexados na última execução, por modo"
+            labels: [{ key: mode, value: "facets" }]
+            gauge:
+              { realtime: false, value: "{{outputs.parameters.indexed}}" }
+      outputs:
+        parameters:
+          - name: indexed
+            valueFrom: { path: /workspace/indexed_count }
+      container:
+        name: main
+        image: ghcr.io/fwfurtado/triage-indexer:0.2.0
+        command: [triage-index-facets]
+        env:
+          - name: QDRANT_URL
+            value: "http://qdrant.data.svc.cluster.local:6333"
+          - name: QDRANT_API_KEY
+            valueFrom: { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
+          - name: COLLECTION_NAME
+            value: "triage_facets"
+          - name: EMBEDDING_MODEL
+            value: "intfloat/multilingual-e5-large"
+          - name: REPO_DIR
+            value: "/workspace/repo"
+          - name: EMBED_BATCH
+            value: "8"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests: { cpu: "100m", memory: "2Gi" }
+          limits: { memory: "4Gi" }

@@ -31,9 +31,3 @@ spec:
       namespace: ai
       jqPathExpressions:
         - ".spec.templates[].containerSet.archiveLogs"
-    - group: argoproj.io
-      kind: WorkflowTemplate
-      name: triage-indexer
-      namespace: ai
-      jqPathExpressions:
-        - ".spec.templates[].containerSet.archiveLogs"
