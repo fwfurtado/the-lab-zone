@@ -1,0 +1,110 @@
+# MCPServer da memória de triagens — busca por FACETA (Fase D, consumo).
+#
+# Serve a collection triage_facets: um ponto por seção do relatório
+# (symptom/evidence/cause/next_step), para perguntas dirigidas a uma faceta —
+# "já vi esse sintoma?", "que linha de investigação funcionou?", "o que foi
+# sugerido?". O campo 'section' é o eixo próprio: com ele o agente busca só na
+# faceta relevante. Read-only. Mesmo modelo (e5-large).
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: triage-facets-mcp
+  namespace: ai
+spec:
+  image: ofwfurtado/mcp-server-qdrant:0.2.2
+  transport: streamable-http
+  mcpPort: 8000
+  proxyPort: 8080
+  groupRef:
+    name: lab-readonly
+  args:
+    - mcp-server-qdrant
+    - --transport
+    - streamable-http
+  env:
+    - name: FASTMCP_SERVER_HOST
+      value: "0.0.0.0"
+    - name: FASTEMBED_CACHE_PATH
+      value: "/cache"
+    - name: QDRANT_URL
+      value: "http://qdrant.data.svc.cluster.local:6333"
+    - name: COLLECTION_NAME
+      value: "triage_facets"
+    - name: EMBEDDING_PROVIDER
+      value: "fastembed"
+    - name: EMBEDDING_MODEL
+      value: "intfloat/multilingual-e5-large"
+    - name: QDRANT_READ_ONLY
+      value: "true"
+    # 'section' é o filtro central desta collection: restringe a busca à faceta
+    # desejada (evidence para linha de investigação, cause para diagnóstico...).
+    - name: FILTERABLE_FIELDS
+      value: |
+        [
+          {
+            "name": "metadata.section",
+            "description": "Faceta do relatório: 'symptom' (sintoma observado), 'evidence' (métricas/logs/eventos investigados — a LINHA DE RACIOCÍNIO), 'cause' (causa provável), 'next_step' (ação sugerida). Filtre por section para buscar dentro de uma faceta específica.",
+            "field_type": "keyword",
+            "condition": "==",
+            "required": false
+          },
+          {
+            "name": "metadata.namespace",
+            "description": "Namespace Kubernetes do incidente (ex.: data, observability, ai).",
+            "field_type": "keyword",
+            "condition": "==",
+            "required": false
+          },
+          {
+            "name": "metadata.confirmation",
+            "description": "Estado de confirmação do diagnóstico: unverified, confirmed ou refuted. Use '!= refuted' para excluir o que se provou errado.",
+            "field_type": "keyword",
+            "condition": "!=",
+            "required": false
+          }
+        ]
+    - name: TOOL_FIND_DESCRIPTION
+      value: >-
+        Busca em FACETAS de triagens passadas (sintoma, evidência, causa, próximo
+        passo — cada seção indexada separadamente). Use DURANTE a investigação
+        para dicas dirigidas: filtre section='evidence' para ver que métricas/logs
+        foram investigados em sintomas parecidos (a linha de raciocínio que
+        funcionou), section='cause' para causas prováveis de sintomas similares,
+        section='next_step' para ações já sugeridas. A query deve descrever a
+        faceta que você investiga (ex.: o sintoma atual). Para saber se o
+        incidente INTEIRO é regressão, use a busca de INCIDENTES.
+  secrets:
+    - name: qdrant-apikey-ai
+      key: apiKey
+      targetEnvName: QDRANT_API_KEY
+  permissionProfile:
+    type: builtin
+    name: network
+  podTemplateSpec:
+    spec:
+      initContainers:
+        - name: seed-cache
+          image: ofwfurtado/mcp-server-qdrant:0.2.2
+          command: ["sh", "-c", "cp -r /opt/models/. /cache/ || true"]
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+      containers:
+        - name: mcp
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "2Gi"
+    requests:
+      cpu: "50m"
+      memory: "512Mi"

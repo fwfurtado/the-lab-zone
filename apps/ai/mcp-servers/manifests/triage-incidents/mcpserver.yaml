@@ -1,0 +1,111 @@
+# MCPServer da memória de triagens — busca por GESTALT (Fase D, consumo).
+#
+# Serve a collection triage_incidents: um ponto por relatório, para a pergunta
+# "esse incidente inteiro já aconteceu antes? é regressão?". Read-only (consumo
+# não escreve). Filtro nomeado via FILTERABLE_FIELDS: os campos e suas condições
+# viram argumentos GUIADOS na tool qdrant-find (o pydantic-settings desserializa
+# o JSON da env var direto para a lista de FilterableField do upstream, e as
+# descriptions entram na descrição da tool). Mesmo modelo do indexer e do QA
+# (e5-large) — obrigatório para query e documento ficarem no mesmo espaço.
+apiVersion: toolhive.stacklok.dev/v1beta1
+kind: MCPServer
+metadata:
+  name: triage-incidents-mcp
+  namespace: ai
+spec:
+  image: ofwfurtado/mcp-server-qdrant:0.2.2
+  transport: streamable-http
+  mcpPort: 8000
+  proxyPort: 8080
+  groupRef:
+    name: lab-readonly
+  args:
+    - mcp-server-qdrant
+    - --transport
+    - streamable-http
+  env:
+    - name: FASTMCP_SERVER_HOST
+      value: "0.0.0.0"
+    - name: FASTEMBED_CACHE_PATH
+      value: "/cache"
+    - name: QDRANT_URL
+      value: "http://qdrant.data.svc.cluster.local:6333"
+    - name: COLLECTION_NAME
+      value: "triage_incidents"
+    - name: EMBEDDING_PROVIDER
+      value: "fastembed"
+    - name: EMBEDDING_MODEL
+      value: "intfloat/multilingual-e5-large"
+    - name: QDRANT_READ_ONLY
+      value: "true"
+    # Filtro nomeado: cada campo vira argumento guiado da tool. namespace e
+    # confirmation com '=='; alertnames é lista no payload, então 'any'
+    # ("contém"). Todos opcionais — o agente filtra quando fizer sentido.
+    - name: FILTERABLE_FIELDS
+      value: |
+        [
+          {
+            "name": "metadata.namespace",
+            "description": "Namespace Kubernetes do incidente (ex.: data, observability, ai). Use para restringir a incidentes do mesmo namespace.",
+            "field_type": "keyword",
+            "condition": "==",
+            "required": false
+          },
+          {
+            "name": "metadata.alertnames",
+            "description": "Nomes de alerta do incidente (ex.: CiliumPolicyDrop, TargetDown). Use para achar incidentes do mesmo tipo de alerta.",
+            "field_type": "keyword",
+            "condition": "any",
+            "required": false
+          },
+          {
+            "name": "metadata.confirmation",
+            "description": "Estado de confirmação do diagnóstico: unverified, confirmed ou refuted. Use '!= refuted' para excluir diagnósticos que se provaram errados.",
+            "field_type": "keyword",
+            "condition": "!=",
+            "required": false
+          }
+        ]
+    - name: TOOL_FIND_DESCRIPTION
+      value: >-
+        Busca na MEMÓRIA DE INCIDENTES de triagem passados (relatório inteiro por
+        incidente). Use no INÍCIO de uma triagem para detectar regressão: "esse
+        incidente, como um todo, já aconteceu antes?". A query deve ser o resumo
+        do incidente atual (sintomas + contexto). Retorna incidentes passados com
+        assinatura semelhante. Para investigar uma faceta específica (um sintoma,
+        uma causa, a linha de raciocínio), use a busca de FACETAS.
+  secrets:
+    - name: qdrant-apikey-ai
+      key: apiKey
+      targetEnvName: QDRANT_API_KEY
+  permissionProfile:
+    type: builtin
+    name: network
+  podTemplateSpec:
+    spec:
+      initContainers:
+        - name: seed-cache
+          image: ofwfurtado/mcp-server-qdrant:0.2.2
+          command: ["sh", "-c", "cp -r /opt/models/. /cache/ || true"]
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+      containers:
+        - name: mcp
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /cache
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "2Gi"
+    requests:
+      cpu: "50m"
+      memory: "512Mi"

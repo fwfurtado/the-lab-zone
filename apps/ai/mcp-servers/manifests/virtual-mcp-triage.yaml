@@ -21,6 +21,15 @@ spec:
         - workload: qdrant-mcp
           excludeAll: true
 
+        # Memória de triagens (Fase D). Duas buscas distintas, cada uma na sua
+        # collection: incidents para regressão (incidente inteiro), facets para
+        # investigação dirigida (sintoma/causa/linha de raciocínio). Ambas
+        # read-only, com filtro de payload nomeado.
+        - workload: triage-incidents-mcp
+          excludeAll: false
+        - workload: triage-facets-mcp
+          excludeAll: false
+
         - workload: proxmox
           excludeAll: false
         - workload: kubernetes

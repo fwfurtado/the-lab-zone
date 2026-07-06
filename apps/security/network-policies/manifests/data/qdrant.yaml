@@ -29,6 +29,14 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: triage-indexer
+        # MCPs de consumo da memória de triagens (Fase D): as duas instâncias
+        # que servem busca sobre triage_incidents e triage_facets ao agente.
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            toolhive-name: triage-incidents-mcp
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            toolhive-name: triage-facets-mcp
       toPorts:
         - ports:
             - port: "6333"
