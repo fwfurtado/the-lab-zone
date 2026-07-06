@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: bot
-          image: ghcr.io/fwfurtado/the-lab-zone-agents-core:0.4.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-core:0.6.0
           ports:
             - name: metrics
               containerPort: 9090
