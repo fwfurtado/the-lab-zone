@@ -1,0 +1,10 @@
+# Campos filtraveis da tool de busca da collection triage_incidents (Fase D).
+# Injetado no container via envFrom (escapa da validacao de env do ToolHive).
+# JSON minificado numa linha; o pydantic-settings do upstream desserializa.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: triage-incidents-filterable-fields
+  namespace: ai
+data:
+  FILTERABLE_FIELDS: '[{"name":"metadata.namespace","description":"Namespace Kubernetes do incidente (ex.: data, observability, ai). Use para restringir a incidentes do mesmo namespace.","field_type":"keyword","condition":"==","required":false},{"name":"metadata.alertnames","description":"Nomes de alerta do incidente (ex.: CiliumPolicyDrop, TargetDown). Use para achar incidentes do mesmo tipo de alerta.","field_type":"keyword","condition":"any","required":false},{"name":"metadata.confirmation","description":"Estado de confirmacao do diagnostico: unverified, confirmed ou refuted. Use != refuted para excluir diagnosticos que se provaram errados.","field_type":"keyword","condition":"!=","required":false}]'
