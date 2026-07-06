@@ -120,7 +120,7 @@ spec:
             valueFrom: { path: /workspace/indexed_count }
       container:
         name: main
-        image: ghcr.io/fwfurtado/triage-indexer:0.2.0
+        image: ghcr.io/fwfurtado/triage-indexer:0.3.1
         command: [triage-index-gestalt]
         env:
           - name: QDRANT_URL
@@ -161,7 +161,7 @@ spec:
             valueFrom: { path: /workspace/indexed_count }
       container:
         name: main
-        image: ghcr.io/fwfurtado/triage-indexer:0.2.0
+        image: ghcr.io/fwfurtado/triage-indexer:0.3.1
         command: [triage-index-facets]
         env:
           - name: QDRANT_URL
