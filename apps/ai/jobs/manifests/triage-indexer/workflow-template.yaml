@@ -1,12 +1,16 @@
-# WorkflowTemplate do triage-indexer (Fase D, Fatia A).
+# WorkflowTemplate do triage-indexer (Fase D, duas collections).
 #
-# Reconcilia os relatórios de triagem do Garage (bucket triage-reports) para a
-# collection triage_reports do Qdrant. Espelha o qa-indexer, trocando o container
-# de origem: em vez de `git clone`, um `rclone copy` do Garage para o emptyDir.
+# DAG: um downloader (rclone) baixa os relatórios do Garage uma vez para o
+# emptyDir; dois indexers em paralelo (fan-out) leem dele e populam collections
+# distintas do Qdrant:
+#   gestalt -> triage_incidents (1 ponto/relatório, busca por regressão)
+#   facets  -> triage_facets    (1 ponto/seção,     busca por sintoma/causa/hint)
 #
-# containerSet: o container `fetch` (rclone) baixa os .md; o `main` (Python,
-# FastEmbed local) parseia, corta o preâmbulo, embeda e faz upsert idempotente
-# com GC por run_id.
+# containerSet (mesmo pod): o emptyDir é compartilhado entre os três containers
+# sem PVC, e gestalt/facets aparecem como nós distintos no Argo UI — falha
+# isolada e visível por modo, que é o ponto da observabilidade separada. O custo
+# é o pod dimensionar para os dois modelos e5-large em paralelo (RAM), aceitável
+# com o headroom noturno.
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -31,10 +35,18 @@ spec:
         labels: [{ key: status, value: "{{workflow.status}}" }]
         counter: { value: "1" }
         when: "{{workflow.status}} != Running"
+      # Métrica por modo (observabilidade separada): cada indexer escreve seu
+      # próprio arquivo de contagem, e a métrica leva o label do modo.
       - name: triage_index_documents
-        help: "Chunks de triagem indexados na última execução"
+        help: "Pontos indexados na última execução, por modo"
+        labels: [{ key: mode, value: "gestalt" }]
         gauge:
-          { realtime: false, value: "{{workflow.outputs.parameters.indexed}}" }
+          { realtime: false, value: "{{workflow.outputs.parameters.indexed-gestalt}}" }
+      - name: triage_index_documents
+        help: "Pontos indexados na última execução, por modo"
+        labels: [{ key: mode, value: "facets" }]
+        gauge:
+          { realtime: false, value: "{{workflow.outputs.parameters.indexed-facets}}" }
   templates:
     - name: index
       retryStrategy:
@@ -43,8 +55,10 @@ spec:
         backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
       outputs:
         parameters:
-          - name: indexed
-            valueFrom: { path: /workspace/indexed_count }
+          - name: indexed-gestalt
+            valueFrom: { path: /workspace/indexed_count_gestalt }
+          - name: indexed-facets
+            valueFrom: { path: /workspace/indexed_count_facets }
       containerSet:
         archiveLogs: false
         volumeMounts:
@@ -85,29 +99,49 @@ spec:
             resources:
               requests: { cpu: 100m, memory: 128Mi }
               limits: { memory: 256Mi }
-          # ---- main (Python): parseia, embeda (FastEmbed local) e upserta ----
-          - name: main
-            image: ghcr.io/fwfurtado/triage-indexer:0.1.0
+          # ---- gestalt: 1 ponto/relatório -> triage_incidents ----
+          - name: gestalt
+            image: ghcr.io/fwfurtado/triage-indexer:0.3.0
+            command: [triage-index-gestalt]
             dependencies: [fetch]
             env:
               - name: QDRANT_URL
                 value: "http://qdrant.data.svc.cluster.local:6333"
               - name: QDRANT_API_KEY
-                valueFrom:
-                  { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
+                valueFrom: { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
               - name: COLLECTION_NAME
-                value: "triage_reports"
+                value: "triage_incidents"
               - name: EMBEDDING_MODEL
                 value: "intfloat/multilingual-e5-large"
               - name: REPO_DIR
                 value: "/workspace/repo"
-              - name: CHUNK_CHARS
-                value: "2000"        # relatório é unidade coesa (calibrável)
+              - name: INDEXED_COUNT_PATH
+                value: "/workspace/indexed_count_gestalt"
               - name: EMBED_BATCH
                 value: "8"
             resources:
-              requests:
-                cpu: "100m"
-                memory: "2Gi"        # FastEmbed/e5-large carrega o modelo em RAM
-              limits:
-                memory: "4Gi"
+              requests: { cpu: "100m", memory: "2Gi" }
+              limits: { memory: "4Gi" }
+          # ---- facets: 1 ponto/seção -> triage_facets ----
+          - name: facets
+            image: ghcr.io/fwfurtado/triage-indexer:0.3.0
+            command: [triage-index-facets]
+            dependencies: [fetch]
+            env:
+              - name: QDRANT_URL
+                value: "http://qdrant.data.svc.cluster.local:6333"
+              - name: QDRANT_API_KEY
+                valueFrom: { secretKeyRef: { name: qdrant-apikey-ai, key: apiKey } }
+              - name: COLLECTION_NAME
+                value: "triage_facets"
+              - name: EMBEDDING_MODEL
+                value: "intfloat/multilingual-e5-large"
+              - name: REPO_DIR
+                value: "/workspace/repo"
+              - name: INDEXED_COUNT_PATH
+                value: "/workspace/indexed_count_facets"
+              - name: EMBED_BATCH
+                value: "8"
+            resources:
+              requests: { cpu: "100m", memory: "2Gi" }
+              limits: { memory: "4Gi" }
