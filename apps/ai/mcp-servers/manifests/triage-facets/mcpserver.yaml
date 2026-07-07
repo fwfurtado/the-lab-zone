@@ -55,6 +55,11 @@ spec:
   permissionProfile:
     type: builtin
     name: network
+  resourceOverrides:
+    proxyDeployment:
+      annotations:
+        "isso-chega-no-sts": true
+
   podTemplateSpec:
     spec:
       initContainers:
