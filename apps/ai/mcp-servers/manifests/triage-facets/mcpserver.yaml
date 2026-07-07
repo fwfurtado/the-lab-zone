@@ -11,10 +11,6 @@ metadata:
   name: triage-facets-mcp
   namespace: ai
 spec:
-  template:
-    metadata:
-      annotations:
-        "chega-no-statefulset": true
   image: ofwfurtado/mcp-server-qdrant:0.2.2
   transport: streamable-http
   mcpPort: 8000
