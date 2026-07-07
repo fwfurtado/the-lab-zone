@@ -58,7 +58,7 @@ spec:
   resourceOverrides:
     proxyDeployment:
       annotations:
-        "isso-chega-no-sts": true
+        "isso-chega-no-sts": "true"
 
   podTemplateSpec:
     spec:
