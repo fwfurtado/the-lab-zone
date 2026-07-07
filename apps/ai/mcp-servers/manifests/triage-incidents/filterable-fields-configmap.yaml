@@ -6,5 +6,10 @@ kind: ConfigMap
 metadata:
   name: triage-incidents-filterable-fields
   namespace: ai
+# NOTA: 'confirmation' foi removido dos campos filtráveis (ADR-0012). O campo tem
+# condition '!=' (o valor passado é EXCLUÍDO), semântica que o agente aplicou
+# errado em produção (passou 'unverified', zerando a busca — todos os relatórios
+# são unverified hoje). Dormente até a Fatia B dar valores variados a confirmation;
+# readicionar então com condition 'any' (valor positivo), não '!='.
 data:
-  FILTERABLE_FIELDS: '[{"name":"namespace","description":"Namespace Kubernetes do incidente (ex.: data, observability, ai). Use para restringir a incidentes do mesmo namespace.","field_type":"keyword","condition":"==","required":false},{"name":"alertnames","description":"Nomes de alerta do incidente (ex.: CiliumPolicyDrop, TargetDown). Use para achar incidentes do mesmo tipo de alerta.","field_type":"keyword","condition":"any","required":false},{"name":"confirmation","description":"Estado de confirmacao do diagnostico: unverified, confirmed ou refuted. Use != refuted para excluir diagnosticos que se provaram errados.","field_type":"keyword","condition":"!=","required":false}]'
+  FILTERABLE_FIELDS: '[{"name":"namespace","description":"Namespace Kubernetes do incidente (ex.: data, observability, ai). Use para restringir a incidentes do mesmo namespace.","field_type":"keyword","condition":"==","required":false},{"name":"alertnames","description":"Nomes de alerta do incidente (ex.: CiliumPolicyDrop, TargetDown). Use para achar incidentes do mesmo tipo de alerta.","field_type":"keyword","condition":"any","required":false}]'

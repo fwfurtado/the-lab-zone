@@ -5,5 +5,10 @@ kind: ConfigMap
 metadata:
   name: triage-facets-filterable-fields
   namespace: ai
+# NOTA: 'confirmation' foi removido dos campos filtráveis (ADR-0012). O campo tem
+# condition '!=' (o valor passado é EXCLUÍDO), semântica que o agente aplicou
+# errado em produção (passou 'unverified', zerando a busca — todos os relatórios
+# são unverified hoje). Dormente até a Fatia B dar valores variados a confirmation;
+# readicionar então com condition 'any' (valor positivo), não '!='.
 data:
-  FILTERABLE_FIELDS: '[{"name":"section","description":"Faceta do relatorio: symptom (sintoma observado), evidence (metricas/logs/eventos investigados — a LINHA DE RACIOCINIO), cause (causa provavel), next_step (acao sugerida). Filtre por section para buscar dentro de uma faceta especifica.","field_type":"keyword","condition":"==","required":false},{"name":"namespace","description":"Namespace Kubernetes do incidente (ex.: data, observability, ai).","field_type":"keyword","condition":"==","required":false},{"name":"confirmation","description":"Estado de confirmacao do diagnostico: unverified, confirmed ou refuted. Use != refuted para excluir o que se provou errado.","field_type":"keyword","condition":"!=","required":false}]'
+  FILTERABLE_FIELDS: '[{"name":"section","description":"Faceta do relatorio: symptom (sintoma observado), evidence (metricas/logs/eventos investigados — a LINHA DE RACIOCINIO), cause (causa provavel), next_step (acao sugerida). Filtre por section para buscar dentro de uma faceta especifica.","field_type":"keyword","condition":"==","required":false},{"name":"namespace","description":"Namespace Kubernetes do incidente (ex.: data, observability, ai).","field_type":"keyword","condition":"==","required":false}]'
