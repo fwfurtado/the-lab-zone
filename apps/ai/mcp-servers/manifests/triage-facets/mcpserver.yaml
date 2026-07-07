@@ -57,6 +57,10 @@ spec:
     name: network
   podTemplateSpec:
     spec:
+      template:
+        metadata:
+          annotations:
+            "chega-no-stateful-set": true
       initContainers:
         - name: seed-cache
           image: ofwfurtado/mcp-server-qdrant:0.2.2
