@@ -54,6 +54,15 @@ config:
       check_interval: 5s        # era 1s no values antigo; default do chart é 5s (mais correto)
       limit_percentage: 75
       spike_limit_percentage: 15
+    # Descarta spans de healthcheck (GET .../healthz): a borda pole o núcleo a
+    # cada ~15s e, sem trace pai, cada poll vira um trace ÓRFÃO no Langfuse.
+    # Stopgap enquanto a imagem 0.7.x da borda (com WithFilter no source) não
+    # sobe — depois pode sair. error_mode: ignore => span sem url.full é mantido.
+    filter/drop_health:
+      error_mode: ignore
+      traces:
+        span:
+          - 'IsMatch(attributes["url.full"], ".*/healthz$")'
     # k8sattributes é injetado automaticamente pelo preset kubernetesAttributes
 
   exporters:
@@ -92,7 +101,7 @@ config:
         exporters: [otlphttp/logs]
       traces:
         receivers: [otlp]
-        processors: [memory_limiter, batch]
+        processors: [memory_limiter, filter/drop_health, batch]
         exporters: [otlphttp/langfuse-zone-test, debug]
 
 # Porta metrics habilitada para o VMAgent scrape o próprio collector
