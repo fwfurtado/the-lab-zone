@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: bot
-          image: ghcr.io/fwfurtado/the-lab-zone-agents-core:0.6.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-core:0.7.0
           ports:
             - name: metrics
               containerPort: 9090
@@ -33,6 +33,21 @@ spec:
               value: gpt-oss-120b
             - name: LOG_LEVEL
               value: "INFO"
+            # Observabilidade OTel: o QA é dono dos spans e roota o próprio trace
+            # (não há borda Go aqui). Exporta pro Collector node-local; HOST_IP
+            # via downward API. Nota: no caminho streaming (run_stream) o LiteLLM
+            # ainda não emite o header de custo, então gen_ai.usage.cost pode
+            # faltar no QA — diferente da triagem (run, não-streaming).
+            - name: OTEL_ENABLED
+              value: "true"
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://$(HOST_IP):4318
+            - name: OTEL_SERVICE_NAME
+              value: qa-bot
           envFrom:
             - secretRef:
                 name: slack-qa-bot

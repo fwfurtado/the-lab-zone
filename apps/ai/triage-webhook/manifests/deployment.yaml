@@ -28,7 +28,7 @@ spec:
       containers:
         # ---- Borda (Go): recebe o Alertmanager, deduplica, enfileira ----
         - name: webhook
-          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.6.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook:0.7.0
           ports:
             - name: webhook
               containerPort: 8080
@@ -68,6 +68,19 @@ spec:
               value: garage
             - name: GARAGE_USE_SSL
               value: "false"           # tráfego interno no cluster, sem TLS
+            # Observabilidade OTel: a borda ENRAÍZA o trace e exporta para o
+            # Collector node-local (daemonset, hostPort 4318). HOST_IP vem do
+            # downward API; $(HOST_IP) precisa vir DEPOIS na lista p/ a expansão.
+            - name: OTEL_ENABLED
+              value: "true"
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://$(HOST_IP):4318
+            - name: OTEL_SERVICE_NAME
+              value: triage-webhook
           envFrom:
             - secretRef:
                 name: triage-webhook   # SLACK_BOT_TOKEN + GARAGE_*_KEY via ESO
@@ -98,7 +111,7 @@ spec:
 
         # ---- Núcleo (Python): o agente de triagem, mesmo da CLI/Slack ----
         - name: core
-          image: ghcr.io/fwfurtado/the-lab-zone-agents-core:0.6.0
+          image: ghcr.io/fwfurtado/the-lab-zone-agents-core:0.7.0
           command: ["triage-serve"]
           ports:
             - name: core-metrics
@@ -149,6 +162,19 @@ spec:
               value: "true"
             - name: HISTORY_KEEP_RECENT_TOOL_RESULTS
               value: "16"
+            # Observabilidade OTel: o núcleo é DONO dos spans (agent run, model
+            # request, tool calls) e continua o trace que a borda enraizou.
+            # Exporta pro Collector node-local; HOST_IP via downward API.
+            - name: OTEL_ENABLED
+              value: "true"
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://$(HOST_IP):4318
+            - name: OTEL_SERVICE_NAME
+              value: triage-agent
           envFrom:
             - secretRef:
                 name: triage-webhook   # LITELLM_KEY via ESO
