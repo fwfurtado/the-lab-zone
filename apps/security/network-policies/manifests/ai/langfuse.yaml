@@ -17,9 +17,6 @@ spec:
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: litellm
-        - matchLabels:
-            io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: pipelines
         - matchLabels:
             io.kubernetes.pod.namespace: ai
