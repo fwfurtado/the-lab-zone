@@ -24,6 +24,9 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: lightrag
+        - matchLabels:
+            io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: opentelemetry-collector
       toPorts:
         - ports:
             - port: "3000"
