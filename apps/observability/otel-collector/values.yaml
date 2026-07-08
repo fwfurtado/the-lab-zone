@@ -87,7 +87,7 @@ config:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, batch]
-        exporters: [otlphttp/langfuse-agents, debug]
+        exporters: [otlphttp/langfuse-agents]
 
 # Porta metrics habilitada para o VMAgent scrape o próprio collector
 ports:
