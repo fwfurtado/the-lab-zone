@@ -1,6 +1,6 @@
 # OTel Collector — DaemonSet no cluster (chart 0.158.1)
 # Fase 5: recebe métricas/logs via OTLP e encaminha para VictoriaMetrics/VictoriaLogs
-# Traces de IA: exportados para o Langfuse (projeto de teste zone-test) via otlphttp.
+# Traces de IA: exportados para o Langfuse (projeto único de observabilidade dos agentes) via otlphttp.
 # (VictoriaTraces full-stack fica para a Fase 7)
 
 mode: daemonset
@@ -27,11 +27,11 @@ presets:
     storeCheckpoints: false
 
 # Credencial OTLP do Langfuse (ESO/Infisical). Deve conter a chave
-# LANGFUSE_ZONE_TEST_OTEL_AUTH = "Basic <base64(pk:sk)>" do projeto zone-test.
+# LANGFUSE_OTEL_AUTH = "Basic <base64(pk:sk)>" do projeto único dos agentes.
 # Injetada como env no pod para o ${env:...} do exporter resolver.
 extraEnvsFrom:
   - secretRef:
-      name: langfuse-zone-test
+      name: langfuse-agents
 
 config:
   receivers:
@@ -54,16 +54,6 @@ config:
       check_interval: 5s        # era 1s no values antigo; default do chart é 5s (mais correto)
       limit_percentage: 75
       spike_limit_percentage: 15
-    # Descarta spans de healthcheck (GET .../healthz): a borda pole o núcleo a
-    # cada ~15s e, sem trace pai, cada poll vira um trace ÓRFÃO no Langfuse.
-    # Stopgap enquanto a imagem 0.7.x da borda (com WithFilter no source) não
-    # sobe — depois pode sair. error_mode: ignore => span sem url.full é mantido.
-    filter/drop_health:
-      error_mode: ignore
-      traces:
-        span:
-          - 'IsMatch(attributes["url.full"], ".*/healthz$")'
-    # k8sattributes é injetado automaticamente pelo preset kubernetesAttributes
 
   exporters:
     otlphttp/metrics:
@@ -76,18 +66,13 @@ config:
       tls:
         insecure: true
 
-    # Traces de IA -> Langfuse (projeto de teste zone-test).
+    # Traces de IA -> Langfuse (projeto único de observabilidade dos agentes).
     # HTTP-only: o Langfuse não aceita gRPC; o exporter anexa /v1/traces ao endpoint base.
-    otlphttp/langfuse-zone-test:
+    otlphttp/langfuse-agents:
       endpoint: http://langfuse-web.ai.svc.cluster.local:3000/api/public/otel
       headers:
-        Authorization: ${env:LANGFUSE_ZONE_TEST_OTEL_AUTH}   # "Basic <base64(pk:sk)>"
+        Authorization: ${env:LANGFUSE_OTEL_AUTH}   # "Basic <base64(pk:sk)>"
         x-langfuse-ingestion-version: "4"
-
-    # debug mantido durante a validação: `kubectl logs` mostra os spans chegando.
-    # Pode sair do pipeline de traces depois que o zone-test estiver confirmado.
-    debug:
-      verbosity: basic
 
   service:
     pipelines:
@@ -102,7 +87,7 @@ config:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, filter/drop_health, batch]
-        exporters: [otlphttp/langfuse-zone-test, debug]
+        exporters: [otlphttp/langfuse-agents, debug]
 
 # Porta metrics habilitada para o VMAgent scrape o próprio collector
 ports:
