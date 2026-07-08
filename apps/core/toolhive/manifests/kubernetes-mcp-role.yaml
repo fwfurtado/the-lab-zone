@@ -34,6 +34,11 @@ rules:
       - nodes/metrics
       - nodes/log       # kubernetes_nodes_log
     verbs: ["get", "list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources:
+      - nodes           # kubectl top nodes / nodes.metrics.k8s.io
+      - pods            # kubectl top pods / pods.metrics.k8s.io
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

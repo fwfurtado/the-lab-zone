@@ -1,0 +1,11 @@
+# Talos nao emite, por padrao aqui, serving certs de kubelet validaveis pelo
+# metrics-server. Mantem o caminho simples para liberar metrics.k8s.io.
+args:
+  - --kubelet-insecure-tls
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 128Mi
