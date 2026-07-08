@@ -4,7 +4,9 @@
 --   n_retrievals  = observações kind='embedding' (buscas vetoriais do LightRAG)
 --   n_generations = observações kind='completion' (geração/extração do LightRAG)
 --   wall_ms       = latência ponta-a-ponta do trace (último end - primeiro start)
--- SEM custo aqui — custo mora no mart_rag_cost_daily (reprecificado). Aqui é volume/forma.
+-- SEM custo aqui — só volume/forma. Custo de RAG está PARKEADO: o repricing via
+-- gateway morreu com a inversão (projeto gateway apagado) e o lightRAG ainda não
+-- captura custo efetivo (fica pra quando ele entrar no plano do collector).
 --
 -- IMPORTANTE: event_date/trace_id saem do int (o, lado esquerdo). Do trace (t, lado direito) só
 -- puxo trace_name/session_id (nomes ÚNICOS). Não dá pra selecionar t.event_date/t.project_id —
