@@ -1,6 +1,6 @@
 # OTel Collector — DaemonSet no cluster (chart 0.158.1)
 # Fase 5: recebe métricas/logs via OTLP e encaminha para VictoriaMetrics/VictoriaLogs
-# Traces de IA: exportados para o Langfuse (projeto único de observabilidade dos agentes) via otlphttp.
+# Traces de IA: exportados para o Langfuse (projeto único de observabilidade dos agentes) via otlp_http.
 # (VictoriaTraces full-stack fica para a Fase 7)
 
 mode: daemonset
@@ -56,38 +56,63 @@ config:
       spike_limit_percentage: 15
 
   exporters:
-    otlphttp/metrics:
+    otlp_http/metrics:
       endpoint: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428/opentelemetry
       tls:
         insecure: true
 
-    otlphttp/logs:
+    otlp_http/logs:
       endpoint: http://victoria-logs-vls-server.observability.svc.cluster.local:9428/insert/opentelemetry
       tls:
         insecure: true
 
     # Traces de IA -> Langfuse (projeto único de observabilidade dos agentes).
     # HTTP-only: o Langfuse não aceita gRPC; o exporter anexa /v1/traces ao endpoint base.
-    otlphttp/langfuse-agents:
+    otlp_http/langfuse-agents:
       endpoint: http://langfuse-web.ai.svc.cluster.local:3000/api/public/otel
       headers:
         Authorization: ${env:LANGFUSE_OTEL_AUTH}   # "Basic <base64(pk:sk)>"
         x-langfuse-ingestion-version: "4"
+
+  connectors:
+    # span_metrics: deriva RED (rate/erros/duração) dos spans do agente e emite
+    # como métrica pro VictoriaMetrics — plano de SISTEMA, alertável via VMRule,
+    # sem consultar o Langfuse. Consome spans (exporter no pipeline traces) e
+    # produz métricas (receiver no pipeline metrics/span_metrics).
+    span_metrics:
+      histogram:
+        explicit:
+          # Runs de agente vão de ms (tool calls) a minutos (triagem inteira);
+          # os buckets cobrem as duas pontas pra ter percentil útil em ambas.
+          buckets: [10ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s, 30s, 60s, 120s, 300s]
+      dimensions:
+        - name: gen_ai.request.model    # RED por modelo (baixa cardinalidade)
+      exemplars:
+        enabled: true
+      metrics_flush_interval: 15s
+      namespace: agents.span_metrics
 
   service:
     pipelines:
       metrics:
         receivers: [otlp]
         processors: [memory_limiter, batch]
-        exporters: [otlphttp/metrics]
+        exporters: [otlp_http/metrics]
       logs:
         receivers: [otlp, filelog]  # filelog injetado pelo preset logsCollection
         processors: [memory_limiter, batch]
-        exporters: [otlphttp/logs]
+        exporters: [otlp_http/logs]
       traces:
         receivers: [otlp]
         processors: [memory_limiter, batch]
-        exporters: [otlphttp/langfuse-agents]
+        exporters: [otlp_http/langfuse-agents, span_metrics]
+      # RED derivado dos spans -> VictoriaMetrics. O connector span_metrics é o
+      # receiver aqui; as séries (agents_span_metrics_calls_total / _duration_*)
+      # ficam alertáveis via VMRule sem tocar no Langfuse.
+      metrics/span_metrics:
+        receivers: [span_metrics]
+        processors: [memory_limiter, batch]
+        exporters: [otlp_http/metrics]
 
 # Porta metrics habilitada para o VMAgent scrape o próprio collector
 ports:
