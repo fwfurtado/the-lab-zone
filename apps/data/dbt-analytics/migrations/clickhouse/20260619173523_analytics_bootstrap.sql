@@ -1,32 +1,33 @@
--- Bootstrap do RBAC do analytics. O database é criado pelo step `ensure-db` do Workflow
--- (o CHI da Altinity não cria database declarativamente; e a tabela de versão do goose
--- precisa de um db que já exista). Aqui versionamos user + grants.
+-- NO-OP desde a migração do RBAC do `analytics` pro operator.
+-- Ver docs/runbooks/argo-workflows/workflows-elt-clickhouse-dbt.md
 --
--- ISOLAMENTO: SELECT em default.* (schema do Langfuse, read-only) + ALL em analytics.* +
--- SELECT em system.* (introspecção do dbt). Nenhuma escrita em default.
+-- ANTES esta migration criava o usuário por SQL:
+--   CREATE USER IF NOT EXISTS analytics IDENTIFIED WITH sha256_password ...
+--   GRANT SELECT ON `default`.* / GRANT ALL ON analytics.* / GRANT SELECT ON system.*
 --
--- A senha vem do env ANALYTICS_PASSWORD (secret clickhouse-analytics) via envsub — sem
--- hardcode. Roda UMA vez (versionado); rotação = nova migration ou ALTER USER manual.
+-- POR QUE SAIU:
+--   1. `IF NOT EXISTS` é idempotente na EXISTÊNCIA, não no ESTADO: rotacionar a senha
+--      no 1Password nunca reaplicava (e o goose não re-roda migration já aplicada).
+--   2. Usuário criado por SQL mora no access storage do ClickHouse (system.users
+--      storage='disk'), enquanto `analytics.goose_db_version` é DADO (PVC). Ciclos de
+--      vida distintos: o usuário sumiu num recreate, o registro do goose sobreviveu, o
+--      goose reportou "no migrations to run" e o dbt quebrou com AUTHENTICATION_FAILED.
+--
+-- AGORA usuário + rede + grants são declarativos no ClickHouseInstallation
+--   (apps/data/clickhouse/manifests/clickhouse-instalation.yaml -> files."users.d/custom-users.xml"),
+--   com hash SHA256 vindo do ESO. O operator reconcilia a cada boot.
+--
+-- O arquivo PERMANECE: a versão já está em goose_db_version e o goose não re-roda
+-- migrations aplicadas — removê-lo criaria drift. Corpo neutralizado porque o ClickHouse
+-- PROÍBE gerenciar a mesma entidade de acesso por XML e por SQL ao mesmo tempo: recriar
+-- o usuário aqui quebraria o bootstrap de um cluster novo (DR).
 
 -- +goose Up
--- +goose envsub on
 -- +goose StatementBegin
-CREATE USER IF NOT EXISTS analytics
-  IDENTIFIED WITH sha256_password BY '${ANALYTICS_PASSWORD}'
-  HOST IP '10.245.0.0/16', IP '127.0.0.1', IP '::1';
+SELECT 1;
 -- +goose StatementEnd
--- +goose StatementBegin
-GRANT SELECT ON `default`.* TO analytics;
--- +goose StatementEnd
--- +goose StatementBegin
-GRANT ALL ON analytics.* TO analytics;
--- +goose StatementEnd
--- +goose StatementBegin
-GRANT SELECT ON system.* TO analytics;
--- +goose StatementEnd
--- +goose envsub off
 
 -- +goose Down
 -- +goose StatementBegin
-DROP USER IF EXISTS analytics;
+SELECT 1;
 -- +goose StatementEnd

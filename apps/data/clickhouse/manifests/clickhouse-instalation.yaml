@@ -51,6 +51,34 @@ spec:
               <password_sha256_hex from_env="CLICKHOUSE_ADMIN_PASSWORD_SHA256"/>
               <networks><ip>::/0</ip></networks>
             </backup>
+            <!-- analytics (dbt/goose): ANTES era criado por SQL na migration goose
+                 (CREATE USER IF NOT EXISTS). Dois defeitos: (1) IF NOT EXISTS nunca
+                 converge senha em rotação; (2) usuário SQL mora no access storage
+                 (storage='disk'), fora do ciclo de vida do operator — sumiu num
+                 recreate enquanto goose_db_version (dado, no PVC) sobreviveu, e o
+                 goose passou a pular a migration ("no migrations to run").
+                 Aqui ele é declarativo: reconciliado a cada boot, senha do ESO.
+                 Definido só neste arquivo (senha + rede + grants juntos). -->
+            <analytics>
+              <password_sha256_hex from_env="CLICKHOUSE_ANALYTICS_PASSWORD_SHA256"/>
+              <!-- Least-privilege de rede: pods do cluster + loopback (igual ao
+                   HOST IP da migration antiga). Não usa ::/0. -->
+              <networks>
+                <ip>10.245.0.0/16</ip>
+                <ip>127.0.0.1</ip>
+                <ip>::1</ip>
+              </networks>
+              <profile>default</profile>
+              <!-- ISOLAMENTO: SELECT em default.* (schema do Langfuse, read-only)
+                   + ALL em analytics.* + SELECT em system.* (introspecção do dbt).
+                   Nenhuma escrita em default. `grants` é incompatível com
+                   access_management/allow_databases — analytics não usa nenhum. -->
+              <grants>
+                <query>GRANT SELECT ON `default`.*</query>
+                <query>GRANT ALL ON analytics.*</query>
+                <query>GRANT SELECT ON system.*</query>
+              </grants>
+            </analytics>
           </users>
         </clickhouse>
 
@@ -88,6 +116,13 @@ spec:
                     secretKeyRef:
                       name: clickhouse-credentials
                       key: langfusePasswordSha256
+                # Mesmo valor que o dbt lê em claro no secret clickhouse-analytics
+                # (1Password item clickhouse-analytics, campo password) — fonte única.
+                - name: CLICKHOUSE_ANALYTICS_PASSWORD_SHA256
+                  valueFrom:
+                    secretKeyRef:
+                      name: clickhouse-credentials
+                      key: analyticsPasswordSha256
               ports:
                 - containerPort: 9363
                   name: metrics
