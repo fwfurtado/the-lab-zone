@@ -53,7 +53,7 @@ spec:
                 "/workspace/repo",
               ]
           - name: main
-            image: ofwfurtado/qa-indexer:0.1.0
+            image: ghcr.io/fwfurtado/qa-indexer:0.2.0
             dependencies: [clone]
             env:
               - name: QDRANT_URL

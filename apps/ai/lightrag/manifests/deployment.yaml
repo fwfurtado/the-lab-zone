@@ -27,7 +27,7 @@ spec:
       containers:
         - name: lightrag
           # Troque pela tag que voce buildar/empurrar (NAO use :latest).
-          image: ofwfurtado/lightrag:2026-06-07-observability
+          image: ghcr.io/fwfurtado/lightrag-langfuse:0.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

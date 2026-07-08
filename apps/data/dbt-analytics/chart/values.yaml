@@ -14,11 +14,11 @@ git:
 
 goose:
   # imagem GENÉRICA goose-runner (bash+jq+goose, sem migrations baked). Pinar por digest.
-  image: ofwfurtado/goose-runner:0.1.0
+  image: ghcr.io/fwfurtado/goose-runner:0.1.0
 
 dbt:
   # imagem GENÉRICA (engine; sem projeto baked). Pinar por digest.
-  image: ofwfurtado/dbt-runner:0.1.0
+  image: ghcr.io/fwfurtado/dbt-runner:0.2.0
   projectDir: apps/data/dbt-analytics/dbt # subdir do projeto dbt no repo (git artifact)
   schedule: "0 */6 * * *" # CronWorkflow: a cada 6h
   timezone: "Etc/UTC"
