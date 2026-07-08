@@ -1,6 +1,7 @@
 # OTel Collector — DaemonSet no cluster (chart 0.158.1)
 # Fase 5: recebe métricas/logs via OTLP e encaminha para VictoriaMetrics/VictoriaLogs
-# Traces: descartados por enquanto (VictoriaTraces na Fase 7)
+# Traces de IA: exportados para o Langfuse (projeto de teste zone-test) via otlphttp.
+# (VictoriaTraces full-stack fica para a Fase 7)
 
 mode: daemonset
 
@@ -24,6 +25,13 @@ presets:
     enabled: true
     includeCollectorLogs: false
     storeCheckpoints: false
+
+# Credencial OTLP do Langfuse (ESO/Infisical). Deve conter a chave
+# LANGFUSE_ZONE_TEST_OTEL_AUTH = "Basic <base64(pk:sk)>" do projeto zone-test.
+# Injetada como env no pod para o ${env:...} do exporter resolver.
+extraEnvsFrom:
+  - secretRef:
+      name: langfuse-zone-test
 
 config:
   receivers:
@@ -59,7 +67,16 @@ config:
       tls:
         insecure: true
 
-    # Traces são aceitos mas descartados (evita erro de receiver sem pipeline)
+    # Traces de IA -> Langfuse (projeto de teste zone-test).
+    # HTTP-only: o Langfuse não aceita gRPC; o exporter anexa /v1/traces ao endpoint base.
+    otlphttp/langfuse-zone-test:
+      endpoint: http://langfuse-web.ai.svc.cluster.local:3000/api/public/otel
+      headers:
+        Authorization: ${env:LANGFUSE_ZONE_TEST_OTEL_AUTH}   # "Basic <base64(pk:sk)>"
+        x-langfuse-ingestion-version: "4"
+
+    # debug mantido durante a validação: `kubectl logs` mostra os spans chegando.
+    # Pode sair do pipeline de traces depois que o zone-test estiver confirmado.
     debug:
       verbosity: basic
 
@@ -76,7 +93,7 @@ config:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, batch]
-        exporters: [debug]
+        exporters: [otlphttp/langfuse-zone-test, debug]
 
 # Porta metrics habilitada para o VMAgent scrape o próprio collector
 ports:
