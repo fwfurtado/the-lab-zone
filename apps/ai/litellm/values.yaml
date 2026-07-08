@@ -133,8 +133,12 @@ proxy_config:
     user_header_name: X-OpenWebUI-User-Id
 
   litellm_settings:
-    success_callback:
-      - "langfuse"
+    # LiteLLM não escreve mais no Langfuse: a instrumentação vive na app (o span
+    # de generation é dono do custo EFETIVO, lido do header x-litellm-response-cost)
+    # e o ledger autoritativo de spend é o DB do LiteLLM. Removido o
+    # success_callback: ["langfuse"] — era a origem da duplicação no projeto
+    # gateway. (As keys LANGFUSE_* do secret langfuse-gateway ficam órfãs; podar
+    # depois, junto com o projeto gateway.)
     num_retries: 2
     fallbacks:
       - { "qwen3-coder": ["qwen3-coder-paid"] }
