@@ -66,6 +66,10 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 **Alerta fira mas não chega no Slack**
 → network-policies (`useManagedConfig:true`; snake_case; `disableNamespaceMatcher`).
 
+**`AUTHENTICATION_FAILED` no ClickHouse com a senha certa / goose "no migrations to run"**
+→ argo-workflows (usuário SQL some com o access storage; `goose_db_version` é dado e sobrevive).
+Erro de auth prova servidor **vivo**; pod de teste sem labels dá timeout por CNP, não por CH morto.
+
 ## Lições que se repetem (ver README de docs/)
 
 Status verde é promessa, leia o destino · VM operator não materializa → restart (3x) ·

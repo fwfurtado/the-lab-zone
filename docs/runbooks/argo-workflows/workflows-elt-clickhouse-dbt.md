@@ -97,6 +97,59 @@ storage).
   renomear a colidente do lado direito num subselect (`project_id as pd_project_id`); usar
   colunas do lado esquerdo e, da direita, só nomes únicos. Evitar `*` em models com JOIN.
 
+## `AUTHENTICATION_FAILED` com a senha certa e goose dizendo "no migrations to run"
+
+**Sintoma:** `dbt-build` falha com `Code: 516 ... analytics: Authentication failed: password is
+incorrect, or there is no user with such name`, mesmo com a senha do secret correta (sem
+newline: último byte `6e`, não `0a`). O step `goose-up` acima passou verde:
+`goose: no migrations to run. current version: 20260619173523`.
+
+**Causa:** o usuário **não existia**. A segunda metade da mensagem do ClickHouse é a
+verdadeira (*"or there is no user with such name"*). A migration que o criava
+(`CREATE USER IF NOT EXISTS analytics`) estava registrada como aplicada em
+`analytics.goose_db_version`, mas o usuário havia sumido. Os dois estados têm **ciclos de vida
+distintos**: a tabela do goose é DADO (database `analytics`, no PVC); o usuário criado por SQL
+mora no **access storage** do ClickHouse (`system.users.storage='disk'`, diretório à parte).
+Perdido o access storage (recreate/restore parcial), o registro do goose sobrevive, o goose pula
+a migration e ninguém recria o usuário. Assinatura do bug: `analytics` era o **único** usuário
+`disk` — `admin`, `langfuse`, `backup`, `default` são `users_xml` (reconciliados pelo operator a
+cada boot) e sobreviveram.
+
+**Diagnóstico:**
+1. **`AUTHENTICATION_FAILED` prova que o servidor está vivo** (erro de aplicação, não timeout).
+   Se o CH estivesse fora, o dbt daria `Could not connect`.
+2. Isolar auth de rede — `kubectl exec` **dentro do pod do CH** (não passa pelo CNP):
+   `clickhouse-client --user analytics --password "$PW" --query "SELECT currentUser()"`.
+3. A pergunta que fecha o caso:
+   `SELECT name, auth_type, storage FROM system.users` — se `analytics` não aparece, não é senha.
+4. `SELECT * FROM analytics.goose_db_version` mostra a migration "aplicada" → **drift**.
+
+**Armadilha do diagnóstico:** testar com um pod avulso (`kubectl run ... --image=curlimages/curl`)
+dá `Could not connect ... after 133s` e sugere ClickHouse morto. É o `clickhouse-default-deny-ingress`
+dropando: a `8123` só é liberada pra `langfuse` (ns `ai`) e `analytics-etl` (ns `data`). Pod sem
+esses labels não passa. Use `--labels='app.kubernetes.io/name=analytics-etl'` ou `exec` no pod.
+
+**Fix imediato** (destrava o ETL; `sha256_password BY` recebe a senha em **texto claro** — o CH
+calcula o hash. Só `sha256_hash BY` recebe hex):
+```
+CREATE USER IF NOT EXISTS analytics IDENTIFIED WITH sha256_password BY '<senha>';
+GRANT SELECT ON `default`.* TO analytics;
+GRANT ALL ON analytics.* TO analytics;
+GRANT SELECT ON system.* TO analytics;
+```
+
+**Fix definitivo:** usuário, rede e grants viraram declarativos no `ClickHouseInstallation`
+(`files."users.d/custom-users.xml"`, `password_sha256_hex from_env`, hash via ESO/`sha256sum` do
+mesmo item 1Password que o dbt lê em claro). A migration virou no-op. Ao migrar, **dropar antes o
+usuário SQL** (`DROP USER IF EXISTS analytics`): o ClickHouse proíbe gerenciar a mesma entidade de
+acesso por XML e por SQL ao mesmo tempo.
+
+**Lição:** `CREATE USER IF NOT EXISTS` em migration é idempotente na **existência**, não no
+**estado** — nunca converge rotação de senha. E RBAC criado por SQL vive fora do ciclo de vida do
+operator: sobrevive diferente do dado, e o versionador (goose) não enxerga a divergência. Num
+cluster gerenciado por operator, RBAC é **config declarativa**, não migration. Quando a mensagem
+de erro tem um "ou", leia a segunda metade.
+
 ## Lição transversal
 
 Migrar `Job → Workflow` muda três coisas com consequência de rede: **identidade** (pod labels →
