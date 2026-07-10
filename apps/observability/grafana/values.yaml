@@ -94,12 +94,12 @@ datasources:
         jsonData:
           # Correlação trace -> RED do span_metrics (já em snake_case no VM).
           tracesToMetrics:
-            datasourceUid: VictoriaMetrics
+            datasourceUid: P4169E866C3094E38
             tags:
               - key: service.name
                 value: service_name
           serviceMap:
-            datasourceUid: VictoriaMetrics
+            datasourceUid: P4169E866C3094E38
 
 dashboardProviders:
   dashboardproviders.yaml:
