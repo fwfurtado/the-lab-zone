@@ -32,6 +32,19 @@ spec:
             <asynchronous_metrics>true</asynchronous_metrics>
           </prometheus>
         </clickhouse>
+      # Nível de log. O default do clickhouse-server é `trace` (emite
+      # <Trace>/<Debug> — MergeTree, MemoryTracker — no stdout, coletado pelo
+      # filelog → VLS). `information` mantém notice/warning/error e corta o
+      # ruído de <Debug>. O <logger><level> controla file E console (o
+      # <console> só liga a saída; o threshold é compartilhado).
+      # NÃO mexe nos system.*_log — a introspecção do dbt/analytics
+      # (GRANT SELECT ON system.*) depende deles.
+      "config.d/logger.xml": |
+        <clickhouse>
+          <logger>
+            <level>information</level>
+          </logger>
+        </clickhouse>
       # Arquivo de usuários com hashes SHA256 vindos do Secret via volumeMount
       # O operator monta files/ como /etc/clickhouse-server/config.d/
       "users.d/custom-users.xml": |
