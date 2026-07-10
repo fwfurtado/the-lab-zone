@@ -30,7 +30,7 @@ spec:
             - name: LITELLM_BASE_URL
               value: http://litellm.ai.svc.cluster.local:4000/v1
             - name: MODEL_NAME
-              value: gpt-oss-120b
+              value: minimax-m3-paid
             - name: LOG_LEVEL
               value: "INFO"
             # Observabilidade OTel: o QA é dono dos spans e roota o próprio trace
