@@ -70,6 +70,14 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 → argo-workflows (usuário SQL some com o access storage; `goose_db_version` é dado e sobrevive).
 Erro de auth prova servidor **vivo**; pod de teste sem labels dá timeout por CNP, não por CH morto.
 
+**Dashboard do Git não atualiza no Grafana / `no database write permissions because of duplicates`**
+→ observability (um uid duplicado congela a escrita de TODOS os providers, sem erro na UI).
+`gnetId` no values é arquivo no PVC: remover do Git não apaga do disco.
+
+**Grafana em CrashLoop com `Datasource provisioning error: data source not found`**
+→ observability (mudou `uid` de datasource existente → precisa de `deleteDatasources`).
+Se o pod sobe mas a UI não abre datasource, é cache do navegador — teste com `/api/datasources/uid/<uid>/health`.
+
 ## Lições que se repetem (ver README de docs/)
 
 Status verde é promessa, leia o destino · VM operator não materializa → restart (3x) ·

@@ -123,6 +123,78 @@ quebram o target: selectors errados (labels reais via `--show-labels`), `matchEx
 (usar só `matchLabels` — ver `runbooks/backup-dr/`), scrape cross-namespace sem
 `namespaceSelector` (ver `runbooks/argo-workflows/`).
 
+## Dashboards congelados: uid duplicado revoga a escrita de TODOS os providers
+
+**Sintoma:** dashboards do repo param de refletir o Git. Nenhum erro na UI, ArgoCD `Synced`,
+ConfigMap correto no cluster. No log do Grafana, a cada 30s:
+`the same UID is used more than once  uid=rYdddlPWk times=2 providers="[default sidecarProvider]"`
+seguido de `dashboards provisioning provider has no database write permissions because of duplicates`.
+
+**Causa:** o mesmo dashboard vinha de dois provedores — `dashboards.default.node-exporter`
+(gnetId 1860, "Node Exporter Full", uid `rYdddlPWk`) no values do chart, e o ConfigMap que o
+`victoria-metrics-k8s-stack` entrega via sidecar. Detectada a colisão de uid, o Grafana **revoga
+a permissão de escrita de AMBOS os providers** — não só do duplicado. Efeito: *nenhum* dashboard
+é gravado, e o Grafana segue servindo a versão antiga sem sinal na UI.
+
+**Causa raiz (a que importa):** dashboards por `gnetId` **não** são ConfigMap. Um init container
+(`download-dashboards`) baixa do grafana.com para `/var/lib/grafana/dashboards/default` — dentro
+do **PVC**. O script só ESCREVE, nunca apaga. Remover a entrada do `values.yaml` impede o
+download futuro, mas o `.json` órfão permanece no disco e o provider `default` continua
+carregando. Estado fora do ciclo de vida do reconciliador; `prune` do Argo não enxerga.
+
+**Diagnóstico:**
+1. `kubectl -n observability logs deploy/grafana -c grafana | grep -iE 'used more than once|write permissions'`
+2. Um duplicado é suficiente para congelar todos. `providers="[default sidecarProvider]"` diz de
+   onde vêm as duas cópias.
+3. Provar o congelamento (a UI não acusa): `scripts/check-dashboards-drift.sh` compara cada
+   ConfigMap do repo com `/api/dashboards/uid/<uid>`.
+4. O que está no disco: `kubectl -n observability exec deploy/grafana -c grafana -- ls /var/lib/grafana/dashboards/default`
+
+**Fix:** remover o duplicado do values **não basta** — o arquivo fica no PVC. Fim de linha:
+`dashboards:` e `dashboardProviders:` saem do values (sem eles, sem init container e sem provider
+`default` lendo o disco), e **todo** dashboard vira ConfigMap versionado com label
+`grafana_dashboard: "1"`, servido pelo sidecar. Gerar/atualizar com
+`./scripts/gnet-to-configmap.py --gnet-id <id> --revision <r> --name <slug>`, que troca os
+`${DS_*}` pela variável `${ds}` (imune a troca de uid de datasource) e injeta a var no topo.
+Limpeza do resíduo: `rm -rf /var/lib/grafana/dashboards/default` + rollout restart.
+Ao remover o provider `default`, o Grafana apaga do banco os dashboards que ele havia criado —
+não sobra órfão. `persistence` **continua ligada**: o sqlite guarda histórico do Explore,
+anotações e preferências, e nunca causou drift.
+
+**Lição:** `gnetId` no chart do Grafana é **estado no PVC disfarçado de config**. Um único uid
+duplicado não degrada só o dashboard colidente — ele desliga a escrita de todos, silenciosamente.
+Mesma assinatura do usuário `analytics` criado por SQL no ClickHouse (ver `runbooks/argo-workflows/`):
+estado que vive fora do reconciliador diverge do Git sem ninguém perceber.
+
+## Grafana em CrashLoop ao fixar `uid` de datasource já existente
+
+**Sintoma:** após declarar `uid` explícito em datasources que já existiam, o pod entra em
+CrashLoopBackOff. No log: `Failed to provision data sources` /
+`Datasource provisioning error: data source not found`, e o processo morre em
+`starting module provisioning`.
+
+**Causa:** o provisionamento casa a datasource pelo **nome**, mas ao encontrar `uid` diferente do
+que está no banco tenta resolvê-la pelo uid novo — que não existe. Como `provisioning` é módulo de
+boot, a falha derruba o processo. Sem `uid` explícito o Grafana gera um aleatório (`P4169E866C3094E38`),
+que acaba hardcoded em dashboards exportados — valor crítico que não está no Git.
+
+**Diagnóstico:** `kubectl -n observability logs deploy/grafana -c grafana | grep -i provision`.
+UIDs atuais: `curl -s -u admin:$PW $GRAFANA_URL/api/datasources | jq '.[] | {name, uid}'`.
+
+**Fix:** declarar `deleteDatasources` (nome + `orgId`) para cada datasource cujo uid muda. O
+Grafana apaga as listadas **antes** de inserir/atualizar, recriando cada uma já com o uid
+definitivo. É idempotente. **Pré-requisito:** nenhum dashboard pode referenciar o uid antigo —
+migrar as refs para uma variável `${ds}` do tipo `datasource` (ver `configmap-*-dashboard.yaml`).
+
+**Armadilha pós-fix:** com os uids novos no banco, a UI ainda erra ("nenhum datasource abre",
+Explore vazio) porque o **navegador** guarda o datasource por uid no `localStorage`. Aba anônima
+resolve. Antes de investigar o backend, prove-o server-side:
+`curl -s -u admin:$PW $GRAFANA_URL/api/datasources/uid/victoriametrics/health`.
+
+**Lição:** uid de datasource é chave estrangeira de dashboards e correlações. Deixá-lo implícito
+transfere um identificador crítico para fora do Git; mudá-lo depois exige `deleteDatasources`, e
+o custo cresce com cada referência criada nesse meio-tempo. Fixe cedo.
+
 ## Lição transversal
 
 `operational`/`VALID`/`selectAllByDefault` não provam target gerado. A prova é o target em
