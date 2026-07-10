@@ -3,7 +3,7 @@
 -- observations é ReplacingMergeTree -> FINAL pra deduplicar; is_deleted=0 tira soft-deletes.
 -- latency via toUnixTimestamp64Milli (start/end são DateTime64(3)) — exato e sem depender
 -- de suporte a unidade 'millisecond' no dateDiff.
--- trace_id (NOVO na Etapa 6): chave pra agrupar observações numa interação (mart_rag_interactions).
+-- trace_id (NOVO na Etapa 6): chave pra agrupar observações numa interação.
 select
     id,
     trace_id,

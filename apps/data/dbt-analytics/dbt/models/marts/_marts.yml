@@ -15,9 +15,3 @@ models:
 
   - name: mart_unmapped_models
     description: "Auditoria: provided_model_name fora do seed. Vazio = seed completo."
-
-  - name: mart_rag_interactions
-    description: "Forma de cada interação RAG (projeto rag) por trace: nº de retrievals (embedding), gerações, tokens e latência ponta-a-ponta."
-    columns:
-      - name: trace_id
-        tests: [not_null]

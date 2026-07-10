@@ -1,7 +1,7 @@
 {{ config(materialized='view') }}
 
 -- traces é ReplacingMergeTree -> FINAL pra deduplicar; is_deleted=0 tira soft-deletes.
--- É o pai das observações (traces.id = observations.trace_id). Usado pelo mart_rag_interactions
+-- É o pai das observações (traces.id = observations.trace_id).
 -- pra montar a "forma" de cada interação RAG (nome do trace, sessão, data).
 select
     id                  as trace_id,
