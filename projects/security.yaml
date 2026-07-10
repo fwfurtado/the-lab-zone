@@ -10,10 +10,14 @@ spec:
     - https://github.com/fwfurtado/the-lab-zone.git
     - https://helm.cilium.io # tetragon (mesmo repo do Cilium, já usado no core)
     - https://aquasecurity.github.io/helm-charts/ # trivy-operator (OCI, mesmo padrão do toolhive no core)
+    - https://kyverno.github.io/policy-reporter # UI navegável de PolicyReports
+    - https://fjogeleit.github.io/trivy-operator-polr-adapter # converte CRDs do Trivy em PolicyReports
 
   destinations:
     - server: https://kubernetes.default.svc
       namespace: trivy-system # trivy-operator
+    - server: https://kubernetes.default.svc
+      namespace: policy-reporter # Policy Reporter UI + adapter do Trivy
     - server: https://kubernetes.default.svc
       namespace: tetragon # tetragon (DaemonSet eBPF)
     - server: https://kubernetes.default.svc
@@ -39,6 +43,12 @@ spec:
     - group: "cilium.io"
       kind: TracingPolicy
     - group: "aquasecurity.github.io"
+      kind: "*"
+    # Policy Reporter consome os CRDs wgpolicyk8s.io; o adapter do Trivy cria
+    # PolicyReports/ClusterPolicyReports a partir dos reports aquasecurity.
+    - group: "wgpolicyk8s.io"
+      kind: "*"
+    - group: "openreports.io"
       kind: "*"
 
   namespaceResourceWhitelist:
