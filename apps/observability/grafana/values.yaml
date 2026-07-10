@@ -52,6 +52,19 @@ envValueFrom:
 # é necessário para que o PVC tenha as permissões corretas no mountPath.
 # Sobrescrever com runAsUser diferente quebra escrita no volume.
 
+# Persistência MANTIDA: o sqlite guarda histórico de Explore, anotações e
+# preferências — estado que queremos preservar e que nunca causou drift.
+#
+# O que SAIU daqui foram os dashboards `gnetId`: eles eram baixados por um init
+# container para /var/lib/grafana/dashboards/default (dentro deste PVC) e o script
+# só ESCREVE, nunca apaga. Remover a entrada do values deixava o .json órfão no
+# disco, o provider `default` seguia carregando, e um uid duplicado com o sidecar
+# REVOGAVA a escrita de todos os providers ("no database write permissions because
+# of duplicates") — congelando todos os dashboards sem erro visível.
+#
+# Agora todo dashboard é ConfigMap versionado (manifests/, label grafana_dashboard),
+# servido pelo sidecar: o Argo controla, prune funciona e some a dependência de
+# egress pro grafana.com no boot. Gerar/atualizar: ./scripts/gnet-to-configmap.py
 persistence:
   enabled: true
   storageClassName: openebs-hostpath-ssd
@@ -141,51 +154,6 @@ datasources:
           serviceMap:
             datasourceUid: victoriametrics
 
-dashboardProviders:
-  dashboardproviders.yaml:
-    apiVersion: 1
-    providers:
-      - name: default
-        orgId: 1
-        folder: ""
-        type: file
-        disableDeletion: false
-        options:
-          path: /var/lib/grafana/dashboards/default
-
-dashboards:
-  default:
-    kubernetes-cluster:
-      gnetId: 15661
-      revision: 1
-      datasource: VictoriaMetrics
-    # node-exporter (gnetId 1860, "Node Exporter Full", uid rYdddlPWk) REMOVIDO:
-    # o victoria-metrics-k8s-stack já entrega o mesmo dashboard via ConfigMap
-    # (sidecarProvider). Com o mesmo uid em dois providers, o Grafana loga
-    # "the same UID is used more than once" e REVOGA a permissão de escrita de
-    # AMBOS ("no database write permissions because of duplicates") — nenhum
-    # dashboard é atualizado no banco, nem os deste repo.
-    # Fase 6 — data layer
-    cloudnative-pg:
-      gnetId: 20417
-      revision: 1
-      datasource: VictoriaMetrics
-    clickhouse:
-      gnetId: 14192
-      revision: 3
-      datasource: VictoriaMetrics
-    qdrant:
-      gnetId: 24603
-      revision: 1
-      datasource: VictoriaMetrics
-    valkey:
-      gnetId: 763
-      revision: 5
-      datasource: VictoriaMetrics
-    trivy-operator:
-      gnetId: 17813
-      revision: 2
-      datasource: VictoriaMetrics
 # Plugin de datasource para VictoriaLogs
 plugins:
   - victoriametrics-logs-datasource
