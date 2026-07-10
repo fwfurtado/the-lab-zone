@@ -63,6 +63,29 @@ persistence:
 datasources:
   datasources.yaml:
     apiVersion: 1
+
+    # MIGRAÇÃO DE UID. O provisionamento casa a datasource pelo NOME, mas quando o
+    # `uid` muda numa que já existe no banco, o Grafana tenta resolvê-la pelo uid
+    # novo e falha com "data source not found" — e como `provisioning` é módulo de
+    # boot, o pod entra em CrashLoopBackOff.
+    #
+    # O Grafana apaga as listadas aqui ANTES de inserir/atualizar as de baixo, o que
+    # recria cada uma já com o uid definitivo. É idempotente: nos boots seguintes a
+    # datasource é apagada e recriada com o mesmo uid, sem efeito observável.
+    #
+    # Pré-requisito: nenhum dashboard pode referenciar o uid ANTIGO. O
+    # control-plane-etcd (que fixava P4169E866C3094E38) foi migrado para a variável
+    # ${ds} no mesmo commit.
+    deleteDatasources:
+      - name: VictoriaMetrics
+        orgId: 1
+      - name: VictoriaLogs
+        orgId: 1
+      - name: Alertmanager
+        orgId: 1
+      - name: Tempo
+        orgId: 1
+
     datasources:
       - name: VictoriaMetrics
         type: prometheus
