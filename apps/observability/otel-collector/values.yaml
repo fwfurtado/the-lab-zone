@@ -46,6 +46,81 @@ config:
     zipkin: null
     prometheus: null
 
+    # ------------------------------------------------------------------
+    # filelog — o preset logsCollection JÁ injeta este receiver (include
+    # /var/log/pods, exclude do próprio collector, start_at, retry_on_failure,
+    # include_file_path e o operator `container`). O chart faz
+    # mustMergeOverwrite(preset, .config): mapas são mesclados, mas LISTAS são
+    # SUBSTITUÍDAS. Ou seja: ao declarar `operators` aqui, herdamos include/
+    # exclude/start_at do preset, MAS precisamos reproduzir o operator `container`
+    # (senão perdemos o unwrap do formato CRI + metadata + recombine de linha
+    # parcial). Só acrescentamos os operators — nada mais.
+    #
+    # PROBLEMA QUE ISTO RESOLVE: sem parsing do payload da app, o body chega cru
+    # (JSON/logfmt como string) e o SeverityText do OTLP nunca é setado. O
+    # VictoriaLogs grava severidade OTLP em `severity_text`/`severity_number`
+    # (é o 1º campo que o datasource do Grafana procura); sem ele o plugin cai
+    # no chute por keyword -> tudo `unknown`.
+    filelog:
+      operators:
+        # 1) Desembrulha o wrapper do runtime (CRI/containerd no Talos), recombina
+        #    linhas parciais (stdout ... P/F) e extrai metadata do caminho.
+        #    O conteúdo da app fica em `body`.
+        - type: container
+          id: container-parser
+          max_log_size: 102400   # = presets.logsCollection.maxRecombineLogSize default
+
+        # 2) Roteia por formato do payload. Primeira rota que casar vence; o resto
+        #    (access logs em texto puro, etc.) segue direto pro noop sem parsing.
+        - type: router
+          id: format-router
+          routes:
+            - output: json-parser
+              expr: 'body matches "^\\s*[{]"'
+            - output: logfmt-parser
+              expr: 'body matches "(^|\\s)level="'
+          default: noop
+
+        # 3a) JSON estruturado (slog/zap das suas apps: {"level":"INFO","msg":...})
+        - type: json_parser
+          id: json-parser
+          parse_from: body
+          parse_to: attributes
+          on_error: send_quiet     # se não for JSON válido de fato, segue intacto
+          output: severity
+
+        # 3b) logfmt (velero, controller-runtime, ...: level=info msg="...")
+        - type: logfmt_parser
+          id: logfmt-parser
+          parse_from: body
+          parse_to: attributes
+          on_error: send_quiet
+          output: severity
+
+        # 4) Converge json+logfmt: mapeia o nível textual -> SeverityText/Number
+        #    do OTLP. O preset default do stanza casa info/warn/error/debug/trace/
+        #    fatal de forma case-insensitive (INFO e info funcionam).
+        - type: severity_parser
+          id: severity
+          parse_from: attributes.level
+          on_error: send_quiet     # log sem `level` (ex.: JSON sem nível) passa
+          output: msg-to-body
+
+        # 5) Limpa o _msg: promove a mensagem legível pro body (senão o _msg fica
+        #    sendo o JSON inteiro, redundante com os campos já extraídos).
+        #    Se não houver `msg`, não mexe. (Se suas apps usarem `message`,
+        #    duplique este move trocando a chave.)
+        - type: move
+          id: msg-to-body
+          from: attributes.msg
+          to: body
+          if: 'attributes?.msg != nil'
+          output: noop
+
+        # 6) Ponto de convergência de todas as rotas (inclusive default).
+        - type: noop
+          id: noop
+
   processors:
     batch:
       timeout: 10s
