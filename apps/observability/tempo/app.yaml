@@ -1,0 +1,39 @@
+# Tempo monolítico (single binary, -target=all): backend de traces do cluster INTEIRO,
+# não só dos agentes. Escolhido sobre o VictoriaTraces por maturidade — VictoriaTraces
+# ainda é pré-1.0 (v0.7.x, chart 0.1.x) e o formato de índice segue mudando.
+#
+# ATENÇÃO ao repoURL: o chart `tempo` (single binary) MIGROU de grafana/helm-charts
+# para grafana-community/helm-charts. O chart `tempo-distributed` é o modo microservices
+# (exige Kafka) — não é o que queremos aqui.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tempo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: observability
+  sources:
+    - repoURL: https://grafana-community.github.io/helm-charts
+      chart: tempo
+      targetRevision: 2.2.3          # appVersion 2.10.7
+      helm:
+        releaseName: tempo
+        valueFiles:
+          - $values/apps/observability/tempo/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/observability/tempo/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true

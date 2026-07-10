@@ -74,6 +74,15 @@ config:
         - context: datapoint
           statements:
             - 'replace_all_patterns(datapoint.attributes, "key", "\\.", "_")'
+    # Langfuse é o plano de LLM: só spans dos agentes entram lá. O Tempo recebe TUDO.
+    # Sem isso, span de infra (Gateway, CNPG, Argo...) viraria lixo no projeto `zone`
+    # — mesma lição do flood de /healthz. O filter DESCARTA o que casa a condição,
+    # então a condição é "não é um dos serviços de agente".
+    filter/langfuse_agents_only:
+      error_mode: ignore
+      traces:
+        span:
+          - 'resource.attributes["service.name"] != "triage-webhook" and resource.attributes["service.name"] != "triage-agent" and resource.attributes["service.name"] != "qa-bot"'
 
   exporters:
     otlp_http/metrics:
@@ -93,6 +102,13 @@ config:
       headers:
         Authorization: ${env:LANGFUSE_OTEL_AUTH}   # "Basic <base64(pk:sk)>"
         x-langfuse-ingestion-version: "4"
+
+    # Traces de TODO o cluster -> Tempo (backend de traces, Fase 7). gRPC: o Tempo
+    # aceita OTLP nativo, diferente do Langfuse (HTTP-only).
+    otlp/tempo:
+      endpoint: tempo.observability.svc.cluster.local:4317
+      tls:
+        insecure: true
 
   connectors:
     # span_metrics: deriva RED (rate/erros/duração) dos spans do agente e emite
@@ -122,10 +138,17 @@ config:
         receivers: [otlp, filelog]  # filelog injetado pelo preset logsCollection
         processors: [memory_limiter, batch]
         exporters: [otlp_http/logs]
+      # TUDO -> Tempo (backend de traces do cluster) + span_metrics (RED).
       traces:
         receivers: [otlp]
         processors: [memory_limiter, batch]
-        exporters: [otlp_http/langfuse-agents, span_metrics]
+        exporters: [otlp/tempo, span_metrics]
+      # Só os agentes -> Langfuse (plano de LLM). Mesmo receiver: o Collector faz
+      # fanout do otlp para os dois pipelines; o filter recorta este.
+      traces/langfuse:
+        receivers: [otlp]
+        processors: [memory_limiter, filter/langfuse_agents_only, batch]
+        exporters: [otlp_http/langfuse-agents]
       # RED derivado dos spans -> VictoriaMetrics. O connector span_metrics é o
       # receiver aqui; as séries (agents_span_metrics_calls_total / _duration_*)
       # ficam alertáveis via VMRule sem tocar no Langfuse.

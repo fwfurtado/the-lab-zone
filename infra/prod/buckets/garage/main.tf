@@ -27,3 +27,8 @@ resource "aws_s3_bucket" "argo_workflows" {
 resource "aws_s3_bucket" "triages" {
   bucket = "triage-reports"
 }
+
+
+resource "aws_s3_bucket" "tempo" {
+  bucket = "tempo"
+}

@@ -85,6 +85,22 @@ datasources:
           implementation: prometheus
           handleGrafanaManagedAlerts: false
 
+      # Tempo: backend de traces do cluster (Fase 7). A porta 3200 é a API HTTP de
+      # query; o ingest OTLP (4317/4318) só o Collector usa.
+      - name: Tempo
+        type: tempo
+        url: http://tempo.observability.svc.cluster.local:3200
+        access: proxy
+        jsonData:
+          # Correlação trace -> RED do span_metrics (já em snake_case no VM).
+          tracesToMetrics:
+            datasourceUid: VictoriaMetrics
+            tags:
+              - key: service.name
+                value: service_name
+          serviceMap:
+            datasourceUid: VictoriaMetrics
+
 dashboardProviders:
   dashboardproviders.yaml:
     apiVersion: 1

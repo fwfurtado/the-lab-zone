@@ -1,0 +1,65 @@
+# Tempo single binary (chart tempo 2.2.3 / app 2.10.7).
+# Blocos vão pro Garage (S3); o PVC guarda só o WAL.
+
+replicas: 1
+
+tempo:
+  # block_retention. 7 dias cobre o ciclo de debug do homelab; blocos vivem no Garage,
+  # então crescer isso custa espaço lá, não no PVC.
+  retention: 168h
+
+  # Ballast é uma alocação virtual que segura o GC do Go. O default (1024) foi pensado
+  # pra instâncias grandes; com limit de 1.5Gi ele confunde mais do que ajuda.
+  memBallastSizeMbs: 256
+
+  # -config.expand-env=true faz o Tempo expandir ${AWS_*} DENTRO do tempo.yaml.
+  # NOTA: o chart renderiza extraArgs como MAPA (-chave=valor); passar lista gera
+  # flags tipo "-0=..." e o pod não sobe.
+  extraArgs:
+    config.expand-env: "true"
+
+  # Credenciais S3 do Garage entram como env (ver manifests/external-secret.yaml).
+  extraEnvFrom:
+    - secretRef:
+        name: tempo-s3
+
+  # Só OTLP. O default do chart liga jaeger/zipkin/opencensus — superfície inútil aqui,
+  # já que todo mundo exporta OTLP via Collector. Substitui o bloco inteiro.
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+  storage:
+    trace:
+      backend: s3
+      s3:
+        bucket: tempo
+        endpoint: garage.data.svc.cluster.local:3900
+        region: garage
+        # Expandidos em runtime pelo -config.expand-env (vêm do secret tempo-s3).
+        access_key: ${AWS_ACCESS_KEY_ID}
+        secret_key: ${AWS_SECRET_ACCESS_KEY}
+        insecure: true          # Garage interno fala HTTP, sem TLS
+        forcepathstyle: true    # obrigatório pro Garage (mesmo motivo do Langfuse)
+      wal:
+        path: /var/tempo/wal
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1536Mi   # relatos de OOM em 700Mi-1Gi; com headroom, folga é barata
+
+# WAL precisa sobreviver a restart, senão perde os spans ainda não flushados em bloco.
+persistence:
+  enabled: true
+  size: 10Gi
+
+# O stack usa VM Operator (VMPodScrape), não Prometheus Operator (ServiceMonitor).
+serviceMonitor:
+  enabled: false

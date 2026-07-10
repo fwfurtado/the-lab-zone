@@ -26,6 +26,10 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: langfuse
+        # tempo: blocos de trace (Parquet) vão pro bucket `tempo`; só o WAL fica no PVC.
+        - matchLabels:
+            io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: tempo
         - matchLabels:
             io.kubernetes.pod.namespace: data
             app.kubernetes.io/name: clickhouse
