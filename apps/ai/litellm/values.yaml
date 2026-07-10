@@ -31,6 +31,11 @@ environmentSecrets:
 envVars:
   OTEL_EXPORTER: "otlp_http"
   OTEL_SERVICE_NAME: "litellm"
+  # Logs em JSON (próprios do LiteLLM + access log do uvicorn nas versões
+  # recentes). ATENÇÃO: sob CONFIG_FILE_PATH (Helm), o `json_logs: true` do
+  # litellm_settings NÃO liga o JSON (litellm#19036 — `_turn_on_json()` não é
+  # chamado nesse caminho). A env é o caminho que funciona.
+  JSON_LOGS: "True"
 
 extraEnvVars:
   - name: HOST_IP
