@@ -23,6 +23,16 @@ masterkeySecretKey: masterkey
 environmentSecrets:
   - litellm-env
 
+# OTLP para o OTel Collector (DaemonSet). OTEL_ENDPOINT aponta pro serviço do
+# collector-agent na 4318 (OTLP/HTTP). service.name=litellm separa esse tráfego no
+# Langfuse (projeto único por service.name) e é o filtro que MANTÉM o LiteLLM fora
+# do pipeline traces/langfuse — ele só chega ao Tempo.
+# OTEL_EXPORTER=otlp_http é o transporte HTTP (não exige grpcio na imagem).
+envVars:
+  OTEL_EXPORTER: "otlp_http"
+  OTEL_ENDPOINT: "http://otel-collector-opentelemetry-collector-agent.observability.svc.cluster.local:4318"
+  OTEL_SERVICE_NAME: "litellm"
+
 # DB existente (CNPG) — credenciais via secret dedicado
 db:
   useExisting: true
@@ -140,6 +150,13 @@ proxy_config:
     # gateway. (As keys LANGFUSE_* do secret langfuse-gateway ficam órfãs; podar
     # depois, junto com o projeto gateway.)
     num_retries: 2
+    # Instrumentação OTLP: o callback "otel" emite um trace por request
+    # (proxy -> auth -> LLM call -> DB). Vai pro OTel Collector (envVars abaixo),
+    # que faz fanout: TUDO -> Tempo; só os 3 agentes -> Langfuse (filtro por
+    # service.name no pipeline traces/langfuse). Logo o LiteLLM NÃO reabre a
+    # duplicação no Langfuse que a remoção do success_callback matou — ele aparece
+    # só no Tempo, virando o nó REAL que hoje o service graph mostra como virtual.
+    callbacks: ["otel"]
     fallbacks:
       - { "qwen3-coder": ["qwen3-coder-paid"] }
       - { "gpt-oss-120b": ["deepseek-v4-flash-paid"] }
