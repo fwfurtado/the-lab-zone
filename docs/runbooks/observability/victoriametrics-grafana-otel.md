@@ -1,7 +1,7 @@
 ---
 tipo: runbook
 componente: observability
-tags: [victoriametrics, vmagent, vmoperator, grafana, otel-collector, vmservicescrape, webhook-cert, reconciliacao]
+tags: [victoriametrics, vmagent, vmoperator, grafana, otel-collector, vmservicescrape, webhook-cert, reconciliacao, victorialogs, filelog, severity, logsql, stanza]
 fases: [5, 6, 7]
 relacionado: [runbooks/cilium-rede, runbooks/argo-workflows]
 ---
@@ -234,6 +234,88 @@ o modelo. **Calibração:** o piso de 30% é chute educado; rode a razão real p
 em ação — inclusive o próprio fallback do LiteLLM. Alerta sobre agente olha a **raiz** (a interação)
 ou **razões** (saúde agregada), quase nunca a contagem bruta de spans. `> 0` num span-metric de
 agente é quase sempre calibração errada.
+
+## VictoriaLogs: tudo `unknown`, impossível filtrar por nível
+
+**Sintoma:** todo log no datasource VictoriaLogs cai em `unknown`; o histograma
+"Logs volume" é 100% cinza e só resta grep no `_msg` — nenhum filtro por nível
+funciona.
+**Causa:** o preset `logsCollection` injeta um `filelog` cujo único operator é
+`container` (unwrap CRI). O payload da app fica cru em `body`, então o
+`SeverityText` do OTLP **nunca é setado**. Na ingestão, o VLS materializa
+`severity_text="Unspecified"` (nunca vazio), e o plugin do Grafana — que resolve
+nível procurando `severity_text` — pinta `unknown`.
+**Diagnóstico:** `_time:15m * | stats by (severity_text) count() as n` mostra
+`Unspecified` dominando. Prova de que não é "log sem campo": `NOT severity_text:*`
+retorna **zero** — o campo está presente em 100% dos logs. O problema é valor
+não-mapeável, não ausência de campo.
+**Fix:** parsear no `filelog` e setar severidade explícita por formato (router +
+`severity_parser` por ramo) — ver ADR-0019. **Regra: `noop` == `Unspecified` ==
+`unknown`.** Todo formato que se quer classificar PRECISA passar por um
+`severity_parser`; não existe nível default implícito.
+**Lição:** ausência de severidade OTLP não é neutra — o VLS a materializa como
+`Unspecified`, que o Grafana lê como `unknown`. É contraintuitivo e volta a
+morder: o balde `unknown` grande quase sempre é severidade não-setada, não log
+"sem nível".
+
+## OTel Collector CrashLoop: `unsupported type` no filelog
+
+**Sintoma:** collector em CrashLoopBackOff após editar os operators do filelog.
+Log: `failed to get config: … 'receivers' error reading configuration for
+"filelog": … 'operators[N]' unsupported type 'logfmt_parser'`.
+**Causa:** `logfmt_parser` **não existe** no stanza. Parsers válidos:
+`json_parser`, `regex_parser`, `csv_parser`, `key_value_parser`,
+`severity_parser`, `time_parser`, `uri_parser`, `container`, `router`, `move`,
+`add`, `copy`, `noop`. Um tipo inválido faz o collector **recusar o config
+inteiro no boot** — não degrada só aquele operator.
+**Diagnóstico:** `kubectl -n observability logs
+ds/otel-collector-opentelemetry-collector-agent | grep -iE "unsupported|error"`.
+O índice `operators[N]` (0-based) aponta o operator ofensor.
+**Fix:** logfmt no filelog é `regex_parser` (só o nível:
+`(?:^|\s)level=(?P<level>\w+)`) — o `key_value_parser` quebra valor citado com
+espaço (`msg="a b c"` → 3 pares). Validar antes do merge:
+`otelcol-k8s validate --config <render do helm template>`.
+**Lição:** tipo de operator inválido = config recusado no boot inteiro
+(CrashLoop), não falha localizada naquele ramo. Vale um `otelcol validate` no
+CI antes de qualquer merge que toque o filelog.
+
+## LogsQL: filtro por label "não filtra" (casa tudo, em silêncio)
+
+**Sintoma:** `k8s_namespace_name:!="tetragon"` não exclui nada — o namespace
+segue aparecendo e o `unknown` não cai. Nenhum erro.
+**Causa:** o campo real é `k8s.namespace.name` (com **pontos** — o VLS preserva
+o nome semconv do OTLP), não `k8s_namespace_name` (underscore, convenção do
+vlagent). O campo com underscore **não existe**; e no LogsQL,
+`campo_inexistente:!="x"` casa **tudo** (o campo ausente tem valor vazio,
+`"" != "x"` é sempre verdadeiro → filtro vira no-op).
+**Diagnóstico:** conferir os nomes reais no painel Fields do Explore, ou
+`curl .../select/logsql/field_names -d 'query=_time:1h' | jq -r '.values[].value'`.
+**Fix:** nome real com aspas (por causa dos pontos):
+`"k8s.namespace.name":!="tetragon"`. **Padrão do setup: tudo é dot-notation**
+(`k8s.pod.name`, `container.image.tag`), nunca underscore.
+**Lição:** filtro que "não faz nada" → desconfie primeiro do nome do campo.
+`campo_inexistente:!=x` falha em **silêncio casando tudo** — nunca dá erro, o
+que o torna traiçoeiro.
+
+## Grafana VictoriaLogs: "Nothing to repeat" derruba o painel
+
+**Sintoma:** o Explore quebra com `An unexpected error happened` /
+`SyntaxError: Invalid regular expression: /\b(severity_text|count(*)|…)…/:
+Nothing to repeat` — em **qualquer** query, não só na atual.
+**Causa:** o plugin monta um regex pra destacar nomes de campo nas linhas,
+concatenando os campos vistos na sessão. Rodar `| stats count()` **sem alias**
+cria a coluna `count(*)` (nome default do count sem alias); o plugin cacheia
+esse nome e o injeta no regex — `(` seguido de `*` é regex inválido, e o render
+estoura.
+**Diagnóstico:** confirmar que não é field armazenado:
+`curl .../select/logsql/field_names -d 'query=_time:1h' | jq -r '.values[].value'
+| grep -F 'count(*)'` — vazio ⇒ era cache do plugin.
+**Fix:** hard-refresh na aba (limpa o cache de campos da sessão) e **sempre
+aliasar** agregações: `| stats … count() as n`. Nunca deixar `count()`/`sum()`
+sem `as <nome>`.
+**Lição:** o bug de fundo é do plugin (não escapa nome de campo antes de montar
+`RegExp`, vale issue upstream), mas a causa prática é `count()` sem alias virando
+`count(*)` com metachar de regex. Regra operacional: agregação sempre aliasada.
 
 ## Lição transversal
 

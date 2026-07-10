@@ -21,6 +21,9 @@ Decisões registradas no formato Nygard (contexto → decisão → consequência
 | [0014](0014-dr-destino-sempre-b2.md) | Destino de DR sempre B2 (off-site) | 10 | Garage morre com o T630; B2 é off-site |
 | [0015](0015-agentes-readonly-via-pr.md) | Agentes read-only, mudanças só via PR | 11 | Nunca mutam o cluster; coerente com GitOps puro |
 | [0016](0016-headroom-descartado-cap-de-contexto-proprio.md) | Headroom descartado; cap de contexto próprio | 11 | 0% de compressão no estado k8s heterogêneo; cap determinístico resolve sem latência |
+| [0017](0017-triagem-por-alerta-borda-go-sidecar.md) | Triagem por alerta; borda Go sidecar do núcleo Python | 11 | Alertmanager→webhook Go→núcleo Python (loopback, sem Service); dedup in-memory até `replicas>1` |
+| [0018](0018-lightrag-desligado-rag-fora-de-escopo.md) | LightRAG desligado; RAG fora de escopo | 7 | Sem ganho no estado k8s; RAG sai de escopo (supersede parcial de 0009/0012) |
+| [0019](0019-severidade-de-log-por-formato-otel.md) | Severidade de log por formato (filelog OTel) | 5 | `noop`==`Unspecified`==`unknown`; severidade por formato; Tetragon=debug, onepassword pelo prefixo `(X)`, ClickHouse por `<>` |
 
 ## Não-decisões documentadas
 
