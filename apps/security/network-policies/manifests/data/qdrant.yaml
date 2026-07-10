@@ -13,9 +13,6 @@ spec:
             io.kubernetes.pod.namespace: observability
             app.kubernetes.io/name: vmagent
         - matchLabels:
-            io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: lightrag
-        - matchLabels:
             io.kubernetes.pod.namespace: data
             app.kubernetes.io/name: qdrant-backup
         - matchLabels:

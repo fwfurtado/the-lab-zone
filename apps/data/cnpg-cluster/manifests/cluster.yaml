@@ -31,7 +31,6 @@ spec:
       - { name: langfuse,  ensure: present, login: true, superuser: false, inherit: true, connectionLimit: -1, passwordSecret: { name: cnpg-role-langfuse } }
       - { name: litellm,   ensure: present, login: true, superuser: false, inherit: true, connectionLimit: -1, passwordSecret: { name: cnpg-role-litellm } }
       - { name: openwebui, ensure: present, login: true, superuser: false, inherit: true, connectionLimit: -1, passwordSecret: { name: cnpg-role-openwebui } }
-      - { name: lightrag,  ensure: present, login: true, superuser: false, inherit: true, connectionLimit: -1, passwordSecret: { name: cnpg-role-lightrag } }
 
   monitoring:
     enablePodMonitor: false

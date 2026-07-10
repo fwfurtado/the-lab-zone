@@ -7,12 +7,8 @@ spec:
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: memgraph
+  # LightRAG era o unico cliente do grafo; removido, o Memgraph fica sem consumidor.
+  # `ingress: - {}` = regra presente porem vazia = nega tudo (nao e allow-all; allow-all
+  # seria fromEntities: [all]). Ver runbook cilium-cnp-default-deny.
   ingress:
-    - fromEndpoints:
-        - matchLabels:
-            io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: lightrag
-      toPorts:
-        - ports:
-            - port: "7687"
-              protocol: TCP
+    - {}
