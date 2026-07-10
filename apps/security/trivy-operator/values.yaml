@@ -22,6 +22,9 @@ trivy:
   storageClassEnabled: true
   storageClassName: openebs-hostpath-ssd
   storageSize: 5Gi
+  # Imagens Python/ML e camadas grandes podem passar de 5m no primeiro scan,
+  # principalmente enquanto o Trivy Server popula o cache persistente.
+  timeout: "15m0s"
 
 # Escopo inicial de estabilizacao: o objetivo operacional e saber o que esta
 # rodando agora, sem multiplicar scans por ReplicaSet/Job/CronJob historicos.
@@ -37,6 +40,9 @@ operator:
   builtInTrivyServer: true
   # TTL dos relatórios: re-scan periódico mantém o retrato fresco.
   scannerReportTTL: "24h"
+  # Deve ser maior ou igual ao timeout do Trivy para o kubelet não matar o Job
+  # antes do scanner retornar um erro legível.
+  scanJobTimeout: 20m
   # Limita jobs simultâneos pra não competir com workload real nem com o etcd
   # enquanto os control planes ainda compartilham o pool local-nvme.
   scanJobsConcurrentLimit: 1
@@ -47,6 +53,11 @@ operator:
   rbacAssessmentScannerEnabled: false
   infraAssessmentScannerEnabled: false
   clusterComplianceEnabled: false
+
+trivyOperator:
+  # Mantém os logs dos scan jobs legíveis para troubleshooting. O default do
+  # chart compacta como bzip2/base64 e dificulta triagem em incidentes.
+  scanJobCompressLogs: false
 
 # Métricas: usamos VMServiceScrape próprio (manifests/), não o ServiceMonitor
 # do Prometheus que o chart oferece.
