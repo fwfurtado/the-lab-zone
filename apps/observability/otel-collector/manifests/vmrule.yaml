@@ -15,18 +15,45 @@ spec:
       rules:
         # Qualquer span com status ERROR: triagem que falhou, tool call que estourou,
         # model request rejeitado pelo gateway.
-        - alert: AgentSpanErrors
+        # Falha REAL de interação: o span RAIZ do agente em erro. Tool calls
+        # individuais falham e se recuperam o tempo todo (um pod sem log, um
+        # recurso vazio, um 429 que cai no fallback) — isso NÃO é incidente, é a
+        # rotina de um agente sondando o cluster. O alerta antigo era `rate(...)>0`
+        # em QUALQUER span: disparava com ruído de recuperação enquanto a raiz
+        # seguia verde (medido: erro interno 0.18/s, raiz 0/s). Aqui olhamos só as
+        # raízes conhecidas — a triagem tem regra própria (TriageErrorRatioHigh).
+        - alert: AgentInteractionErrors
           expr: |
             sum by (service_name) (
-              rate(agents_span_metrics_calls{status_code="STATUS_CODE_ERROR"}[15m])
+              rate(agents_span_metrics_calls{span_name="invoke_agent agent", status_code="STATUS_CODE_ERROR"}[15m])
             ) > 0
           for: 5m
           labels:
             severity: warning
             component: agents
           annotations:
-            summary: "Spans com erro em {{ $labels.service_name }}"
-            description: "O serviço {{ $labels.service_name }} registrou spans com status ERROR nos últimos 15m ({{ $value | humanize }}/s)."
+            summary: "Interações falhando em {{ $labels.service_name }}"
+            description: "O span raiz do agente ({{ $labels.service_name }}) terminou em erro nos últimos 15m — a interação falhou de fato para o usuário, não é um tool call que se recuperou. Ver o trace no Tempo por {{ $labels.service_name }} com status=error."
+
+        # Saúde interna: proporção de tool calls em erro. Um piso alto (>30%) pega
+        # degradação sistêmica (um MCP server fora, todos os execute_tool falhando)
+        # sem alarmar pelo ruído normal de sondagem. Complementa o alerta de raiz:
+        # a interação pode "terminar verde" mas às custas de muito retry — isso é
+        # sinal de que algo do lado das ferramentas está mal.
+        - alert: AgentToolErrorRatioHigh
+          expr: |
+            (
+              sum by (service_name) (rate(agents_span_metrics_calls{span_name=~"execute_tool|tools/call", status_code="STATUS_CODE_ERROR"}[15m]))
+              /
+              sum by (service_name) (rate(agents_span_metrics_calls{span_name=~"execute_tool|tools/call"}[15m]))
+            ) > 0.3
+          for: 10m
+          labels:
+            severity: warning
+            component: agents
+          annotations:
+            summary: "Muitos tool calls falhando em {{ $labels.service_name }}"
+            description: "Mais de 30% dos tool calls de {{ $labels.service_name }} estão em erro nos últimos 15m ({{ $value | humanizePercentage }}). Suspeitos: um MCP server fora, RBAC negando, ou um recurso/endpoint indisponível. Ver os span_name em erro no Tempo."
 
         # p95 do span RAIZ da triagem (span_name="triage", emitido pela borda Go).
         # duration é em MILISSEGUNDOS (default do span_metrics); 300000ms = 5min.
