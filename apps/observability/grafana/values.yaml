@@ -159,10 +159,12 @@ dashboards:
       gnetId: 15661
       revision: 1
       datasource: VictoriaMetrics
-    node-exporter:
-      gnetId: 1860
-      revision: 37
-      datasource: VictoriaMetrics
+    # node-exporter (gnetId 1860, "Node Exporter Full", uid rYdddlPWk) REMOVIDO:
+    # o victoria-metrics-k8s-stack já entrega o mesmo dashboard via ConfigMap
+    # (sidecarProvider). Com o mesmo uid em dois providers, o Grafana loga
+    # "the same UID is used more than once" e REVOGA a permissão de escrita de
+    # AMBOS ("no database write permissions because of duplicates") — nenhum
+    # dashboard é atualizado no banco, nem os deste repo.
     # Fase 6 — data layer
     cloudnative-pg:
       gnetId: 20417
