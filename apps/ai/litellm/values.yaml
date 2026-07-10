@@ -30,8 +30,15 @@ environmentSecrets:
 # OTEL_EXPORTER=otlp_http é o transporte HTTP (não exige grpcio na imagem).
 envVars:
   OTEL_EXPORTER: "otlp_http"
-  OTEL_ENDPOINT: "http://otel-collector-opentelemetry-collector-agent.observability.svc.cluster.local:4318"
   OTEL_SERVICE_NAME: "litellm"
+
+extraEnvVars:
+  - name: HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: OTEL_ENDPOINT
+    value: "http://$(HOST_IP):4318"
 
 # DB existente (CNPG) — credenciais via secret dedicado
 db:
