@@ -1,0 +1,43 @@
+# Policy Reporter 3.8.1 — UI navegável para PolicyReports.
+#
+# O Trivy Operator publica VulnerabilityReport (aquasecurity.github.io). O
+# trivy-operator-polr-adapter materializa PolicyReport (wgpolicyk8s.io), e a UI
+# do Policy Reporter navega esses reports. Mantemos o core com REST/metrics e o
+# plugin Trivy habilitado para enriquecer a experiência da UI.
+#
+# [CONFERIR] nomes de chaves com:
+#   helm show values policy-reporter --repo https://kyverno.github.io/policy-reporter --version 3.8.1
+
+metrics:
+  enabled: true
+
+ui:
+  enabled: true
+  name: the-lab-zone
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+plugin:
+  trivy:
+    enabled: true
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+
+# Usamos VMServiceScrape próprio (manifests/), não ServiceMonitor do Prometheus.
+monitoring:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 256Mi

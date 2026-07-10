@@ -1,0 +1,22 @@
+# Scrape do Policy Reporter core e do plugin Trivy pelo vmagent.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: policy-reporter
+  namespace: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  namespaceSelector:
+    matchNames:
+      - policy-reporter
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - policy-reporter
+          - policy-reporter-trivy-plugin
+  endpoints:
+    - port: http
+      path: /metrics

@@ -1,0 +1,39 @@
+# trivy-operator-polr-adapter 0.11.5 — converte CRDs do Trivy Operator em
+# PolicyReport/ClusterPolicyReport para consumo pelo Policy Reporter.
+#
+# Como o Trivy Operator está configurado para vulnerability scanning apenas,
+# mantemos somente vulnerabilityReports habilitado.
+#
+# [CONFERIR] nomes de chaves com:
+#   helm show values trivy-operator-polr-adapter --repo https://fjogeleit.github.io/trivy-operator-polr-adapter --version 0.11.5
+
+crds:
+  install: true
+
+adapters:
+  vulnerabilityReports:
+    enabled: true
+    timeout: 5
+  configAuditReports:
+    enabled: false
+  cisKubeBenchReports:
+    enabled: false
+  complianceReports:
+    enabled: false
+  rbacAssessmentReports:
+    enabled: false
+  exposedSecretReports:
+    enabled: false
+  infraAssessmentReports:
+    enabled: false
+  clusterInfraAssessmentReports:
+    enabled: false
+  clusterVulnerabilityReports:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    memory: 256Mi

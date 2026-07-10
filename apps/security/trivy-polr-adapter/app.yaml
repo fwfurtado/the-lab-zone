@@ -1,0 +1,31 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trivy-polr-adapter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: security
+  sources:
+    - repoURL: https://fjogeleit.github.io/trivy-operator-polr-adapter
+      chart: trivy-operator-polr-adapter
+      targetRevision: 0.11.5
+      helm:
+        releaseName: trivy-polr-adapter
+        valueFiles:
+          - $values/apps/security/trivy-polr-adapter/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: policy-reporter
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true
+      - CreateNamespace=true
