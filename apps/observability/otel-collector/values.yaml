@@ -63,16 +63,30 @@ config:
     transform/span_metrics_naming:
       error_mode: ignore
       metric_statements:
-        # resource attrs -> labels promovidos pelo VM (service.name, k8s.*)
+        # CARDINALIDADE: o VM promove TODO resource attribute a label. O span_metrics
+        # copia o resource do span (container.image.tag, k8s.pod.uid, ...), que muda a
+        # cada deploy e multiplica séries sem servir a nenhuma agregação de RED.
+        # Allowlist explícita — enumerar, não excluir (mesmo princípio do RBAC).
         - context: resource
           statements:
+            - 'keep_matching_keys(resource.attributes, "^(service\\.name|service\\.namespace|deployment\\.environment)$")'
             - 'replace_all_patterns(resource.attributes, "key", "\\.", "_")'
         - context: metric
           statements:
             - 'replace_pattern(metric.name, "\\.", "_")'
         # atributos do datapoint: span.name, span.kind, status.code, gen_ai.request.model
+        #
+        # collector.instance.id: o connector o adiciona para SEPARAR os contadores de
+        # cada instância do collector — sem ele, dois pods do daemonset emitindo a mesma
+        # série colidem e o rate() vira serra. Mas o valor é um UUID gerado no boot: todo
+        # rollout cria séries novas e abandona as antigas (churn sem teto).
+        # Troca por identidade ESTÁVEL por nó: daemonset = 1 collector por nó, e o nome do
+        # nó não muda no restart. `${env:OTEL_K8S_NODE_NAME}` é expandido pelo collector no
+        # load do config (o chart injeta essa env via fieldRef spec.nodeName).
         - context: datapoint
           statements:
+            - 'set(datapoint.attributes["collector_node"], "${env:OTEL_K8S_NODE_NAME}")'
+            - 'delete_key(datapoint.attributes, "collector.instance.id")'
             - 'replace_all_patterns(datapoint.attributes, "key", "\\.", "_")'
     # O connector service_graph emite os histogramas como
     # traces_service_graph_request_{client,server} (unidade: segundos). O Grafana
@@ -81,10 +95,19 @@ config:
     transform/service_graph_naming:
       error_mode: ignore
       metric_statements:
+        # Mesma poda do span_metrics: sem ela os labels client/server ganham carona de
+        # container.image.tag, k8s.pod.uid e cia.
+        - context: resource
+          statements:
+            - 'keep_matching_keys(resource.attributes, "^(service\\.name|service\\.namespace|deployment\\.environment)$")'
+            - 'replace_all_patterns(resource.attributes, "key", "\\.", "_")'
         - context: metric
           statements:
             - 'set(metric.name, "traces_service_graph_request_server_seconds") where metric.name == "traces_service_graph_request_server"'
             - 'set(metric.name, "traces_service_graph_request_client_seconds") where metric.name == "traces_service_graph_request_client"'
+        - context: datapoint
+          statements:
+            - 'replace_all_patterns(datapoint.attributes, "key", "\\.", "_")'
 
     # Langfuse é o plano de LLM: só spans dos agentes entram lá. O Tempo recebe TUDO.
     # Sem isso, span de infra (Gateway, CNPG, Argo...) viraria lixo no projeto `zone`
