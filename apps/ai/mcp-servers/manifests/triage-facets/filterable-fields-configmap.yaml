@@ -10,5 +10,9 @@ metadata:
 # errado em produção (passou 'unverified', zerando a busca — todos os relatórios
 # são unverified hoje). Dormente até a Fatia B dar valores variados a confirmation;
 # readicionar então com condition 'any' (valor positivo), não '!='.
+# outcome/confidence vêm do artefato de conclusão (ADR-0013), enriquecidos no
+# payload pelo indexer. Condition POSITIVA (== high, == diagnosed): o agente
+# filtra pelo que QUER, nunca pelo que exclui — a inversão do '!=' derrotou o
+# agente em produção (o mesmo motivo da remoção do confirmation, acima).
 data:
-  FILTERABLE_FIELDS: '[{"name":"section","description":"Faceta do relatorio: symptom (sintoma observado), evidence (metricas/logs/eventos investigados — a LINHA DE RACIOCINIO), cause (causa provavel), next_step (acao sugerida). Filtre por section para buscar dentro de uma faceta especifica.","field_type":"keyword","condition":"==","required":false},{"name":"namespace","description":"Namespace Kubernetes do incidente (ex.: data, observability, ai).","field_type":"keyword","condition":"==","required":false}]'
+  FILTERABLE_FIELDS: '[{"name":"section","description":"Faceta do relatorio: symptom (sintoma observado), evidence (metricas/logs/eventos investigados — a LINHA DE RACIOCINIO), cause (causa provavel), next_step (acao sugerida). Filtre por section para buscar dentro de uma faceta especifica.","field_type":"keyword","condition":"==","required":false},{"name":"namespace","description":"Namespace Kubernetes do incidente (ex.: data, observability, ai).","field_type":"keyword","condition":"==","required":false},{"name":"outcome","description":"Se o relatorio chegou a uma causa: diagnosed (elegeu uma causa provavel) ou inconclusive (sem dado suficiente). Filtre outcome=diagnosed para recuperar so triagens que concluiram.","field_type":"keyword","condition":"==","required":false},{"name":"confidence","description":"Confianca do diagnostico PRIMARIO extraida do relatorio: high, medium, low. So existe quando outcome=diagnosed. Filtre confidence=high para so recuperar diagnosticos de alta confianca (a memoria mais confiavel).","field_type":"keyword","condition":"==","required":false}]'
