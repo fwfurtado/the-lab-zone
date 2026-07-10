@@ -20,9 +20,6 @@ spec:
             app.kubernetes.io/name: open-webui
         - matchLabels:
             io.kubernetes.pod.namespace: ai
-            app.kubernetes.io/name: lightrag
-        - matchLabels:
-            io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: qdrant-mcp
         - matchLabels:
             io.kubernetes.pod.namespace: ai

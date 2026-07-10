@@ -73,18 +73,6 @@ proxy_config:
     #   model_info:
     #     mode: chat
 
-    - model_name: lightrag
-      litellm_params:
-        # ollama_chat usa /api/chat — que é o endpoint que o LightRAG emula.
-        # (ollama puro usa /api/generate, que o LightRAG pode não implementar.)
-        model: ollama_chat/lightrag:latest
-        api_base: http://lightrag.ai.svc.cluster.local:9621
-        # LightRAG está com API Key auth; o header que ele espera é X-API-Key.
-        extra_headers:
-          X-API-Key: os.environ/LIGHTRAG_API_KEY
-      model_info:
-        mode: chat
-
     - model_name: kimi-k2.7-code-paid
       litellm_params:
         model: openrouter/moonshotai/kimi-k2.7-code
