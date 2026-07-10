@@ -54,6 +54,26 @@ config:
       check_interval: 5s        # era 1s no values antigo; default do chart é 5s (mais correto)
       limit_percentage: 75
       spike_limit_percentage: 15
+    # Converte NOMES e CHAVES DE LABEL do span_metrics para snake_case.
+    # Necessário porque o VM guarda métricas OTLP como vêm (sem
+    # -opentelemetry.usePrometheusNaming): sem isso chegam pontuadas
+    # (agents.span_metrics.calls{service.name=...}). E MetricsQL NÃO aceita label
+    # com ponto em `by()` — exigiria label_replace em todo VMRule/dashboard.
+    # Escopo: só o pipeline metrics/span_metrics; o pipeline `metrics` geral não é tocado.
+    transform/span_metrics_naming:
+      error_mode: ignore
+      metric_statements:
+        # resource attrs -> labels promovidos pelo VM (service.name, k8s.*)
+        - context: resource
+          statements:
+            - 'replace_all_patterns(resource.attributes, "key", "\\.", "_")'
+        - context: metric
+          statements:
+            - 'replace_pattern(metric.name, "\\.", "_")'
+        # atributos do datapoint: span.name, span.kind, status.code, gen_ai.request.model
+        - context: datapoint
+          statements:
+            - 'replace_all_patterns(datapoint.attributes, "key", "\\.", "_")'
 
   exporters:
     otlp_http/metrics:
@@ -111,7 +131,7 @@ config:
       # ficam alertáveis via VMRule sem tocar no Langfuse.
       metrics/span_metrics:
         receivers: [span_metrics]
-        processors: [memory_limiter, batch]
+        processors: [memory_limiter, transform/span_metrics_naming, batch]
         exporters: [otlp_http/metrics]
 
 # Porta metrics habilitada para o VMAgent scrape o próprio collector
