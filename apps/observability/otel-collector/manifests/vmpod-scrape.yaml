@@ -1,0 +1,20 @@
+# Telemetria interna do OTel Collector (porta 8888, habilitada em values.yaml via
+# ports.metrics + config.service.telemetry.metrics.address).
+#
+# Séries úteis pro plano de sistema:
+#   otelcol_exporter_sent_spans / otelcol_exporter_send_failed_spans  (por exporter:
+#     otlp/tempo, otlp_http/langfuse-agents) — prova de entrega ponta a ponta
+#   otelcol_receiver_accepted_spans / _refused_spans
+#   otelcol_processor_dropped_metric_points, otelcol_exporter_queue_size
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: opentelemetry-collector
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics

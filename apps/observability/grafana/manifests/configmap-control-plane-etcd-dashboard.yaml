@@ -25,7 +25,7 @@ data:
           "title": "etcd Has Leader",
           "type": "stat",
           "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "options": {
             "reduceOptions": { "calcs": [ "lastNotNull" ] },
             "colorMode": "background",
@@ -60,7 +60,7 @@ data:
           "title": "Leader Changes / 1h",
           "type": "stat",
           "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "options": {
             "reduceOptions": { "calcs": [ "lastNotNull" ] },
             "colorMode": "background",
@@ -88,7 +88,7 @@ data:
           "title": "WAL fsync p99",
           "type": "stat",
           "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "options": {
             "reduceOptions": { "calcs": [ "lastNotNull" ] },
             "colorMode": "background",
@@ -116,7 +116,7 @@ data:
           "title": "Backend Commit p99",
           "type": "stat",
           "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "options": {
             "reduceOptions": { "calcs": [ "lastNotNull" ] },
             "colorMode": "background",
@@ -144,7 +144,7 @@ data:
           "title": "Pending Proposals",
           "type": "stat",
           "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "options": {
             "reduceOptions": { "calcs": [ "lastNotNull" ] },
             "colorMode": "background",
@@ -172,7 +172,7 @@ data:
           "title": "Trivy Scan Writes",
           "type": "stat",
           "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "options": {
             "reduceOptions": { "calcs": [ "lastNotNull" ] },
             "colorMode": "background",
@@ -200,7 +200,7 @@ data:
           "title": "etcd Leader Changes",
           "type": "timeseries",
           "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "short",
@@ -216,7 +216,7 @@ data:
           "title": "etcd WAL fsync p99",
           "type": "timeseries",
           "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "s",
@@ -240,7 +240,7 @@ data:
           "title": "etcd Backend Commit p99",
           "type": "timeseries",
           "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "s",
@@ -264,7 +264,7 @@ data:
           "title": "etcd Proposals",
           "type": "timeseries",
           "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "short",
@@ -281,7 +281,7 @@ data:
           "title": "etcd MVCC Writes",
           "type": "timeseries",
           "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "ops",
@@ -299,7 +299,7 @@ data:
           "title": "apiserver Write Requests",
           "type": "timeseries",
           "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "reqps",
@@ -315,7 +315,7 @@ data:
           "title": "Control Plane Disk Busy (vda)",
           "type": "timeseries",
           "gridPos": { "x": 0, "y": 28, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "percentunit",
@@ -339,7 +339,7 @@ data:
           "title": "Control Plane I/O PSI",
           "type": "timeseries",
           "gridPos": { "x": 12, "y": 28, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "s",
@@ -363,7 +363,7 @@ data:
           "title": "Control Plane Disk Writes (vda)",
           "type": "timeseries",
           "gridPos": { "x": 0, "y": 36, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "Bps",
@@ -379,7 +379,7 @@ data:
           "title": "Trivy Scan I/O Pressure",
           "type": "timeseries",
           "gridPos": { "x": 12, "y": 36, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "Bps",
@@ -404,7 +404,7 @@ data:
           "title": "etcd DB Size",
           "type": "timeseries",
           "gridPos": { "x": 0, "y": 44, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "fieldConfig": {
             "defaults": {
               "unit": "bytes",
@@ -421,7 +421,7 @@ data:
           "title": "Stored Objects",
           "type": "bargauge",
           "gridPos": { "x": 12, "y": 44, "w": 12, "h": 8 },
-          "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" },
+          "datasource": { "type": "prometheus", "uid": "${ds}" },
           "options": {
             "reduceOptions": { "calcs": [ "lastNotNull" ] },
             "orientation": "horizontal",
@@ -443,5 +443,5 @@ data:
           ]
         }
       ],
-      "templating": { "list": [] }
+      "templating": { "list": [ { "current": {"text": "VictoriaMetrics", "value": "victoriametrics"}, "label": "Datasource", "name": "ds", "options": [], "query": "prometheus", "refresh": 1, "type": "datasource" } ] }
     }

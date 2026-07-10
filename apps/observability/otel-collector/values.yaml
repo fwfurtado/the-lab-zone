@@ -74,6 +74,18 @@ config:
         - context: datapoint
           statements:
             - 'replace_all_patterns(datapoint.attributes, "key", "\\.", "_")'
+    # O connector service_graph emite os histogramas como
+    # traces_service_graph_request_{client,server} (unidade: segundos). O Grafana
+    # (Service Graph do datasource Tempo) procura o nome com sufixo _seconds — que
+    # o VM não adiciona, por não fazer naming Prometheus. Renomeia explicitamente.
+    transform/service_graph_naming:
+      error_mode: ignore
+      metric_statements:
+        - context: metric
+          statements:
+            - 'set(metric.name, "traces_service_graph_request_server_seconds") where metric.name == "traces_service_graph_request_server"'
+            - 'set(metric.name, "traces_service_graph_request_client_seconds") where metric.name == "traces_service_graph_request_client"'
+
     # Langfuse é o plano de LLM: só spans dos agentes entram lá. O Tempo recebe TUDO.
     # Sem isso, span de infra (Gateway, CNPG, Argo...) viraria lixo no projeto `zone`
     # — mesma lição do flood de /healthz. O filter DESCARTA o que casa a condição,
@@ -128,7 +140,23 @@ config:
       metrics_flush_interval: 15s
       namespace: agents.span_metrics
 
+    # service_graph: deriva as ARESTAS entre serviços (quem chama quem) a partir de
+    # pares de spans client/server no mesmo trace. É o que alimenta o Service Graph
+    # do Grafana — o span_metrics NÃO produz isso (ele dá RED por serviço, não o grafo).
+    service_graph:
+      latency_histogram_buckets: [10ms, 100ms, 500ms, 1s, 5s, 30s, 120s]
+      store:
+        ttl: 10s          # janela pra casar client<->server; triagens longas fecham a aresta na borda
+        max_items: 1000
+      metrics_flush_interval: 30s
+
   service:
+    # Telemetria interna do Collector. O chart só cria o reader Prometheus se este
+    # `address` existir; sem ele a 8888 não é servida e as séries otelcol_* (spans
+    # enviados/falhos por exporter, fila, refused) simplesmente não existem.
+    telemetry:
+      metrics:
+        address: ${env:MY_POD_IP}:8888
     pipelines:
       metrics:
         receivers: [otlp]
@@ -142,7 +170,7 @@ config:
       traces:
         receivers: [otlp]
         processors: [memory_limiter, batch]
-        exporters: [otlp/tempo, span_metrics]
+        exporters: [otlp/tempo, span_metrics, service_graph]
       # Só os agentes -> Langfuse (plano de LLM). Mesmo receiver: o Collector faz
       # fanout do otlp para os dois pipelines; o filter recorta este.
       traces/langfuse:
@@ -155,6 +183,11 @@ config:
       metrics/span_metrics:
         receivers: [span_metrics]
         processors: [memory_limiter, transform/span_metrics_naming, batch]
+        exporters: [otlp_http/metrics]
+      # Arestas do grafo de serviços -> VictoriaMetrics (traces_service_graph_*).
+      metrics/service_graph:
+        receivers: [service_graph]
+        processors: [memory_limiter, transform/service_graph_naming, batch]
         exporters: [otlp_http/metrics]
 
 # Porta metrics habilitada para o VMAgent scrape o próprio collector
@@ -194,3 +227,9 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
+
+# A porta de métricas é DESABILITADA por default no chart; sem ela não há o que
+# scrapear (VMPodScrape em manifests/vmpod-scrape.yaml).
+ports:
+  metrics:
+    enabled: true

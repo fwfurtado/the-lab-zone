@@ -66,6 +66,9 @@ datasources:
     datasources:
       - name: VictoriaMetrics
         type: prometheus
+        # uid EXPLÍCITO. Sem ele o Grafana gera um aleatório (era P4169E866C3094E38) e
+        # qualquer referência — dashboard, correlação — fica presa a um valor fora do Git.
+        uid: victoriametrics
         url: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428
         isDefault: true
         access: proxy
@@ -74,11 +77,13 @@ datasources:
 
       - name: VictoriaLogs
         type: victoriametrics-logs-datasource
+        uid: victorialogs
         url: http://victoria-logs-vls-server.observability.svc.cluster.local:9428
         access: proxy
 
       - name: Alertmanager
         type: alertmanager
+        uid: alertmanager
         url: http://vmalertmanager-victoria-metrics-vmks.observability.svc.cluster.local:9093
         access: proxy
         jsonData:
@@ -89,17 +94,29 @@ datasources:
       # query; o ingest OTLP (4317/4318) só o Collector usa.
       - name: Tempo
         type: tempo
+        uid: tempo
         url: http://tempo.observability.svc.cluster.local:3200
         access: proxy
         jsonData:
+          # Node graph: desenha o grafo do trace aberto (não depende de métrica).
+          nodeGraph:
+            enabled: true
           # Correlação trace -> RED do span_metrics (já em snake_case no VM).
+          # datasourceUid exige o UID (não o nome) da datasource de destino.
           tracesToMetrics:
-            datasourceUid: P4169E866C3094E38
+            datasourceUid: victoriametrics
             tags:
               - key: service.name
                 value: service_name
+            queries:
+              - name: "Taxa de requests (RED)"
+                query: 'sum(rate(agents_span_metrics_calls{$__tags}[5m]))'
+              - name: "Taxa de erros (RED)"
+                query: 'sum(rate(agents_span_metrics_calls{$__tags, status_code="STATUS_CODE_ERROR"}[5m]))'
+          # Service Graph: alimentado pelo connector service_graph do Collector
+          # (traces_service_graph_*), não pelo span_metrics.
           serviceMap:
-            datasourceUid: P4169E866C3094E38
+            datasourceUid: victoriametrics
 
 dashboardProviders:
   dashboardproviders.yaml:
