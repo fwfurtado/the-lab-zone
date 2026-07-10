@@ -14,10 +14,16 @@ spec:
         - ports:
             - port: "3000"
               protocol: TCP
-    # Ingestao OTLP dos agentes chega via OTel Collector (fanout traces/langfuse).
-    # As origens diretas lightrag e pipelines (OWUI) foram removidas: LightRAG
-    # desligado e a instrumentacao do open-webui saiu de escopo.
+    # Duas classes de ingestao no Langfuse:
+    #  - opentelemetry-collector: OTLP dos 3 agentes (fanout traces/langfuse).
+    #  - pipelines (open-webui-pipelines): o langfuse_filter_pipeline do OWUI
+    #    exporta trace via SDK direto (nao passa pelo collector). Label do pod =
+    #    app.kubernetes.io/name: pipelines (subchart do open-webui).
+    # A origem lightrag foi removida (LightRAG desligado, ADR-0018).
     - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: pipelines
         - matchLabels:
             io.kubernetes.pod.namespace: observability
             app.kubernetes.io/name: opentelemetry-collector
