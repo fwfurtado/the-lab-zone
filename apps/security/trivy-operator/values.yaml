@@ -11,10 +11,17 @@
 #  victoria-logs clusterIP. Mantemos o values MÍNIMO de propósito.)
 
 trivy:
-  # Standalone: o trivy roda embutido no job, sem servidor externo.
-  mode: Standalone
+  # O operator cria um container de scan por container do Pod alvo. Em modo
+  # Standalone, todos usam o mesmo emptyDir em /tmp/trivy/.cache e competem pelo
+  # lock do DB/cache. ClientServer move o DB/cache para o Trivy Server e deixa os
+  # Jobs como clientes, eliminando a disputa local entre init/main/wait/clone.
+  mode: ClientServer
   # Só reporta CVE COM fix disponível — corta o ruído de "unfixed" que não dá pra agir.
   ignoreUnfixed: true
+  # PVC do Trivy Server. Declarar a classe evita depender do default do cluster.
+  storageClassEnabled: true
+  storageClassName: openebs-hostpath-ssd
+  storageSize: 5Gi
 
 # Escopo inicial de estabilizacao: o objetivo operacional e saber o que esta
 # rodando agora, sem multiplicar scans por ReplicaSet/Job/CronJob historicos.
@@ -25,6 +32,9 @@ targetWorkloads: "pod"
 excludeNamespaces: "kube-system,trivy-system"
 
 operator:
+  # Usa um Trivy Server gerenciado pelo chart. Isto sobrescreve trivy.mode para
+  # ClientServer e injeta serverURL para os scan jobs.
+  builtInTrivyServer: true
   # TTL dos relatórios: re-scan periódico mantém o retrato fresco.
   scannerReportTTL: "24h"
   # Limita jobs simultâneos pra não competir com workload real nem com o etcd
