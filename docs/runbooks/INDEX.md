@@ -21,6 +21,7 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 | Argo Workflows | [argo-workflows/workflows-elt-clickhouse-dbt.md](argo-workflows/workflows-elt-clickhouse-dbt.md) | generateName, templateRef, Argo 3.6, dbt/goose/ClickHouse |
 | SSO/Authentik | [sso-authentik/authentik-oidc-apps.md](sso-authentik/authentik-oidc-apps.md) | grant_types, signing_key, trailing slash, Harbor/Forgejo/Langfuse |
 | Network Policies | [network-policies/cilium-cnp-default-deny.md](network-policies/cilium-cnp-default-deny.md) | default-deny ingress, audit mode, fromEntities, archiveLogs, drops→Slack |
+| Security | [security/trivy-operator-scan-jobs.md](security/trivy-operator-scan-jobs.md) | Trivy operator, scan jobs, cache lock, ClientServer, timeouts |
 | Backup/DR | [backup-dr/cnpg-velero-offsite-dr.md](backup-dr/cnpg-velero-offsite-dr.md) | backup fantasma CNPG, anunciante L2 GPU, rclone vazio, Velero, plumbing |
 
 ## Por sintoma (atalhos)
