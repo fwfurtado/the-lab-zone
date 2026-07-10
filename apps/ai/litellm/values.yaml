@@ -169,3 +169,29 @@ proxy_config:
       - { "gpt-oss-120b": ["deepseek-v4-flash-paid"] }
       - { "qwen3-next-80b": ["deepseek-v4-flash-paid"] }
       - { "gemma-4-26b": ["deepseek-v4-flash-paid"] }
+      # minimax-m3-paid é o primário do qa-bot e da triagem. Cadeia:
+      #   minimax-m3-paid -> deepseek-v4-flash-paid -> gpt-oss-120b (free)
+      # deepseek-v4-flash é o pick para QA/triagem (tool-calling + RAG): iguala o
+      # Pro em raciocínio a ~12x menos custo; o Pro só compensa em loops agênticos
+      # profundos e recall factual, que não é este caso. gpt-oss-120b (free) é a
+      # última rede — família diferente dos frees já saturados, então tem chance de
+      # não estar no MESMO 429. Se o gpt-oss-120b também vier a viver estrangulado,
+      # troque por outro free de família distinta.
+      - { "minimax-m3-paid": ["deepseek-v4-flash-paid", "gpt-oss-120b"] }
+
+  # Comportamento do router sob falha/429. Aplica a TODOS os model groups.
+  router_settings:
+    # Ao tomar 429/erro, o deployment sai da rotação por N segundos em vez de ser
+    # martelado de novo. É o que reduz as tentativas natimortas que apareciam no
+    # trace (router repetido, 18s de latência). 60s dá tempo da janela de rate
+    # limit do provider free renovar antes de tentar de novo.
+    cooldown_time: 60
+    # Quantas falhas na janela de cooldown antes de esfriar o deployment. 2 =
+    # tolera um pico isolado, mas esfria rápido um provider consistentemente em 429.
+    allowed_fails: 2
+    # usage-based-routing-v2 distribui por TPM/RPM ENTRE deployments do mesmo
+    # model_name. Hoje cada modelo é único (um provider por nome), então isto é
+    # quase inócuo — passa a valer quando você registrar o mesmo modelo em vários
+    # providers. Incluído para já deixar a política pronta; o que resolve o 429
+    # agora é cooldown + fallback acima.
+    routing_strategy: usage-based-routing-v2
