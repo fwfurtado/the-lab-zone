@@ -1,0 +1,63 @@
+# RED dos agentes, derivado dos spans pelo connector span_metrics do OTel Collector
+# (apps/observability/otel-collector/values.yaml) e exportado pro VictoriaMetrics.
+# Plano de SISTEMA: alerta sem consultar o Langfuse.
+#
+# Nomes e labels chegam em snake_case graças ao processor transform/span_metrics_naming
+# no pipeline metrics/span_metrics — por isso as queries abaixo são PromQL comum.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: agents-red
+  namespace: observability
+spec:
+  groups:
+    - name: agents-red
+      rules:
+        # Qualquer span com status ERROR: triagem que falhou, tool call que estourou,
+        # model request rejeitado pelo gateway.
+        - alert: AgentSpanErrors
+          expr: |
+            sum by (service_name) (
+              rate(agents_span_metrics_calls{status_code="STATUS_CODE_ERROR"}[15m])
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: agents
+          annotations:
+            summary: "Spans com erro em {{`{{ $labels.service_name }}`}}"
+            description: "O serviço {{`{{ $labels.service_name }}`}} registrou spans com status ERROR nos últimos 15m ({{`{{ $value | printf \"%.2f\" }}`}}/s)."
+
+        # p95 do span RAIZ da triagem (span_name="triage", emitido pela borda Go).
+        # duration é em MILISSEGUNDOS (default do span_metrics); 300000ms = 5min.
+        # Atenção: 300s é o ÚLTIMO bucket do connector — acima disso o quantil satura.
+        - alert: TriageLatencyP95High
+          expr: |
+            histogram_quantile(
+              0.95,
+              sum by (le) (rate(agents_span_metrics_duration_bucket{span_name="triage"}[30m]))
+            ) > 300000
+          for: 10m
+          labels:
+            severity: warning
+            component: triage
+          annotations:
+            summary: "Triagem lenta (p95 > 5min)"
+            description: "O p95 da triagem ponta-a-ponta passou de 5min na última meia hora. Suspeitos: LLM lento/fallback no LiteLLM, tool call travado no vMCP, ou contexto grande demais."
+
+        # Taxa de erro RELATIVA da triagem: >20% das triagens falhando em 30m.
+        # Complementa o AgentSpanErrors (absoluto): pega degradação sistêmica.
+        - alert: TriageErrorRatioHigh
+          expr: |
+            (
+              sum(rate(agents_span_metrics_calls{span_name="triage", status_code="STATUS_CODE_ERROR"}[30m]))
+              /
+              sum(rate(agents_span_metrics_calls{span_name="triage"}[30m]))
+            ) > 0.2
+          for: 10m
+          labels:
+            severity: critical
+            component: triage
+          annotations:
+            summary: "Mais de 20% das triagens falhando"
+            description: "A razão de triagens com status ERROR passou de 20% em 30m ({{`{{ $value | humanizePercentage }}`}}). Ver o trace no Langfuse e o log da borda."
