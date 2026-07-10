@@ -75,10 +75,24 @@ config:
         - type: router
           id: format-router
           routes:
+            # Tetragon (ns tetragon): auditoria eBPF sem `level`. Carimba `debug`
+            # — é o papel desses eventos hoje (observabilidade de runtime, não
+            # sinal acionável) — e mantém o JSON opaco no _msg (via unpack_json
+            # sob demanda). PRECEDE as demais (o evento é JSON e cairia no json).
+            - output: tetra-level
+              expr: 'resource["k8s.namespace.name"] == "tetragon" or attributes["k8s.namespace.name"] == "tetragon"'
+            # 1Password Connect: JSON com chave `log_message` e level NUMÉRICO.
+            # Quirk conhecida (connect#44): o número NÃO é syslog (3=info,4=debug).
+            # Mapeia pelo PREFIXO (X) do log_message, não pelo número. PRECEDE json.
+            - output: op-level
+              expr: 'body matches "\"log_message\""'
             - output: json-parser
               expr: 'body matches "^\\s*[{]"'
             - output: logfmt-parser
               expr: 'body matches "(^|\\s)level="'
+            # ClickHouse ("... [ tid ] {qid} <Debug> ..."): nível entre <>.
+            - output: ch-level
+              expr: 'body matches " <(Trace|Debug|Information|Notice|Warning|Error|Critical|Fatal|Test)>"'
           default: noop
 
         # 3a) JSON estruturado (slog/zap das suas apps: {"level":"INFO","msg":...})
@@ -123,7 +137,57 @@ config:
           if: 'attributes?.msg != nil'
           output: noop
 
-        # 6) Ponto de convergência de todas as rotas (inclusive default).
+        # --- Tetragon: carimba `debug` e seta severidade reusando o `severity`
+        #     geral (default preset casa "debug"). Não faz json explode; o _msg
+        #     segue como o evento cru. O `msg-to-body` no caminho é no-op aqui
+        #     (evento não tem `msg`).
+        - type: add
+          id: tetra-level
+          field: attributes.level
+          value: debug
+          output: severity
+
+        # --- 1Password Connect: extrai (X) do log_message; a LETRA vira o nível
+        #     (I=info, D=debug, W=warn, E=error, F=fatal). Sem json explode
+        #     (evita cardinalidade de scope.request_id); _msg segue como o JSON.
+        - type: regex_parser
+          id: op-level
+          parse_from: body
+          parse_to: attributes
+          regex: '"log_message"\s*:\s*"\((?P<oplevel>[TIDWEF])\)'
+          on_error: send_quiet
+          output: op-severity
+        - type: severity_parser
+          id: op-severity
+          parse_from: attributes.oplevel
+          mapping: {trace: T, debug: D, info: I, warn: W, error: E, fatal: F}
+          on_error: send_quiet
+          output: noop
+
+        # --- ClickHouse: extrai <Nível> e mapeia. Mantém o default preset como
+        #     rede (Debug/Error/Warning/Fatal/Trace casam case-insensitive);
+        #     adicionamos os termos não-padrão Information/Notice/Critical/Test.
+        - type: regex_parser
+          id: ch-level
+          parse_from: body
+          parse_to: attributes
+          regex: '<(?P<chlevel>Trace|Debug|Information|Notice|Warning|Error|Critical|Fatal|Test)>'
+          on_error: send_quiet
+          output: ch-severity
+        - type: severity_parser
+          id: ch-severity
+          parse_from: attributes.chlevel
+          mapping:
+            trace: [Trace, Test]
+            debug: Debug
+            info: [Information, Notice]
+            warn: Warning
+            error: [Error, Critical]
+            fatal: Fatal
+          on_error: send_quiet
+          output: noop
+
+        # Ponto de convergência de todas as rotas (inclusive default).
         - type: noop
           id: noop
 
