@@ -195,6 +195,46 @@ resolve. Antes de investigar o backend, prove-o server-side:
 transfere um identificador crítico para fora do Git; mudá-lo depois exige `deleteDatasources`, e
 o custo cresce com cada referência criada nesse meio-tempo. Fixe cedo.
 
+## Alerta de agente firing sem incidente: span de erro ≠ falha de sistema
+
+**Sintoma:** `AgentSpanErrors` (grupo `agents-red`) em `Firing` contínuo, para `service_name`
+como `qa-bot` e `litellm`, sem nenhuma reclamação de que os agentes estejam quebrados. O gráfico
+do alerta mostra taxa de erro > 0 e subindo.
+
+**Causa:** a regra era `sum by (service_name) (rate(agents_span_metrics_calls{status_code="STATUS_CODE_ERROR"}[15m])) > 0`
+— dispara com **qualquer** span em erro. Num agente, erro em nó-folha é rotina, não incidente:
+um `tools/call` para um pod sem log, um recurso vazio, ou o 429 do LiteLLM que **cai no fallback**
+(a tentativa que falhou marca `STATUS_CODE_ERROR` mesmo quando a request final teve sucesso). O
+alerta contava ruído de recuperação como fogo.
+
+**Diagnóstico — a query que separa ruído de falha real:** comparar erro interno com erro de raiz.
+
+```promql
+# tudo que o alerta grosseiro conta
+sum(rate(agents_span_metrics_calls{service_name="qa-bot", status_code="STATUS_CODE_ERROR"}[15m]))
+# só o span RAIZ (a interação que de fato falhou p/ o usuário)
+sum(rate(agents_span_metrics_calls{service_name="qa-bot", span_name="invoke_agent agent", status_code="STATUS_CODE_ERROR"}[15m]))
+```
+
+Medido: interno `0.18/s`, raiz `0/s` → nenhuma interação falhou. `count by (span_name)` localiza
+onde os erros vivem (`execute_tool`/`tools/call` de `kubernetes_pods_log`, `kubernetes_resources_list`
+— o agente sondando o cluster). No Tempo, `{resource.service.name="qa-bot" && status=error}` volta
+vazio: o `status=error` do trace olha a raiz, que está verde.
+
+**Fix:** dois sinais alinhados à realidade, no lugar do `> 0` bruto:
+- `AgentInteractionErrors` — só o span raiz (`span_name="invoke_agent agent"`) em erro. É a falha
+  que importa: a interação quebrou. Fica quieto quando as raízes estão verdes.
+- `AgentToolErrorRatioHigh` — razão de tool calls em erro (`execute_tool|tools/call`) acima de um
+  piso alto (30%). Ignora o pod-sem-log isolado, pega degradação sistêmica (MCP fora, RBAC negando).
+
+O `TriageErrorRatioHigh` já seguia esse princípio (filtra `span_name="triage"`, razão > 20%) — foi
+o modelo. **Calibração:** o piso de 30% é chute educado; rode a razão real por alguns dias e ajuste.
+
+**Lição:** span de erro ≠ falha de sistema. Em agente, erro em folha é frequentemente recuperação
+em ação — inclusive o próprio fallback do LiteLLM. Alerta sobre agente olha a **raiz** (a interação)
+ou **razões** (saúde agregada), quase nunca a contagem bruta de spans. `> 0` num span-metric de
+agente é quase sempre calibração errada.
+
 ## Lição transversal
 
 `operational`/`VALID`/`selectAllByDefault` não provam target gerado. A prova é o target em

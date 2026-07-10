@@ -79,6 +79,10 @@ Erro de auth prova servidor **vivo**; pod de teste sem labels dá timeout por CN
 → observability (mudou `uid` de datasource existente → precisa de `deleteDatasources`).
 Se o pod sobe mas a UI não abre datasource, é cache do navegador — teste com `/api/datasources/uid/<uid>/health`.
 
+**Alerta de agente (`agents-red`) firing sem incidente real**
+→ observability (span de erro ≠ falha; `> 0` em span-metric de agente conta ruído de recuperação).
+Compare erro interno vs. erro de raiz (`span_name="invoke_agent agent"`); alerte na raiz ou em razão, não em contagem bruta.
+
 ## Lições que se repetem (ver README de docs/)
 
 Status verde é promessa, leia o destino · VM operator não materializa → restart (3x) ·
