@@ -89,11 +89,17 @@ config:
           on_error: send_quiet     # se não for JSON válido de fato, segue intacto
           output: severity
 
-        # 3b) logfmt (velero, controller-runtime, ...: level=info msg="...")
-        - type: logfmt_parser
+        # 3b) logfmt (velero, controller-runtime, ...: level=info msg="...").
+        #     ATENÇÃO: NÃO existe operator `logfmt_parser` no stanza. Para logfmt
+        #     só precisamos do nível pro filtro, então extraímos `level` via regex
+        #     (RE2) direto pra attributes.level. Extração completa é evitada de
+        #     propósito: o key_value_parser quebra valor citado com espaço
+        #     (msg="a b c" viraria 3 pares).
+        - type: regex_parser
           id: logfmt-parser
           parse_from: body
           parse_to: attributes
+          regex: '(?:^|\s)level=(?P<level>\w+)'
           on_error: send_quiet
           output: severity
 
