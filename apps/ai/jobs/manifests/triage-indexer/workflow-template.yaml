@@ -1,10 +1,25 @@
-# WorkflowTemplate do triage-indexer (Fase D, duas collections).
+# WorkflowTemplate do triage-indexer (Fase D + Fatia B.1, ADR-0013).
 #
-# DAG com pods separados: um downloader (rclone) baixa os relatórios do Garage
-# uma vez para um PVC efêmero; dois indexers em paralelo (fan-out) leem dele e
-# populam collections distintas do Qdrant:
-#   gestalt -> triage_incidents (1 ponto/relatório, busca por regressão)
-#   facets  -> triage_facets    (1 ponto/seção,     busca por sintoma/causa/hint)
+# DAG com pods separados sobre um PVC efêmero:
+#
+#   downloader ──> classifier ──┬──> uploader   (conclusions/ -> Garage)
+#                               ├──> gestalt    (-> triage_incidents)
+#                               └──> facets     (-> triage_facets)
+#
+#   downloader : rclone traz do Garage AMBOS os prefixos (triage/ e conclusions/)
+#   classifier : lê triage/, escreve conclusions/ no workspace. NUNCA toca o
+#                Qdrant — só produz artefato (ADR-0013).
+#   uploader   : devolve conclusions/ ao Garage. ESSENCIAL: o PVC é efêmero
+#                (ADR-0011); sem subir, a conclusão morre com o run e o modo
+#                incremental do classificador reclassificaria o corpus INTEIRO
+#                toda noite.
+#   gestalt    : 1 ponto/relatório  (busca por regressão)
+#   facets     : 1 ponto/seção      (busca por sintoma/causa/hint)
+#
+# O classificador tem `continueOn: failed`: se o LLM estiver fora, a indexação
+# ainda roda com as conclusões que já estavam no Garage. Degradação suave — o
+# relatório sem conclusão irmã é indexado sem verdict/confidence, e a próxima run
+# incremental o repesca (falha não escreve conclusão => não é pulada depois).
 #
 # Por que dag+PVC (e não containerSet): cada indexer é um pod/template próprio,
 # com seu `main` e seus outputs — o que satisfaz a regra do Argo (containerSet
@@ -12,7 +27,7 @@
 # E devolve a métrica de contagem por template. O volumeClaimTemplate é um PVC
 # EFÊMERO (criado por run, deletado no fim) — não é estado durável a gerenciar,
 # é scratch que cruza pods. Como é LocalPV (openebs-hostpath-ssd, node-local,
-# RWO), os três pods co-locam no mesmo nó; ok, o headroom de RAM é por-nó.
+# RWO), os pods co-locam no mesmo nó; ok, o headroom de RAM é por-nó.
 apiVersion: argoproj.io/v1alpha1
 kind: WorkflowTemplate
 metadata:
@@ -46,20 +61,29 @@ spec:
         counter: { value: "1" }
         when: "{{workflow.status}} != Running"
   templates:
-    # ---- DAG: downloader -> (gestalt, facets) ----
+    # ---- DAG: downloader -> classifier -> (uploader, gestalt, facets) ----
     - name: index
       dag:
         tasks:
           - name: downloader
             template: downloader
+          - name: classifier
+            template: classifier
+            dependencies: [downloader]
+            # LLM fora do ar não pode bloquear a indexação: os relatórios são
+            # indexados de qualquer forma, sem verdict/confidence.
+            continueOn: { failed: true }
+          - name: uploader
+            template: uploader
+            dependencies: [classifier]
           - name: gestalt
             template: gestalt
-            dependencies: [downloader]
+            dependencies: [classifier]
           - name: facets
             template: facets
-            dependencies: [downloader]
+            dependencies: [classifier]
 
-    # ---- downloader (rclone): baixa os .md do Garage para o PVC ----
+    # ---- downloader (rclone): baixa os dois prefixos do Garage para o PVC ----
     - name: downloader
       retryStrategy:
         limit: "2"
@@ -90,10 +114,116 @@ spec:
           - |
             set -eu
             mkdir -p /workspace/repo
-            echo ">> rclone copy garage:triage-reports/triage -> /workspace/repo"
-            rclone copy "garage:triage-reports/triage" /workspace/repo \
+            # Copia a RAIZ do bucket com filtro, em vez de copiar cada prefixo
+            # para dentro de /workspace/repo. Assim a estrutura triage/... e
+            # conclusions/... é PRESERVADA no workspace — o classificador espelha
+            # um caminho no outro (conclusion_path_for), e os indexers escopam os
+            # globs em triage/. Filtrar também tolera o prefixo conclusions/
+            # ainda não existir (primeira run): nada casa, nada falha.
+            echo ">> rclone copy garage:triage-reports -> /workspace/repo (triage/ + conclusions/)"
+            rclone copy "garage:triage-reports" /workspace/repo \
+              --include "/triage/**" --include "/conclusions/**" \
               --fast-list --transfers 8 --checkers 16 --s3-no-check-bucket
-            echo "downloader OK ($(find /workspace/repo -name '*.md' | wc -l) arquivos)"
+            t=$(find /workspace/repo/triage -name '*.md' 2>/dev/null | wc -l)
+            c=$(find /workspace/repo/conclusions -name '*.md' 2>/dev/null | wc -l)
+            echo "downloader OK (triagens: $t, conclusões: $c)"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          requests: { cpu: 100m, memory: 128Mi }
+          limits: { memory: 256Mi }
+
+    # ---- classifier: triage/ -> conclusions/ (verdict/confidence, ADR-0013) ----
+    - name: classifier
+      retryStrategy:
+        limit: "1"
+        retryPolicy: OnError
+        backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
+      container:
+        name: main
+        image: ghcr.io/fwfurtado/triage-indexer:0.6.0
+        # Sem --reclassify: modo INCREMENTAL. Só classifica relatório sem
+        # conclusão irmã. Regenerar o corpus é um run manual com
+        # `triage-classify --reclassify` (nunca `rm` no bucket).
+        command: [triage-classify]
+        env:
+          - name: REPO_DIR
+            value: "/workspace/repo"
+          # Escopado ao prefixo: sem isto o glob varreria conclusions/ também.
+          - name: TRIAGE_GLOBS
+            value: "triage/**/*.md"
+          - name: CLASSIFIER_MODEL
+            value: "minimax-m3-paid"
+          - name: CLASSIFIER_CONCURRENCY
+            value: "4"
+          - name: LITELLM_BASE_URL
+            value: "http://litellm.ai.svc.cluster.local:4000/v1"
+          - name: LITELLM_API_KEY
+            valueFrom:
+              secretKeyRef: { name: triage-indexer-litellm, key: LITELLM_KEY }
+          # OTel Collector é DaemonSet: fala-se com o do PRÓPRIO nó, pelo IP do
+          # host. Porta 4318 (http/protobuf), não 4317 (gRPC) — o exporter do
+          # classificador é o http.
+          - name: HOST_IP
+            valueFrom:
+              fieldRef: { fieldPath: status.hostIP }
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://$(HOST_IP):4318"
+          - name: OTEL_SERVICE_NAME
+            value: "triage-classifier"
+        volumeMounts:
+          - name: workspace
+            mountPath: /workspace
+        resources:
+          # Não embeda nada (o LLM é remoto), mas a imagem importa o fastembed
+          # via _common — onnxruntime carrega mesmo sem uso. Daí 1Gi de teto.
+          requests: { cpu: "100m", memory: "512Mi" }
+          limits: { memory: "1Gi" }
+
+    # ---- uploader (rclone): devolve as conclusões ao Garage ----
+    # SEM ele o incremental é decorativo: o PVC é efêmero, a conclusão morreria
+    # com o run e o classificador reclassificaria tudo na noite seguinte.
+    - name: uploader
+      retryStrategy:
+        limit: "2"
+        retryPolicy: OnError
+        backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
+      container:
+        name: main
+        image: rclone/rclone:1.69.0
+        env:
+          - name: RCLONE_CONFIG_GARAGE_TYPE
+            value: s3
+          - name: RCLONE_CONFIG_GARAGE_PROVIDER
+            value: Other
+          - name: RCLONE_CONFIG_GARAGE_ENDPOINT
+            value: http://garage.data.svc.cluster.local:3900
+          - name: RCLONE_CONFIG_GARAGE_REGION
+            value: garage
+          - name: RCLONE_CONFIG_GARAGE_FORCE_PATH_STYLE
+            value: "true"
+          - name: RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: { name: triage-indexer-garage, key: GARAGE_ACCESS_KEY }
+          - name: RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: { name: triage-indexer-garage, key: GARAGE_SECRET_KEY }
+        command: [sh, -c]
+        args:
+          - |
+            set -eu
+            if [ ! -d /workspace/repo/conclusions ]; then
+              echo "uploader: nada a subir (nenhuma conclusão gerada)"
+              exit 0
+            fi
+            # `copy`, NUNCA `sync`: sync apagaria no destino o que não existe na
+            # origem. A conclusão é regenerável, mas o bucket também guarda os
+            # relatórios IMUTÁVEIS — nenhum passo deste job deleta objeto.
+            echo ">> rclone copy /workspace/repo/conclusions -> garage:triage-reports/conclusions"
+            rclone copy /workspace/repo/conclusions "garage:triage-reports/conclusions" \
+              --transfers 8 --checkers 16 --s3-no-check-bucket
+            echo "uploader OK ($(find /workspace/repo/conclusions -name '*.md' | wc -l) conclusões)"
         volumeMounts:
           - name: workspace
             mountPath: /workspace
@@ -117,10 +247,10 @@ spec:
       outputs:
         parameters:
           - name: indexed
-            valueFrom: { path: /workspace/indexed_count }
+            valueFrom: { path: /workspace/indexed_count_gestalt }
       container:
         name: main
-        image: ghcr.io/fwfurtado/triage-indexer:0.5.0
+        image: ghcr.io/fwfurtado/triage-indexer:0.6.0
         command: [triage-index-gestalt]
         env:
           - name: QDRANT_URL
@@ -133,6 +263,14 @@ spec:
             value: "intfloat/multilingual-e5-large"
           - name: REPO_DIR
             value: "/workspace/repo"
+          # Escopado: o workspace agora tem conclusions/ ao lado de triage/, e o
+          # default (**/*.md) indexaria conclusão como se fosse relatório.
+          - name: DOC_GLOBS
+            value: "triage/**/*.md"
+          # gestalt e facets rodam em PARALELO sobre o mesmo PVC: sem caminhos
+          # distintos, um lê a contagem do outro (corrida silenciosa na métrica).
+          - name: INDEXED_COUNT_PATH
+            value: "/workspace/indexed_count_gestalt"
           - name: EMBED_BATCH
             value: "8"
         volumeMounts:
@@ -158,10 +296,10 @@ spec:
       outputs:
         parameters:
           - name: indexed
-            valueFrom: { path: /workspace/indexed_count }
+            valueFrom: { path: /workspace/indexed_count_facets }
       container:
         name: main
-        image: ghcr.io/fwfurtado/triage-indexer:0.5.0
+        image: ghcr.io/fwfurtado/triage-indexer:0.6.0
         command: [triage-index-facets]
         env:
           - name: QDRANT_URL
@@ -174,6 +312,10 @@ spec:
             value: "intfloat/multilingual-e5-large"
           - name: REPO_DIR
             value: "/workspace/repo"
+          - name: DOC_GLOBS
+            value: "triage/**/*.md"
+          - name: INDEXED_COUNT_PATH
+            value: "/workspace/indexed_count_facets"
           - name: EMBED_BATCH
             value: "8"
         volumeMounts:

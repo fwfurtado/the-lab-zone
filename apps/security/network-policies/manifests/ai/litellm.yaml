@@ -34,6 +34,13 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: triage-webhook
+        # Step `classifier` do WorkflowTemplate triage-indexer: extrai
+        # verdict/confidence dos relatórios via LLM (ADR-0013). O label vem do
+        # podMetadata do workflow, logo vale para todos os pods do run — só o
+        # classifier de fato abre conexão.
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: triage-indexer
       toPorts:
         - ports:
             - port: "4000"
