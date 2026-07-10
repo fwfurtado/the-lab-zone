@@ -16,14 +16,15 @@
                 UTC (req Langfuse). CNPG single-instance +
                 WAL→Garage/B2 (PITR). Cada store validado isolado.|
 |7 — Stack de AI|RAG + inferência + orquestração de agentes + observabilidade de
-                LLM.|Ollama (P40 + nó 3090), LiteLLM, LightRAG, Open WebUI,
+                LLM.|Ollama (P40 + nó 3090), LiteLLM, Open WebUI,
                 ToolHive (runtime MCP),
                 LangGraph (orquestração),
                 Langfuse v3|Depende da Fase 6 (consome CNPG, Qdrant, Memgraph, Valkey,
                 ClickHouse, Garage S3). Langfuse exige
                 Postgres+ClickHouse+Valkey+S3 (peso aceito). LangGraph com
                 checkpointer no CNPG. ToolHive via operator (CRDs
-                MCPServer).|
+                MCPServer). LightRAG desligado (ADR-0018): RAG fora de escopo,
+                Qdrant/Memgraph seguem mas Memgraph fica ocioso.|
 |8 — Analytics / streaming (opcional)|Camada analítica/ELT, só se a necessidade for real.|ClickHouse, dbt (+ Redpanda/Debezium se houver CDC)|Opcional. O ClickHouse
                 pode ser o mesmo instanciado pro Langfuse na
                 Fase 6/7 — reuso, não duplicação.|

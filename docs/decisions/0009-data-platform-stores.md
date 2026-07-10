@@ -10,7 +10,9 @@ relacionado: [runbooks/data-platform]
 # ADR-0009 — Escolha dos stores stateful
 
 ## Status
-Aceito (Fase 6).
+Aceito (Fase 6). Parcialmente revisto por ADR-0018: Qdrant/Memgraph foram
+escolhidos como stores do pipeline RAG (LightRAG), que foi desligado; os stores
+permanecem, mas o Memgraph fica sem consumidor.
 
 ## Contexto
 Provisionar todos os backends stateful vazios e validados antes de qualquer app de negócio,

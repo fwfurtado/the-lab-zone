@@ -10,7 +10,8 @@ relacionado: [runbooks/gpu]
 # ADR-0012 — Inferência local: device plugin + Ollama + LiteLLM
 
 ## Status
-Aceito (Fase 7).
+Aceito (Fase 7). Nota (ADR-0018): o alias `qwen3-embedding` era "FIXO por causa
+do LightRAG"; o LightRAG foi desligado, mas o alias permanece por seguir em uso.
 
 ## Contexto
 RTX 3090 (24GB) no `worker-3-gpu` pra inferência local. A alternativa era o gpu-operator
