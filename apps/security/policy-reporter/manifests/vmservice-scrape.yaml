@@ -1,4 +1,7 @@
-# Scrape do Policy Reporter core e do plugin Trivy pelo vmagent.
+# Scrape do Policy Reporter core pelo vmagent.
+#
+# O trivy-plugin serve a API em /vulnr/v1/policies, mas não expoe /metrics; se
+# entrar neste selector, o vmagent gera TargetDown com scrape rapido/404.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
@@ -11,12 +14,8 @@ spec:
     matchNames:
       - policy-reporter
   selector:
-    matchExpressions:
-      - key: app.kubernetes.io/name
-        operator: In
-        values:
-          - policy-reporter
-          - policy-reporter-trivy-plugin
+    matchLabels:
+      app.kubernetes.io/name: policy-reporter
   endpoints:
     - port: http
       path: /metrics
