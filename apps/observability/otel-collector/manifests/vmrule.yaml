@@ -25,8 +25,8 @@ spec:
             severity: warning
             component: agents
           annotations:
-            summary: "Spans com erro em {{`{{ $labels.service_name }}`}}"
-            description: "O serviço {{`{{ $labels.service_name }}`}} registrou spans com status ERROR nos últimos 15m ({{`{{ $value | printf \"%.2f\" }}`}}/s)."
+            summary: "Spans com erro em {{ $labels.service_name }}"
+            description: "O serviço {{ $labels.service_name }} registrou spans com status ERROR nos últimos 15m ({{ $value | humanize }}/s)."
 
         # p95 do span RAIZ da triagem (span_name="triage", emitido pela borda Go).
         # duration é em MILISSEGUNDOS (default do span_metrics); 300000ms = 5min.
@@ -60,4 +60,4 @@ spec:
             component: triage
           annotations:
             summary: "Mais de 20% das triagens falhando"
-            description: "A razão de triagens com status ERROR passou de 20% em 30m ({{`{{ $value | humanizePercentage }}`}}). Ver o trace no Langfuse e o log da borda."
+            description: "A razão de triagens com status ERROR passou de 20% em 30m ({{ $value | humanizePercentage }}). Ver o trace no Langfuse e o log da borda."
