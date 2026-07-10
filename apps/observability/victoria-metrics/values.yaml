@@ -79,14 +79,14 @@ kube-state-metrics:
 
 # Regras de alerta base para K8s
 defaultRules:
-  create: true
+  enabled: true
+
+  # NOTA: antes havia `create: true` (chave inexistente no chart — o campo é
+  # `enabled`) e toggles de GRUPO (etcd, kubernetesApps, node...) dentro de
+  # `rules:`, que é o mapa de override por REGRA. Schema errado, silenciosamente
+  # ignorado. Todos valiam `true`, que já é o default — removidos sem mudança de
+  # comportamento. Para desabilitar um grupo, use `defaultRules.groups.<grupo>`.
   rules:
-    etcd: true
-    kubernetesApps: true
-    kubernetesResources: true
-    kubernetesStorage: true
-    kubernetesSystem: true
-    node: true
     # Opt-in de triagem por agente (ADR-0017): o label entra na REGRA, então
     # TODA instância de TargetDown (qualquer job/namespace) vira candidata a
     # triagem. Escopo deliberado: target down é exatamente a classe de sintoma
@@ -104,6 +104,21 @@ defaultDashboards:
 
 # VM Operator — habilita endpoint de métricas na porta 8080
 victoria-metrics-operator:
+  # PIN da imagem do operator. O k8s-stack declara a dependência como WILDCARD
+  # (`victoria-metrics-operator: 0.65.*`), então o mesmo commit pode renderizar
+  # operators diferentes conforme a data. Fixar a tag torna o deploy reprodutível.
+  #
+  # v0.72.0 (= appVersion do subchart 0.65.1). Sai da v0.71.0, que os próprios
+  # mantenedores recomendam PULAR (bug: para de emitir métricas com muitos objetos
+  # rastreados). Não ir além da v0.72.0 aqui: a v0.73.0 introduziu strategic-merge
+  # em listas de VMRule que quebrava regras homônimas (revertido só na v0.73.1) —
+  # isso afeta o override de TargetDown acima. Etapa 2 vai direto pra v0.73.1.
+  #
+  # NOTA de upgrade v0.72.0: ConfigMaps de regras do VMAlert passam a guardar
+  # conteúdo gzip em `binaryData` (init container descomprime) => os pods do
+  # VMAlert são ROLADOS uma vez neste upgrade. Esperado, não é incidente.
+  image:
+    tag: v0.72.0
   operator:
     args:
       metricsAddr: ":8080"
