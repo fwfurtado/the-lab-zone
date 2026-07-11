@@ -121,6 +121,37 @@ extraEnvVars:
   - name: OAUTH_ALLOWED_ROLES
     value: "the-lab-admins"
 
+  # ── OTel do SERVER HTTP (Fase 7+) ───────────────────────────────────────────
+  # Instrumentação nativa do open-webui: FastAPI/SQLAlchemy/Redis/httpx. Cobre a
+  # SAÚDE DA APP WEB (latência por rota, query no Postgres, status HTTP) — NÃO a
+  # semântica de LLM (custo/token vêm do span do LiteLLM, ADR-0019).
+  # A partir de 0.6.26 o master flag não liga traces sozinho: ENABLE_OTEL_TRACES
+  # é um toggle separado (upstream #17041). Precisa dos dois + o de métricas.
+  - name: ENABLE_OTEL
+    value: "true"
+  - name: ENABLE_OTEL_TRACES
+    value: "true"
+  - name: ENABLE_OTEL_METRICS
+    value: "true"
+  # Exporter → collector node-local (DaemonSet, hostPort). gRPC :4317 (o receiver
+  # grpc do collector está em MY_POD_IP:4317, publicado via hostPort). HOST_IP vem
+  # do status.hostIP do nó, mesmo padrão dos 3 agentes.
+  - name: HOST_IP
+    valueFrom:
+      fieldRef:
+        fieldPath: status.hostIP
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://$(HOST_IP):4317"
+  - name: OTEL_EXPORTER_OTLP_INSECURE
+    value: "true"
+  # Bug upstream #16183: com span exporter em http, as MÉTRICAS insistem em gRPC.
+  # Como fixamos tudo em gRPC :4317, o ponto é evitado — mas deixo o endpoint de
+  # métricas explícito pra não herdar default divergente.
+  - name: OTEL_METRICS_EXPORTER_OTLP_ENDPOINT
+    value: "http://$(HOST_IP):4317"
+  - name: OTEL_SERVICE_NAME
+    value: "open-webui"
+
 route:
   enabled: true
   apiVersion: gateway.networking.k8s.io/v1
