@@ -116,6 +116,18 @@ datasources:
         uid: victorialogs
         url: http://victoria-logs-vls-server.observability.svc.cluster.local:9428
         access: proxy
+        jsonData:
+          # Correlação log -> trace: no Explore/Logs panel, um log com campo
+          # `trace_id` ganha um link "Ver trace" que abre o Tempo. matcherType
+          # label = pega o valor do FIELD trace_id (não regex na _msg). O
+          # ${__value.raw} é passado como o traceID pro Tempo.
+          derivedFields:
+            - name: trace_id
+              matcherType: label
+              matcherRegex: trace_id
+              url: '${__value.raw}'
+              urlDisplayLabel: Ver trace no Tempo
+              datasourceUid: tempo
 
       - name: Alertmanager
         type: alertmanager
@@ -137,6 +149,20 @@ datasources:
           # Node graph: desenha o grafo do trace aberto (não depende de métrica).
           nodeGraph:
             enabled: true
+          # Correlação trace -> logs (botão "Logs for this span" na view do trace).
+          # customQuery: filtra os logs do VictoriaLogs pelo trace_id do span. O
+          # campo `trace_id` vem do JsonFormatter do core (hex OTel) -> parseado
+          # pelo filelog. Só trace_id (não span_id) = TODOS os logs do trace, não
+          # só do span. Time shifts pegam logs logo antes/depois da borda do span.
+          # Requer Grafana >= 12.2. datasourceUid = UID da datasource de logs.
+          tracesToLogsV2:
+            datasourceUid: victorialogs
+            spanStartTimeShift: '-2s'
+            spanEndTimeShift: '2s'
+            filterByTraceID: false
+            filterBySpanID: false
+            customQuery: true
+            query: 'trace_id:="${__trace.traceId}"'
           # Correlação trace -> RED do span_metrics (já em snake_case no VM).
           # datasourceUid exige o UID (não o nome) da datasource de destino.
           tracesToMetrics:
