@@ -43,6 +43,12 @@ spec:
             - --enable-prefix-caching
             - --host=0.0.0.0
             - --port=8000
+            # Corta o access log do uvicorn (INFO: <ip> - "POST /v1/... HTTP/1.1" 200),
+            # ~99% probe/health noise. Afeta só o logger uvicorn; os logs próprios do
+            # vLLM (engine, throughput) ficam no logger `vllm`, intactos. Throughput
+            # real é observado via VMPodScrape, não pelo access log.
+            # Alternativa mais cirúrgica em vLLM novo: --disable-uvicorn-access-log.
+            - --uvicorn-log-level=warning
             # --- Speculative decoding (ngram): grande ganho de latencia p/ edit-predict,
             # pois a maioria dos tokens ja esta no prompt (so gera o diff). MAS a sintaxe
             # do flag VARIA por versao do vLLM. Habilite SO depois do boot baseline OK, e

@@ -26,6 +26,11 @@ spec:
   env:
     - name: FASTMCP_SERVER_HOST
       value: "0.0.0.0"
+    # Suprime o access log do uvicorn (ruído de health probe, ~72/min). O FastMCP
+    # repassa FASTMCP_LOG_LEVEL direto pro uvicorn.Config(log_level); WARNING corta
+    # o uvicorn.access (emitido em INFO). Erros (WARNING+) seguem.
+    - name: FASTMCP_LOG_LEVEL
+      value: "WARNING"
     - name: FASTEMBED_CACHE_PATH
       value: "/cache"
     - name: QDRANT_URL
