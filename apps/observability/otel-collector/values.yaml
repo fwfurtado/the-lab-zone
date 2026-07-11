@@ -135,6 +135,18 @@ config:
           from: attributes.msg
           to: body
           if: 'attributes?.msg != nil'
+          output: message-to-body
+        # Apps que usam `message` (não `msg`) como chave da mensagem — ex.: o core
+        # aiohttp, que loga via JsonFormatter com {"level","logger","message"}. Sem
+        # isto o `msg`-move pula e o _msg fica sendo o JSON inteiro + um campo
+        # `message` redundante. Encadeado após o msg-move: quem tem `msg` já virou
+        # body e pula aqui (sem `message`); quem tem `message` cai aqui. Na prática
+        # mutuamente exclusivos (uma app usa uma convenção só).
+        - type: move
+          id: message-to-body
+          from: attributes.message
+          to: body
+          if: 'attributes?.message != nil'
           output: noop
 
         # --- Tetragon: carimba `debug` e seta severidade reusando o `severity`
