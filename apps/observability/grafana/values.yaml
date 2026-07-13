@@ -162,7 +162,7 @@ datasources:
             filterByTraceID: false
             filterBySpanID: false
             customQuery: true
-            query: 'trace_id:="${__trace.traceId}"'
+            query: 'trace_id:="$${__trace.traceId}"'
           # Correlação trace -> RED do span_metrics (já em snake_case no VM).
           # datasourceUid exige o UID (não o nome) da datasource de destino.
           tracesToMetrics:
