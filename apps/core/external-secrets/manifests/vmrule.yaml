@@ -1,0 +1,41 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: external-secrets
+  namespace: observability
+spec:
+  groups:
+    - name: external-secrets
+      rules:
+        - alert: ExternalSecretNotReady
+          expr: externalsecret_status_condition{condition="Ready",status!="True"} == 1
+          for: 15m
+          labels:
+            severity: warning
+            component: external-secrets
+            triage: "true"
+          annotations:
+            summary: "ExternalSecret {{ $labels.name }} não está Ready"
+            description: "O ExternalSecret {{ $labels.namespace }}/{{ $labels.name }} não está Ready há pelo menos 15m."
+
+        - alert: ExternalSecretsReconcileErrors
+          expr: increase(controller_runtime_reconcile_errors_total{namespace="external-secrets"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: external-secrets
+            triage: "true"
+          annotations:
+            summary: "External Secrets com erros de reconcile"
+            description: "O controller {{ $labels.controller }} registrou erros de reconcile nos últimos 15m."
+
+        - alert: ExternalSecretsMetricsTargetDown
+          expr: up{namespace="external-secrets", service=~"external-secrets.*"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: external-secrets
+            triage: "true"
+          annotations:
+            summary: "Target de métricas do External Secrets está down"
+            description: "O target {{ $labels.service }} / {{ $labels.instance }} não é raspado com sucesso há pelo menos 5m."

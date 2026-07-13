@@ -19,6 +19,9 @@ spec:
     - repoURL: https://github.com/fwfurtado/the-lab-zone.git
       targetRevision: main
       ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/core/metrics-server/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: kube-system

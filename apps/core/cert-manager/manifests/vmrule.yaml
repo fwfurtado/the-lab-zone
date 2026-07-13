@@ -1,0 +1,41 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: cert-manager
+  namespace: observability
+spec:
+  groups:
+    - name: cert-manager
+      rules:
+        - alert: CertManagerCertificateNotReady
+          expr: certmanager_certificate_ready_status{condition="True",status!="True"} == 1
+          for: 15m
+          labels:
+            severity: warning
+            component: cert-manager
+            triage: "true"
+          annotations:
+            summary: "Certificate {{ $labels.name }} não está Ready"
+            description: "O Certificate {{ $labels.namespace }}/{{ $labels.name }} não está Ready há pelo menos 15m."
+
+        - alert: CertManagerCertificateExpiringSoon
+          expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 604800
+          for: 30m
+          labels:
+            severity: warning
+            component: cert-manager
+            triage: "true"
+          annotations:
+            summary: "Certificate {{ $labels.name }} expira em menos de 7 dias"
+            description: "O Certificate {{ $labels.namespace }}/{{ $labels.name }} está perto de expirar; verificar renovação DNS01/issuer."
+
+        - alert: CertManagerMetricsTargetDown
+          expr: up{namespace="cert-manager", service=~"cert-manager.*"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: cert-manager
+            triage: "true"
+          annotations:
+            summary: "Target de métricas do cert-manager está down"
+            description: "O target {{ $labels.service }} / {{ $labels.instance }} não é raspado com sucesso há pelo menos 5m."

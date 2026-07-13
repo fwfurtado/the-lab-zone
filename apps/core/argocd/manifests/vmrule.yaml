@@ -1,0 +1,41 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: argocd
+  namespace: observability
+spec:
+  groups:
+    - name: argocd
+      rules:
+        - alert: ArgoCDApplicationOutOfSync
+          expr: argocd_app_info{sync_status!="Synced"} == 1
+          for: 15m
+          labels:
+            severity: warning
+            component: argocd
+            triage: "true"
+          annotations:
+            summary: "Argo CD app {{ $labels.name }} está OutOfSync"
+            description: "A aplicação {{ $labels.name }} no projeto {{ $labels.project }} está com sync_status={{ $labels.sync_status }} há pelo menos 15m."
+
+        - alert: ArgoCDApplicationUnhealthy
+          expr: argocd_app_info{health_status=~"Degraded|Missing|Unknown"} == 1
+          for: 10m
+          labels:
+            severity: warning
+            component: argocd
+            triage: "true"
+          annotations:
+            summary: "Argo CD app {{ $labels.name }} está {{ $labels.health_status }}"
+            description: "A aplicação {{ $labels.name }} no projeto {{ $labels.project }} está com health_status={{ $labels.health_status }} há pelo menos 10m."
+
+        - alert: ArgoCDMetricsTargetDown
+          expr: up{namespace="argocd", service=~"argocd-.*-metrics"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: argocd
+            triage: "true"
+          annotations:
+            summary: "Target de métricas do Argo CD está down"
+            description: "O target {{ $labels.service }} / {{ $labels.instance }} não é raspado com sucesso há pelo menos 5m."

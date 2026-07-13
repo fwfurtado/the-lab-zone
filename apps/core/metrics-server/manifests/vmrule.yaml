@@ -1,0 +1,30 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: metrics-server
+  namespace: observability
+spec:
+  groups:
+    - name: metrics-server
+      rules:
+        - alert: MetricsServerTargetDown
+          expr: up{namespace="kube-system", service="metrics-server"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: metrics-server
+            triage: "true"
+          annotations:
+            summary: "metrics-server não está sendo raspado"
+            description: "O target do metrics-server não é raspado com sucesso há pelo menos 5m."
+
+        - alert: MetricsAPIUnavailable
+          expr: max(aggregator_unavailable_apiservice{name="v1beta1.metrics.k8s.io"}) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: metrics-server
+            triage: "true"
+          annotations:
+            summary: "metrics.k8s.io não está Available"
+            description: "A APIService v1beta1.metrics.k8s.io não está Available há pelo menos 5m; kubectl top/HPA/MCP podem falhar."

@@ -55,7 +55,16 @@ redis-ha:
   enabled: false
 controller:
   replicas: 1
+  metrics:
+    enabled: true
 server:
   replicas: 1
+  metrics:
+    enabled: true
 repoServer:
   replicas: 1
+  metrics:
+    enabled: true
+applicationSet:
+  metrics:
+    enabled: true

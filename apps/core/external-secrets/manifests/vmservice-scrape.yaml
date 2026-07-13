@@ -1,0 +1,21 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: external-secrets
+  namespace: observability
+spec:
+  namespaceSelector:
+    matchNames:
+      - external-secrets
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - external-secrets
+          - external-secrets-cert-controller
+          - external-secrets-webhook
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s

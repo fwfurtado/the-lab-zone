@@ -1,1 +1,15 @@
 installCRDs: true
+
+metrics:
+  service:
+    enabled: true
+
+webhook:
+  metrics:
+    service:
+      enabled: true
+
+certController:
+  metrics:
+    service:
+      enabled: true
