@@ -26,4 +26,4 @@ spec:
         - https://langfuse.lab.the-lab.zone
         - https://litellm.lab.the-lab.zone
         - https://memgraph.lab.the-lab.zone
-        - https://next-edit.lab.the-lab.zone
+        - https://next-edit.lab.the-lab.zone/health
