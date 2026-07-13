@@ -1,0 +1,13 @@
+reloader:
+  # Opt-in: workloads precisam declarar a annotation reloader.stakater.com/auto=true.
+  autoReloadAll: false
+  logFormat: json
+  logLevel: info
+  watchGlobally: true
+  deployment:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
