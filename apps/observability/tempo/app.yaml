@@ -1,10 +1,11 @@
-# Tempo monolítico (single binary, -target=all): backend de traces do cluster INTEIRO,
-# não só dos agentes. Escolhido sobre o VictoriaTraces por maturidade — VictoriaTraces
-# ainda é pré-1.0 (v0.7.x, chart 0.1.x) e o formato de índice segue mudando.
+# Tempo monolítico 3.0 (single binary, -target=all): backend de traces do cluster INTEIRO.
 #
-# ATENÇÃO ao repoURL: o chart `tempo` (single binary) MIGROU de grafana/helm-charts
-# para grafana-community/helm-charts. O chart `tempo-distributed` é o modo microservices
-# (exige Kafka) — não é o que queremos aqui.
+# MIGRADO DE CHART PARA MANIFESTS (ADR de saída do chart): o chart `tempo` single-binary
+# congelou no app 2.10.7 (flag -mem-ballast hardcoded, removida no 3.0) e o chart 3.0 só
+# existe no modo microservices (tempo-distributed, exige Kafka + ~12 componentes —
+# desproporcional pro homelab). Monolithic 3.0 (sem Kafka, 1 pod) não é exposto por
+# nenhum chart, então gerimos os manifests à mão. Responsabilidade nova: acompanhar
+# breaking changes de cada release do Tempo manualmente.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,20 +15,10 @@ metadata:
     argocd.argoproj.io/sync-wave: "2"
 spec:
   project: observability
-  sources:
-    - repoURL: https://grafana-community.github.io/helm-charts
-      chart: tempo
-      targetRevision: 2.2.3          # appVersion 2.10.7
-      helm:
-        releaseName: tempo
-        valueFiles:
-          - $values/apps/observability/tempo/values.yaml
-    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
-      targetRevision: main
-      ref: values
-    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
-      targetRevision: main
-      path: apps/observability/tempo/manifests
+  source:
+    repoURL: https://github.com/fwfurtado/the-lab-zone.git
+    targetRevision: main
+    path: apps/observability/tempo/manifests
   destination:
     server: https://kubernetes.default.svc
     namespace: observability
@@ -37,3 +28,4 @@ spec:
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
+      - CreateNamespace=false

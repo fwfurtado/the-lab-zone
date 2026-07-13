@@ -1,0 +1,15 @@
+# apps/observability/tempo/manifests/vmpod-scrape.yaml
+# Scrape das métricas próprias do Tempo (/metrics na porta http :3200). O stack usa
+# VM Operator (VMPodScrape), não Prometheus Operator (ServiceMonitor).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: tempo
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tempo
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics

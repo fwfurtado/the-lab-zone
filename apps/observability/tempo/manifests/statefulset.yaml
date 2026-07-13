@@ -1,0 +1,99 @@
+# apps/observability/tempo/manifests/statefulset.yaml
+# Tempo 3.0.2 monolítico (-target=all), 1 réplica. Gerido como manifesto próprio
+# (ver configmap.yaml pro motivo). O label app.kubernetes.io/name: tempo é OBRIGATÓRIO:
+# a CNP do Garage (data/garage.yaml) autoriza egress S3 por esse selector, e o
+# collector aponta pro Service `tempo` (mesmo nome).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tempo
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: tempo
+spec:
+  replicas: 1
+  serviceName: tempo
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tempo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tempo
+      annotations:
+        # força rollout quando o config muda
+        checksum/config: 3ff1f8469d29c8f1b55c2db82c9335e7894bb268de908a506bf23f6fc8ec60d9
+    spec:
+      securityContext:
+        fsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: tempo
+          image: docker.io/grafana/tempo:3.0.2
+          args:
+            - -config.file=/conf/tempo.yaml
+            - -config.expand-env=true
+            # -target=all é o default (monolithic); explícito pra clareza.
+            - -target=all
+          # SEM -mem-ballast-size-mbs (flag removida no 3.0; usa GOMEMLIMIT).
+          env:
+            # GOMEMLIMIT ~80% do limit de memória (1536Mi) = ~1288MiB. Substitui o
+            # antigo ballast na função de segurar o GC do Go.
+            - name: GOMEMLIMIT
+              value: "1288MiB"
+          envFrom:
+            # Credenciais S3 do Garage (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY),
+            # expandidas no tempo.yaml via -config.expand-env.
+            - secretRef:
+                name: tempo-s3
+          ports:
+            - name: http
+              containerPort: 3200
+              protocol: TCP
+            - name: grpc
+              containerPort: 9095
+              protocol: TCP
+            - name: otlp-grpc
+              containerPort: 4317
+              protocol: TCP
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1536Mi   # relatos de OOM em 700Mi-1Gi; folga é barata
+          volumeMounts:
+            - name: config
+              mountPath: /conf
+            - name: wal
+              mountPath: /var/tempo
+      volumes:
+        - name: config
+          configMap:
+            name: tempo
+  volumeClaimTemplates:
+    # WAL do live-store precisa sobreviver a restart (spans ainda não flushados).
+    - metadata:
+        name: wal
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 10Gi

@@ -1,0 +1,68 @@
+# apps/observability/tempo/manifests/configmap.yaml
+# Config do Tempo 3.0 monolítico (-target=all). Gerido como manifesto próprio porque
+# o chart `tempo` single-binary travou no app 2.10.7 (flag -mem-ballast hardcoded,
+# removida no 3.0) e o chart 3.0 só existe no modo microservices (exige Kafka).
+#
+# Monolithic 3.0: distributor empurra spans in-process direto pro live-store; sem Kafka,
+# sem ingester, sem compactor separado (backend-scheduler/worker fazem compaction interna).
+# ${AWS_*} são expandidos em runtime via -config.expand-env=true (secret tempo-s3).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tempo
+  namespace: observability
+  labels:
+    app.kubernetes.io/name: tempo
+data:
+  tempo.yaml: |
+    stream_over_http_enabled: true
+
+    server:
+      http_listen_port: 3200
+      grpc_listen_port: 9095
+
+    # Só OTLP. Todo mundo exporta via OTel Collector; jaeger/zipkin/opencensus seriam
+    # superfície inútil (e o opencensus foi removido no 3.0 de qualquer forma).
+    distributor:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+
+    # Compaction agora é do backend-scheduler/worker (compactor removido no 3.0).
+    # block_retention 168h = 7 dias, cobre o ciclo de debug do homelab; blocos vivem
+    # no Garage, então crescer isso custa espaço lá, não no PVC.
+    backend_scheduler:
+      provider:
+        compaction:
+          compaction:
+            block_retention: 168h
+
+    storage:
+      trace:
+        backend: s3
+        s3:
+          bucket: tempo
+          endpoint: garage.data.svc.cluster.local:3900
+          region: garage
+          # Expandidos em runtime pelo -config.expand-env (secret tempo-s3).
+          access_key: ${AWS_ACCESS_KEY_ID}
+          secret_key: ${AWS_SECRET_ACCESS_KEY}
+          insecure: true          # Garage interno fala HTTP, sem TLS
+          forcepathstyle: true    # obrigatório pro Garage
+        # WAL local do live-store: sobrevive a restart no PVC, senão perde spans
+        # ainda não flushados em bloco.
+        wal:
+          path: /var/tempo/wal
+
+    # Overrides no formato SCOPED (defaults:). O 3.0 recusa subir com o formato flat
+    # (legacy). Vazio por ora — sem metrics_generator processors (RED vem do
+    # span_metrics do collector; TraceQL Metrics recentes são servidos pelo live-store).
+    overrides:
+      defaults: {}
+
+    usage_report:
+      reporting_enabled: false
