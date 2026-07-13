@@ -148,7 +148,7 @@ spec:
         backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
       container:
         name: main
-        image: ghcr.io/fwfurtado/triage-indexer:0.7.0
+        image: ghcr.io/fwfurtado/triage-indexer:0.9.0
         # Sem --reclassify: modo INCREMENTAL. Só classifica relatório sem
         # conclusão irmã. Regenerar o corpus é um run manual com
         # `triage-classify --reclassify` (nunca `rm` no bucket).
@@ -256,7 +256,7 @@ spec:
             valueFrom: { path: /workspace/indexed_count_gestalt }
       container:
         name: main
-        image: ghcr.io/fwfurtado/triage-indexer:0.7.0
+        image: ghcr.io/fwfurtado/triage-indexer:0.9.0
         command: [triage-index-gestalt]
         env:
           - name: QDRANT_URL
@@ -305,7 +305,7 @@ spec:
             valueFrom: { path: /workspace/indexed_count_facets }
       container:
         name: main
-        image: ghcr.io/fwfurtado/triage-indexer:0.7.0
+        image: ghcr.io/fwfurtado/triage-indexer:0.9.0
         command: [triage-index-facets]
         env:
           - name: QDRANT_URL
