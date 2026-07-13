@@ -48,6 +48,29 @@ envValueFrom:
       name: grafana-oidc
       key: client_secret
 
+# Habilita declarativamente o app "Grafana Logs Drilldown".
+# O Grafana 12 ja auto-habilita esse app, mas este arquivo fixa o estado em Git.
+extraConfigmapMounts:
+  - name: grafana-plugin-provisioning
+    configMap: grafana-plugin-provisioning
+    mountPath: /etc/grafana/provisioning/plugins/logs-drilldown.yaml
+    subPath: logs-drilldown.yaml
+    readOnly: true
+
+extraObjects:
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: grafana-plugin-provisioning
+      namespace: observability
+    data:
+      logs-drilldown.yaml: |
+        apiVersion: 1
+        apps:
+          - type: grafana-lokiexplore-app
+            org_id: 1
+            disabled: false
+
 # Não sobrescrever securityContext — o default do chart (uid 472, fsGroup 472)
 # é necessário para que o PVC tenha as permissões corretas no mountPath.
 # Sobrescrever com runAsUser diferente quebra escrita no volume.
