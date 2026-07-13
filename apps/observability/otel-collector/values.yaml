@@ -276,6 +276,22 @@ config:
         span:
           - 'resource.attributes["service.name"] != "triage-webhook" and resource.attributes["service.name"] != "triage-agent" and resource.attributes["service.name"] != "qa-bot"'
 
+    # Descarta os logs do namespace trivy-system. Os scan jobs efêmeros do
+    # trivy-operator (containers main/wait/init/clone/upload/snapshot) cospem
+    # ~1.5M linhas/3h de progresso/CVE no stdout — bursty, explode a cada scan.
+    # O dado ACIONÁVEL não está aqui: vive nos VulnerabilityReport CRDs, na
+    # métrica trivy_image_vulnerabilities (já scrapeada + dashboard) e nos
+    # PolicyReports (polr-adapter). O stdout é ruído operacional puro. Drop no
+    # pipeline em vez de `exclude` no filelog — este substituiria a lista de
+    # exclude do preset (que exclui o self-log do collector). Leva junto o log
+    # do controller do operator; recuperável via métrica/`kubectl logs`. Para
+    # preservá-lo, escopar por pod (scan-*/node-collector-*) em vez do namespace.
+    filter/drop_trivy:
+      error_mode: ignore
+      logs:
+        log_record:
+          - 'resource.attributes["k8s.namespace.name"] == "trivy-system"'
+
   exporters:
     otlp_http/metrics:
       endpoint: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428/opentelemetry
@@ -344,7 +360,7 @@ config:
         exporters: [otlp_http/metrics]
       logs:
         receivers: [otlp, filelog]  # filelog injetado pelo preset logsCollection
-        processors: [memory_limiter, batch]
+        processors: [memory_limiter, filter/drop_trivy, batch]
         exporters: [otlp_http/logs]
       # TUDO -> Tempo (backend de traces do cluster) + span_metrics (RED).
       traces:
