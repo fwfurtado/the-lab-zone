@@ -90,7 +90,9 @@ spec:
             name: tempo
   volumeClaimTemplates:
     # WAL do live-store precisa sobreviver a restart (spans ainda não flushados).
-    - metadata:
+    - apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
         name: wal
       spec:
         accessModes: ["ReadWriteOnce"]
