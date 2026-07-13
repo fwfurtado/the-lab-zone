@@ -292,6 +292,21 @@ config:
         log_record:
           - 'resource.attributes["k8s.namespace.name"] == "trivy-system"'
 
+    # Keepalive do pool do open-webui: o SQLAlchemy abre conexão contra o CNPG a
+    # cada ~10-30s (liveness do pool). FORA de uma request HTTP, cada checkout vira
+    # um trace-RAIZ de 1 span (name=connect, db.system=postgresql) — dilúvio de
+    # <1ms que suja o Tempo e infla span_metrics/service_graph com uma aresta
+    # open-webui->cnpg espúria. DENTRO de uma request de chat esses mesmos connect
+    # são filhos do POST /api/chat/completions e DEVEM sobreviver (é a query real).
+    # A distinção é exatamente IsRootSpan(): keepalive = raiz; query real = aninhada.
+    # Condição específica (raiz + serviço + db) pra não pegar request HTTP legítima
+    # (cuja raiz é o POST, não um connect). Mesma lição do flood de /healthz.
+    filter/drop_owui_db_keepalive:
+      error_mode: ignore
+      traces:
+        span:
+          - 'IsRootSpan() and resource.attributes["service.name"] == "open-webui" and attributes["db.system"] == "postgresql"'
+
   exporters:
     otlp_http/metrics:
       endpoint: http://vmsingle-victoria-metrics-vmks.observability.svc.cluster.local:8428/opentelemetry
@@ -365,7 +380,7 @@ config:
       # TUDO -> Tempo (backend de traces do cluster) + span_metrics (RED).
       traces:
         receivers: [otlp]
-        processors: [memory_limiter, batch]
+        processors: [memory_limiter, filter/drop_owui_db_keepalive, batch]
         exporters: [otlp/tempo, span_metrics, service_graph]
       # Só os agentes -> Langfuse (plano de LLM). Mesmo receiver: o Collector faz
       # fanout do otlp para os dois pipelines; o filter recorta este.
