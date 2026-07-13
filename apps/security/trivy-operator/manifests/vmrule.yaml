@@ -1,0 +1,53 @@
+# Alerta de cobertura: scan jobs de vulnerabilidade do Trivy falhando.
+#
+# Contexto: pods multi-container disparam a race de /tmp compartilhado entre os
+# containers de scan (todos montam o mesmo emptyDir `tmp` em /tmp e o trivy usa
+# trivy-<pid> com PID determinístico igual por container -> colisão de path).
+# Bug aberto trivy-operator#2859. Efeito: o VulnerabilityReport do workload não
+# é (re)gerado e a cobertura fica com buraco SILENCIOSO — daí o alerta.
+#
+# Métrica: kube_job_status_failed (kube-state-metrics; já scrapeado, as dashboards
+# do CNPG usam job="kube-state-metrics"). Os scan jobs são efêmeros (scanJobTTL),
+# então max_over_time retém o sinal alguns minutos além do TTL pra não perder a
+# janela. Filtro por namespace + job_name (scan-vulnerabilityreport-*) é
+# inequívoco; não amarro no label `job` pra não ficar frágil a rename do scrape.
+#
+# Vive em observability (namespace explícito), como os demais scrapes/rules do
+# repo, ainda que a App aponte destination trivy-system.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: trivy-scan-job-failing
+  namespace: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  groups:
+    - name: trivy-operator
+      rules:
+        - alert: TrivyScanJobFailing
+          expr: |
+            count(
+              max_over_time(
+                kube_job_status_failed{namespace="trivy-system", job_name=~"scan-vulnerabilityreport-.*"}[15m]
+              ) > 0
+            ) >= 1
+          # Problema é persistente (recorre a cada reconcile do operator), então
+          # 10m confirma sem flapar por uma falha isolada. max_over_time[15m] já
+          # suaviza a efemeridade; se as falhas cessam, a série cai e o alerta
+          # resolve ~15m depois.
+          for: 10m
+          labels:
+            severity: warning
+            # Sem triage:"true" de propósito: isto é bug de infra do operator,
+            # não um sintoma que o triage-agent investiga via kubectl/CNPs.
+          annotations:
+            summary: "Scan job do Trivy falhando em trivy-system"
+            description: >-
+              {{ $value }} scan job(s) de vulnerabilidade falharam nos últimos 15m
+              — cobertura de VulnerabilityReport com buraco. Provável a race de /tmp
+              compartilhado em pods multi-container (trivy-operator#2859).
+              Investigar:
+              kubectl -n trivy-system get jobs --field-selector status.successful=0 ;
+              e nos jobs listados:
+              kubectl -n trivy-system logs job/<nome> --all-containers | grep -i fatal
