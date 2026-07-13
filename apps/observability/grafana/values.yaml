@@ -125,7 +125,7 @@ datasources:
             - name: trace_id
               matcherType: label
               matcherRegex: trace_id
-              url: '${__value.raw}'
+              url: '$${__value.raw}'
               urlDisplayLabel: Ver trace no Tempo
               datasourceUid: tempo
 
