@@ -94,6 +94,8 @@ datasources:
         orgId: 1
       - name: VictoriaLogs
         orgId: 1
+      - name: Loki
+        orgId: 1
       - name: Alertmanager
         orgId: 1
       - name: Tempo
@@ -128,6 +130,14 @@ datasources:
               url: '$${__value.raw}'
               urlDisplayLabel: Ver trace no Tempo
               datasourceUid: tempo
+
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki-vl-proxy.observability.svc.cluster.local:3100
+        access: proxy
+        jsonData:
+          maxLines: 1000
 
       - name: Alertmanager
         type: alertmanager
