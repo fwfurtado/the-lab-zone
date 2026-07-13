@@ -20,3 +20,11 @@ spec:
       value: :8080
     - name: MCP_LOG_FORMAT
       value: "json"
+    # Desabilita o vector-DB de documentação embutido. Motivos:
+    #  1) É "the main source of resource usage" (RAM/CPU) segundo a doc do mcp-victoriametrics.
+    #  2) A resposta da tool `documentation` é logada inteira numa única linha JSON gigante,
+    #     que o runtime corta em fragmentos de ~16KB -> só o 1o fragmento tem `level`,
+    #     o resto vira unknown no VictoriaLogs (era o dominante do namespace `ai`).
+    # Os agentes de triage consultam métricas via MCP, não a documentação embutida.
+    - name: MCP_DISABLED_TOOLS
+      value: documentation

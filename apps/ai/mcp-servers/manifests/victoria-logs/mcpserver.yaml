@@ -16,3 +16,9 @@ spec:
       value: http                  # isto é o env do mcp-victorialogs (= Streamable HTTP)
     - name: MCP_LISTEN_ADDR
       value: :8080                 # casa com o proxyPort que o ToolHive espera
+    # Mesmo racional do VM MCP: desliga o vector-DB de documentação embutido
+    # (RAM/CPU segundo a doc do mcp-victorialogs) e evita dumps futuros da tool
+    # `documentation` em linha gigante. Os 649 unknown atuais do VL MCP são
+    # access logs logfmt (level=INFO) — devem classificar pela rota logfmt do filelog.
+    - name: MCP_DISABLED_TOOLS
+      value: documentation
