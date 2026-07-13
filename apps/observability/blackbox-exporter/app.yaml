@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: blackbox-exporter
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: observability
+  sources:
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: prometheus-blackbox-exporter
+      targetRevision: 11.15.1
+      helm:
+        releaseName: blackbox-exporter
+        valueFiles:
+          - $values/apps/observability/blackbox-exporter/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/observability/blackbox-exporter/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: observability
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - SkipDryRunOnMissingResource=true

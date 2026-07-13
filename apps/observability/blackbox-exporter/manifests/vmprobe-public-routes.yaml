@@ -1,0 +1,29 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMProbe
+metadata:
+  name: public-routes
+  namespace: observability
+spec:
+  jobName: blackbox-public-routes
+  module: http_2xx
+  interval: 30s
+  scrapeTimeout: 10s
+  vmProberSpec:
+    url: blackbox-exporter.observability.svc.cluster.local:9115
+    scheme: http
+    path: /probe
+  targets:
+    staticConfig:
+      labels:
+        probe_class: public-route
+      targets:
+        - https://alertmanager.lab.the-lab.zone
+        - https://argocd.lab.the-lab.zone
+        - https://argo-workflows.lab.the-lab.zone
+        - https://chat.lab.the-lab.zone
+        - https://grafana.lab.the-lab.zone
+        - https://hubble.lab.the-lab.zone
+        - https://langfuse.lab.the-lab.zone
+        - https://litellm.lab.the-lab.zone
+        - https://memgraph.lab.the-lab.zone
+        - https://next-edit.lab.the-lab.zone
