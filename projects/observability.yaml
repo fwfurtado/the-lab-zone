@@ -12,6 +12,7 @@ spec:
     - https://open-telemetry.github.io/opentelemetry-helm-charts
     - https://grafana-community.github.io/helm-charts
     - ghcr.io/reliablyobserve/charts
+    - https://prometheus-community.github.io/helm-charts
   destinations:
     - namespace: observability
       server: https://kubernetes.default.svc
