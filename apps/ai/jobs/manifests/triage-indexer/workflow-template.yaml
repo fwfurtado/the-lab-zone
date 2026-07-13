@@ -1,4 +1,4 @@
-# WorkflowTemplate do triage-indexer (Fase D + Fatia B.1, ADR-0013).
+# WorkflowTemplate do triage-indexer (Fase D + Fatia B.1/B.2, ADR-0013/0014).
 #
 # DAG com pods separados sobre um PVC efêmero:
 #
@@ -6,13 +6,17 @@
 #                               ├──> gestalt    (-> triage_incidents)
 #                               └──> facets     (-> triage_facets)
 #
-#   downloader : rclone traz do Garage AMBOS os prefixos (triage/ e conclusions/)
+#   downloader : rclone traz do Garage OS TRÊS prefixos (triage/, conclusions/
+#                e confirmations/). O terceiro é escrito pelo listener de
+#                feedback do Slack (ADR-0014, outro processo) — o downloader só
+#                LÊ, nunca escreve ali.
 #   classifier : lê triage/, escreve conclusions/ no workspace. NUNCA toca o
 #                Qdrant — só produz artefato (ADR-0013).
 #   uploader   : devolve conclusions/ ao Garage. ESSENCIAL: o PVC é efêmero
 #                (ADR-0011); sem subir, a conclusão morre com o run e o modo
 #                incremental do classificador reclassificaria o corpus INTEIRO
-#                toda noite.
+#                toda noite. NÃO sobe confirmations/ — esse prefixo nasce fora
+#                deste Workflow (Slack), o job só o lê.
 #   gestalt    : 1 ponto/relatório  (busca por regressão)
 #   facets     : 1 ponto/seção      (busca por sintoma/causa/hint)
 #
@@ -115,18 +119,20 @@ spec:
             set -eu
             mkdir -p /workspace/repo
             # Copia a RAIZ do bucket com filtro, em vez de copiar cada prefixo
-            # para dentro de /workspace/repo. Assim a estrutura triage/... e
-            # conclusions/... é PRESERVADA no workspace — o classificador espelha
-            # um caminho no outro (conclusion_path_for), e os indexers escopam os
-            # globs em triage/. Filtrar também tolera o prefixo conclusions/
-            # ainda não existir (primeira run): nada casa, nada falha.
-            echo ">> rclone copy garage:triage-reports -> /workspace/repo (triage/ + conclusions/)"
+            # para dentro de /workspace/repo. Assim a estrutura triage/...,
+            # conclusions/... e confirmations/... é PRESERVADA no workspace —
+            # o classificador espelha um caminho no outro (conclusion_path_for),
+            # e os indexers escopam os globs em triage/. Filtrar também tolera
+            # um prefixo ainda não existir (primeira run, ou nenhum feedback
+            # humano ainda): nada casa, nada falha.
+            echo ">> rclone copy garage:triage-reports -> /workspace/repo (triage/ + conclusions/ + confirmations/)"
             rclone copy "garage:triage-reports" /workspace/repo \
-              --include "/triage/**" --include "/conclusions/**" \
+              --include "/triage/**" --include "/conclusions/**" --include "/confirmations/**" \
               --fast-list --transfers 8 --checkers 16 --s3-no-check-bucket
             t=$(find /workspace/repo/triage -name '*.md' 2>/dev/null | wc -l)
             c=$(find /workspace/repo/conclusions -name '*.md' 2>/dev/null | wc -l)
-            echo "downloader OK (triagens: $t, conclusões: $c)"
+            f=$(find /workspace/repo/confirmations -name '*.md' 2>/dev/null | wc -l)
+            echo "downloader OK (triagens: $t, conclusões: $c, confirmações: $f)"
         volumeMounts:
           - name: workspace
             mountPath: /workspace
