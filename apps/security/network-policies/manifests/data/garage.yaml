@@ -71,6 +71,14 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: triage-indexer
+        # slack-qa-bot (Fatia B.2, ADR-0014): o listener de feedback humano
+        # (botão/modal de confirmação da triagem) roda no MESMO processo do
+        # QA bot — ESCREVE confirmations/ no bucket triage-reports. Sem esta
+        # regra o PUT é dropado quando o garage sair do audit mode, e a falha
+        # é só logada (best-effort) — o feedback se perderia em silêncio.
+        - matchLabels:
+            io.kubernetes.pod.namespace: ai
+            app.kubernetes.io/name: slack-qa-bot
       toPorts:
         - ports:
             - port: "3900"

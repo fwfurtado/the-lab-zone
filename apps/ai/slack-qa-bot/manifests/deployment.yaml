@@ -48,6 +48,23 @@ spec:
               value: http://$(HOST_IP):4318
             - name: OTEL_SERVICE_NAME
               value: qa-bot
+            # Garage (feedback humano de triagem, ADR-0014): o listener de
+            # confirmação/refutação (botão/modal) roda neste MESMO processo
+            # (ver comentário do 'replicas: 1' acima — Socket Mode não tolera
+            # 2 conexões, então o feedback não pode ir para um Deployment
+            # separado sem abrir um segundo app Slack dedicado).
+            # Sem esquema (http/https decidido por GARAGE_USE_SSL) — mesma
+            # convenção do triage-webhook (Go, minio-go). Ausência de
+            # GARAGE_ENDPOINT desliga o listener de feedback sem derrubar o
+            # QA bot (agents/qa/main.py loga e segue sem a capacidade).
+            - name: GARAGE_ENDPOINT
+              value: garage.data.svc.cluster.local:3900
+            - name: GARAGE_BUCKET
+              value: triage-reports
+            - name: GARAGE_REGION
+              value: garage
+            - name: GARAGE_USE_SSL
+              value: "false"
           envFrom:
             - secretRef:
                 name: slack-qa-bot
