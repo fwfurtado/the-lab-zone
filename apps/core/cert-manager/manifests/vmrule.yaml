@@ -8,7 +8,7 @@ spec:
     - name: cert-manager
       rules:
         - alert: CertManagerCertificateNotReady
-          expr: certmanager_certificate_ready_status{condition="True",status!="True"} == 1
+          expr: certmanager_certificate_ready_status{condition="True"} != 1
           for: 15m
           labels:
             severity: warning
@@ -16,7 +16,7 @@ spec:
             triage: "true"
           annotations:
             summary: "Certificate {{ $labels.name }} não está Ready"
-            description: "O Certificate {{ $labels.namespace }}/{{ $labels.name }} não está Ready há pelo menos 15m."
+            description: "O Certificate {{ $labels.exported_namespace }}/{{ $labels.name }} não está Ready há pelo menos 15m."
 
         - alert: CertManagerCertificateExpiringSoon
           expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < 604800
@@ -27,7 +27,7 @@ spec:
             triage: "true"
           annotations:
             summary: "Certificate {{ $labels.name }} expira em menos de 7 dias"
-            description: "O Certificate {{ $labels.namespace }}/{{ $labels.name }} está perto de expirar; verificar renovação DNS01/issuer."
+            description: "O Certificate {{ $labels.exported_namespace }}/{{ $labels.name }} está perto de expirar; verificar renovação DNS01/issuer."
 
         - alert: CertManagerMetricsTargetDown
           expr: up{namespace="cert-manager", service=~"cert-manager.*"} == 0
