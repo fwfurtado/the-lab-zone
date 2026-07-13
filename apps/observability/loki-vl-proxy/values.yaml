@@ -1,0 +1,21 @@
+# Loki-VL-proxy — chart/app 1.62.0
+#
+# Camada de compatibilidade Loki para o VictoriaLogs. Mantemos a datasource
+# nativa VictoriaLogs no Grafana e adicionamos uma datasource Loki separada
+# apontando para este proxy.
+
+replicaCount: 1
+
+extraArgs:
+  backend: http://victoria-logs-vls-server.observability.svc.cluster.local:9428
+  patterns-enabled: "true"
+
+networkPolicy:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    memory: 512Mi

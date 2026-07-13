@@ -1,0 +1,14 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: loki-vl-proxy
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: loki-vl-proxy
+      app.kubernetes.io/instance: loki-vl-proxy
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
