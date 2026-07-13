@@ -9,6 +9,9 @@ replicaCount: 1
 extraArgs:
   backend: http://victoria-logs-vls-server.observability.svc.cluster.local:9428
   patterns-enabled: "true"
+  # O upstream nao tem flag especifica para silenciar apenas health/ready.
+  # warn remove logs informativos de sucesso/healthy e preserva 4xx/5xx.
+  log-level: warn
 
 networkPolicy:
   enabled: false
