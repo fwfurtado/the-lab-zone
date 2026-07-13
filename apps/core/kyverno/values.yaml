@@ -13,10 +13,18 @@
 cleanupController:
   enabled: false
 
-# PolicyReports sao uteis pra auditar a policy (ver quais Services foram mutados).
-# Se quiser enxugar ainda mais no inicio, da pra desligar os dois abaixo —
-# a MUTACAO continua funcionando so com o admissionController:
+# Os CRDs wgpolicyk8s.io ficam sob ownership do trivy-polr-adapter, que alimenta
+# o Policy Reporter. Evita shared ownership e conflitos de upgrade/migracao entre
+# o app core/kyverno e a stack security.
+crds:
+  groups:
+    wgpolicyk8s:
+      clusterpolicyreports: false
+      policyreports: false
+
+# Desligamos os PolicyReports do Kyverno para nao disputar ownership dos CRDs
+# wgpolicyk8s.io com a stack security. A mutacao/admission continua funcionando.
 # backgroundController:
 #   enabled: false
-# reportsController:
-#   enabled: false
+reportsController:
+  enabled: false

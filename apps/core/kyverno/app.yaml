@@ -55,7 +55,6 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
-      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff:
@@ -65,9 +64,6 @@ spec:
   # 1) aggregated ClusterRoles: .rules e populado dinamicamente pelo agregador do k8s.
   # 2) CRDs: o chart renderiza metadata.annotations/labels como {} (mapas vazios), que
   #    o k8s descarta no live -> OutOfSync eterno. Ignora esses paths nos CRDs.
-  # 3) PolicyReports wgpolicyk8s.io: o trivy-polr-adapter tambem gerencia esses CRDs
-  #    para alimentar o Policy Reporter. Mantemos a versao viva no app de security,
-  #    evitando que o Kyverno tente remover v1beta1 enquanto ainda existem reports.
   ignoreDifferences:
     - group: rbac.authorization.k8s.io
       kind: ClusterRole
@@ -78,15 +74,3 @@ spec:
       jqPathExpressions:
         - '.metadata.annotations'
         - '.metadata.labels'
-    - group: apiextensions.k8s.io
-      kind: CustomResourceDefinition
-      name: policyreports.wgpolicyk8s.io
-      jqPathExpressions:
-        - '.spec.versions'
-        - '.status.storedVersions'
-    - group: apiextensions.k8s.io
-      kind: CustomResourceDefinition
-      name: clusterpolicyreports.wgpolicyk8s.io
-      jqPathExpressions:
-        - '.spec.versions'
-        - '.status.storedVersions'
