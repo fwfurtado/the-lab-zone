@@ -15,6 +15,7 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 | Storage | [storage/openebs-localpv-hostpath.md](storage/openebs-localpv-hostpath.md) | logging vestigial do Mayastor, chaves do chart, plano TF |
 | Storage | [storage/proxmox-nvme-expansion-plan.md](storage/proxmox-nvme-expansion-plan.md) | capacidade de disco no Proxmox, isolamento do control plane, plano NVMe em 2 fases |
 | Observability | [observability/victoriametrics-grafana-otel.md](observability/victoriametrics-grafana-otel.md) | VM stack, webhook cert churn, operator não materializa, OTel, severidade de log (filelog por formato), LogsQL |
+| Observability | [observability/alertas-operacionais.md](observability/alertas-operacionais.md) | Alertmanager routing, Blackbox, ArgoCD, cert-manager, External Secrets, metrics-server, Grafana, VM stack |
 | Data platform | [data-platform/garage-clickhouse-cnpg-stores.md](data-platform/garage-clickhouse-cnpg-stores.md) | Garage S3, ClickHouse Altinity, Memgraph, VMPodScrape |
 | ToolHive/MCP | [toolhive-mcp/toolhive-mcp-servers.md](toolhive-mcp/toolhive-mcp-servers.md) | sessionAffinity, Kyverno, stdio+OAuth, bind 0.0.0.0, SearXNG |
 | GPU | [gpu/dcgm-runtimeclass-daemonset.md](gpu/dcgm-runtimeclass-daemonset.md) | DCGM (OOM/distroless), RuntimeClass+DaemonSet, taint+otel |
