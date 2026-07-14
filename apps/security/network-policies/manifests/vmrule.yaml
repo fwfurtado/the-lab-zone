@@ -15,6 +15,7 @@ spec:
           for: 2m # evita falso-positivo de drop pontual (1 reconexão e some)
           labels:
             severity: warning
+            component: cilium
             # Triagem por agente (ADR-0017): drop por policy é o sintoma-
             # assinatura que o agente investiga bem — tem RBAC pra ler as CNPs
             # e a métrica hubble_drop_total no radar. Baixo volume e disparo

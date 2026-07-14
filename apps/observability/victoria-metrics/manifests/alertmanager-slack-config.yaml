@@ -7,43 +7,100 @@ metadata:
 spec:
   route:
     receiver: slack
-    group_by: ["alertname", "namespace"]
+    group_by: ["alertname", "namespace", "component"]
     group_wait: 30s
     group_interval: 5m
     repeat_interval: 4h
     routes:
-      # Alertas de plumbing do kube-prometheus/VM — NUNCA notificam humano.
-      # Watchdog: sempre firing (prova de vida do pipeline).
-      # InfoInhibitor: existe só para inibir severity=info (regra abaixo).
+      # Plumbing do kube-prometheus/VM: nunca notifica humano.
       - receiver: blackhole
         matchers:
           - alertname =~ "Watchdog|InfoInhibitor"
         continue: false
 
-      # Triagem por agente (Fase B, ADR-0017). OPT-IN: só alertas cujo VMRule
-      # carrega o label triage="true". continue: true para o alerta seguir
-      # descendo e TAMBÉM notificar o Slack (rota catch-all abaixo).
-      #
-      # Agrupamento próprio, mais largo que o default: a triagem quer o
-      # CONTEXTO do namespace inteiro, não um webhook por alertname.
-      # - group_wait 2m: espera alertas correlatos chegarem antes de triar.
-      # - group_interval 10m: alerta novo no grupo => webhook novo => a borda
-      #   re-tria com contexto mais completo (a chave de dedup muda).
-      # - repeat_interval 12h: reenvio sem mudança. DEVE ser MAIOR que o
-      #   DEDUP_TTL da borda (6h), senão nunca há re-triagem de incidente
-      #   longo. Relação registrada no ADR-0017.
+      # Triagem por agente. continue=true: envia para o agente e tambem segue
+      # para a rota humana apropriada abaixo.
       - receiver: triage-webhook
         matchers:
           - triage = "true"
         continue: true
-        group_by: ["namespace"]
+        group_by: ["namespace", "component"]
         group_wait: 2m
         group_interval: 10m
         repeat_interval: 12h
 
-      # Catch-all EXPLÍCITO. Necessário por semântica de routing: quando um
-      # child route casa (a triagem acima), o receiver do route pai deixa de
-      # ser aplicado — sem esta rota, alerta triado sumiria do Slack.
+      # Critical tem ciclo proprio, independente do dominio.
+      - receiver: slack
+        matchers:
+          - severity = "critical"
+        group_by: ["alertname", "namespace", "component"]
+        group_wait: 10s
+        group_interval: 2m
+        repeat_interval: 1h
+        continue: false
+
+      # Synthetic monitoring: agrupa por rota para nao misturar sites distintos.
+      - receiver: slack
+        matchers:
+          - component = "blackbox"
+        group_by: ["alertname", "instance"]
+        group_wait: 30s
+        group_interval: 10m
+        repeat_interval: 2h
+        continue: false
+
+      # Core platform: GitOps, certs, secrets, metrics API e backups.
+      - receiver: slack
+        matchers:
+          - component =~ "argocd|cert-manager|external-secrets|metrics-server|velero"
+        group_by: ["component", "namespace", "alertname"]
+        group_wait: 1m
+        group_interval: 10m
+        repeat_interval: 4h
+        continue: false
+
+      # Segurança: drops de Cilium e cobertura de scan.
+      - receiver: slack
+        matchers:
+          - component =~ "cilium|trivy-operator"
+        group_by: ["component", "alertname", "source_namespace", "destination_namespace"]
+        group_wait: 1m
+        group_interval: 10m
+        repeat_interval: 6h
+        continue: false
+
+      # Jobs e pipelines de dados/AI.
+      - receiver: slack
+        matchers:
+          - component =~ "qa-indexer|analytics-elt"
+        group_by: ["component", "namespace", "alertname"]
+        group_wait: 1m
+        group_interval: 10m
+        repeat_interval: 6h
+        continue: false
+
+      # Agentes e pipeline de triagem.
+      - receiver: slack
+        matchers:
+          - component =~ "agents|triage"
+        group_by: ["component", "namespace", "alertname"]
+        group_wait: 1m
+        group_interval: 10m
+        repeat_interval: 4h
+        continue: false
+
+      # Info ainda chega no Slack, mas com repeticao baixa. Inhibit rules abaixo
+      # continuam removendo info quando ja existe warning/critical correlato.
+      - receiver: slack
+        matchers:
+          - severity = "info"
+        group_by: ["alertname", "namespace", "component"]
+        group_wait: 5m
+        group_interval: 30m
+        repeat_interval: 12h
+        continue: false
+
+      # Catch-all explicito para defaultRules e alertas novos sem componente.
       - receiver: slack
 
   receivers:
@@ -54,18 +111,24 @@ spec:
             key: slack-url
           channel: "#alerts"
           send_resolved: true
-          title: "{{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})"
+          title: >-
+            [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}
+            {{ with .CommonLabels.severity }}({{ . }}){{ end }}
           text: >-
-            {{ range .Alerts }}{{ .Annotations.summary }}
+            {{ range .Alerts }}
+            *{{ .Labels.alertname }}*
+            {{ with .Labels.component }}component={{ . }} {{ end }}{{ with .Labels.namespace }}namespace={{ . }} {{ end }}
+            {{ .Annotations.summary }}
+
             {{ .Annotations.description }}
+
             {{ end }}
 
-    # Null receiver: sem nenhuma config = alerta é engolido silenciosamente.
+    # Null receiver: sem configs = alerta engolido silenciosamente.
     - name: blackhole
 
-    # Borda Go da triagem (ai/triage-webhook). send_resolved false: triagem é
-    # sobre incidente aberto; resolved não dispara agente. max_alerts limita o
-    # payload — o contexto vai pro LLM, não queremos um grupo de 200 alertas.
+    # Borda Go da triagem (ai/triage-webhook). send_resolved=false: triagem e
+    # sobre incidente aberto; resolved nao dispara agente.
     - name: triage-webhook
       webhook_configs:
         - url: http://triage-webhook.ai.svc.cluster.local:8080/webhook
@@ -73,16 +136,14 @@ spec:
           max_alerts: 20
 
   inhibit_rules:
-    # 1) warning/critical inibem os info do MESMO namespace.
-    #    (quando há problema real, o ruído info some)
+    # warning/critical inibem info do mesmo namespace.
     - source_matchers:
         - severity =~ "warning|critical"
       target_matchers:
         - severity = "info"
       equal: ["namespace"]
 
-    # 2) InfoInhibitor inibe os info do MESMO namespace quando NÃO há
-    #    warning/critical (é o "guarda" dos info-level isolados).
+    # InfoInhibitor inibe info do mesmo namespace quando nao ha warning/critical.
     - source_matchers:
         - alertname = "InfoInhibitor"
       target_matchers:

@@ -12,6 +12,7 @@ spec:
           for: 2m
           labels:
             severity: warning
+            component: blackbox
             triage: "true"
           annotations:
             summary: "Blackbox probe failed for {{ $labels.instance }}"
@@ -21,6 +22,7 @@ spec:
           for: 5m
           labels:
             severity: info
+            component: blackbox
           annotations:
             summary: "Blackbox probe is slow for {{ $labels.instance }}"
             description: "The public route {{ $labels.instance }} has taken more than 5 seconds to probe for at least 5 minutes."

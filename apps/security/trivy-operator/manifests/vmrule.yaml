@@ -39,6 +39,7 @@ spec:
           for: 10m
           labels:
             severity: warning
+            component: trivy-operator
             # Sem triage:"true" de propósito: isto é bug de infra do operator,
             # não um sintoma que o triage-agent investiga via kubectl/CNPs.
           annotations:
