@@ -77,6 +77,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://$(HOST_IP):4318
             - name: OTEL_SERVICE_NAME
@@ -171,6 +175,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://$(HOST_IP):4318
             - name: OTEL_SERVICE_NAME
