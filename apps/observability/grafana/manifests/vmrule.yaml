@@ -1,0 +1,43 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  groups:
+    - name: grafana
+      rules:
+        - alert: GrafanaTargetDown
+          expr: up{namespace="observability", service="grafana"} == 0
+          for: 2m
+          labels:
+            severity: warning
+            component: grafana
+            triage: "true"
+          annotations:
+            summary: "Grafana metrics target is down"
+            description: "The Grafana /metrics target has been down for at least 2 minutes."
+
+        - alert: GrafanaHTTPServerErrors
+          expr: |
+            sum(rate(grafana_http_request_duration_seconds_count{status_code=~"5.."}[5m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: grafana
+          annotations:
+            summary: "Grafana is returning HTTP 5xx"
+            description: "Grafana returned HTTP 5xx responses for at least 5 minutes."
+
+        - alert: GrafanaDatasourceErrors
+          expr: |
+            sum by (datasource) (
+              rate(grafana_datasource_request_duration_seconds_count{code=~"5.."}[5m])
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: grafana
+          annotations:
+            summary: "Grafana datasource {{ $labels.datasource }} is returning 5xx"
+            description: "Grafana datasource {{ $labels.datasource }} returned 5xx responses for at least 5 minutes."

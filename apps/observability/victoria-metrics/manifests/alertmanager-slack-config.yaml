@@ -89,6 +89,16 @@ spec:
         repeat_interval: 4h
         continue: false
 
+      # Componentes da stack de observability fora do chart VictoriaMetrics.
+      - receiver: slack
+        matchers:
+          - component =~ "grafana"
+        group_by: ["component", "namespace", "alertname"]
+        group_wait: 1m
+        group_interval: 10m
+        repeat_interval: 4h
+        continue: false
+
       # Info ainda chega no Slack, mas com repeticao baixa. Inhibit rules abaixo
       # continuam removendo info quando ja existe warning/critical correlato.
       - receiver: slack
