@@ -40,3 +40,12 @@ spec:
               protocol: TCP
             - port: "5432"
               protocol: TCP
+
+    # `kubectl cnpg status` proxies through the Kubernetes API server to the
+    # instance manager status port.
+    - fromEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
