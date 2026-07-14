@@ -5,7 +5,7 @@
 pyroscope:
   fullnameOverride: pyroscope
   replicaCount: 1
-  disableSelfProfile: false
+  disableSelfProfile: true
 
   extraArgs:
     config.expand-env: "true"
