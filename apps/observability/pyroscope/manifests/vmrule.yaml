@@ -1,0 +1,31 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: pyroscope
+  namespace: observability
+spec:
+  groups:
+    - name: pyroscope
+      rules:
+        - alert: PyroscopeTargetDown
+          expr: up{namespace="observability", service="pyroscope"} == 0
+          for: 2m
+          labels:
+            severity: warning
+            component: pyroscope
+            triage: "true"
+          annotations:
+            summary: "Pyroscope metrics target is down"
+            description: "The Pyroscope /metrics target has been down at least 2 minutes."
+
+        - alert: PyroscopePodRestarting
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="observability", container="pyroscope"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: pyroscope
+            triage: "true"
+          annotations:
+            summary: "Pyroscope pod is restarting"
+            description: "The Pyroscope container restarted in the last 15 minutes."

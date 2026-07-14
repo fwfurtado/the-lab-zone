@@ -10,7 +10,7 @@
 
 @set-global-alias:
     #!/usr/bin/env bash
-    for name in cnpg-wal langfuse qdrant-snapshots velero clickhouse-backup argo-workflows triage-reports tempo; do
+    for name in cnpg-wal langfuse qdrant-snapshots velero clickhouse-backup argo-workflows triage-reports tempo pyroscope; do
       id=$(kubectl exec -n data garage-0 -c garage -- /garage bucket list 2>/dev/null | grep ":${name}$" | awk '{print $1}' | cut -d' ' -f1)
       kubectl exec -n data garage-0 -c garage -- /garage bucket alias "$id" "$name"
     done

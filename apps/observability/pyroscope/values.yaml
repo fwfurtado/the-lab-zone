@@ -1,0 +1,67 @@
+# Pyroscope — chart 2.1.1 / app 2.1.1
+# Backend de continuous profiling. O chart sobe o Alloy junto por padrão; ele faz
+# scrape de pods anotados com profiles.grafana.com/* e envia para o Pyroscope.
+
+pyroscope:
+  fullnameOverride: pyroscope
+  replicaCount: 1
+  disableSelfProfile: false
+
+  extraArgs:
+    config.expand-env: "true"
+    log.level: info
+
+  extraEnvFrom:
+    - secretRef:
+        name: pyroscope-s3
+
+  # Credenciais S3 vêm do Secret como AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY e
+  # são expandidas em runtime por -config.expand-env=true.
+  config: |
+    storage:
+      backend: s3
+      s3:
+        bucket_name: pyroscope
+        endpoint: garage.data.svc.cluster.local:3900
+        region: garage
+        insecure: true
+        bucket_lookup_type: path-style
+        access_key_id: ${AWS_ACCESS_KEY_ID}
+        secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+
+    analytics:
+      reporting_enabled: false
+
+  persistence:
+    enabled: true
+    storageClassName: openebs-hostpath-ssd
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      memory: 1536Mi
+
+alloy:
+  enabled: true
+  alloy:
+    stabilityLevel: public-preview
+  controller:
+    type: statefulset
+    replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+minio:
+  enabled: false
+
+serviceMonitor:
+  enabled: false

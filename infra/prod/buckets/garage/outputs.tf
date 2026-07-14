@@ -7,5 +7,8 @@ output "buckets" {
     velero            = aws_s3_bucket.velero.bucket
     langfuse          = aws_s3_bucket.langfuse.bucket
     argo_workflows    = aws_s3_bucket.argo_workflows.bucket
+    triage_reports    = aws_s3_bucket.triages.bucket
+    tempo             = aws_s3_bucket.tempo.bucket
+    pyroscope         = aws_s3_bucket.pyroscope.bucket
   }
 }

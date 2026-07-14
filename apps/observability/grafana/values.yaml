@@ -123,6 +123,8 @@ datasources:
         orgId: 1
       - name: Tempo
         orgId: 1
+      - name: Pyroscope
+        orgId: 1
 
     datasources:
       - name: VictoriaMetrics
@@ -171,6 +173,14 @@ datasources:
           implementation: prometheus
           handleGrafanaManagedAlerts: false
 
+      - name: Pyroscope
+        type: grafana-pyroscope-datasource
+        uid: pyroscope
+        url: http://pyroscope.observability.svc.cluster.local:4040
+        access: proxy
+        jsonData:
+          minStep: '15s'
+
       # Tempo: backend de traces do cluster (Fase 7). A porta 3200 é a API HTTP de
       # query; o ingest OTLP (4317/4318) só o Collector usa.
       - name: Tempo
@@ -212,10 +222,22 @@ datasources:
           # (traces_service_graph_*), não pelo span_metrics.
           serviceMap:
             datasourceUid: victoriametrics
+          # Correlação trace -> profile. Só aparece quando o workload emite profiles
+          # com labels compatíveis e usa a ponte span-profile da linguagem.
+          tracesToProfiles:
+            datasourceUid: pyroscope
+            tags:
+              - key: service.name
+                value: service_name
+              - key: service.namespace
+                value: service_namespace
+            profileTypeId: process_cpu:cpu:nanoseconds:cpu:nanoseconds
+            customQuery: false
 
 # Plugin de datasource para VictoriaLogs
 plugins:
   - victoriametrics-logs-datasource
+  - grafana-pyroscope-app
 
 resources:
   requests:

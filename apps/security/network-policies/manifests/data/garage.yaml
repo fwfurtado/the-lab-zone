@@ -30,6 +30,11 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: observability
             app.kubernetes.io/name: tempo
+        # pyroscope: blocos de profiles vão pro bucket `pyroscope`; o PVC segura
+        # dados locais/metastore do single-binary.
+        - matchLabels:
+            io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: pyroscope
         - matchLabels:
             io.kubernetes.pod.namespace: data
             app.kubernetes.io/name: clickhouse

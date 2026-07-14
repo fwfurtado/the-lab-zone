@@ -1,0 +1,18 @@
+# Métricas próprias do Pyroscope (/metrics na porta http2 :4040).
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: pyroscope
+  namespace: observability
+spec:
+  namespaceSelector:
+    matchNames:
+      - observability
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pyroscope
+      app.kubernetes.io/instance: pyroscope
+  endpoints:
+    - port: http2
+      path: /metrics
+      interval: 30s
