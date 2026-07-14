@@ -44,7 +44,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-            - name: POD_NAMESPACE
+            - name: OTEL_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
