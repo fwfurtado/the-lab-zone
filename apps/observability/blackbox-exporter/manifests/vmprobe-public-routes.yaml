@@ -1,10 +1,10 @@
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMProbe
 metadata:
-  name: public-routes
+  name: public-ui
   namespace: observability
 spec:
-  jobName: blackbox-public-routes
+  jobName: blackbox-public-ui
   module: http_2xx
   interval: 30s
   scrapeTimeout: 10s
@@ -15,7 +15,7 @@ spec:
   targets:
     staticConfig:
       labels:
-        probe_class: public-route
+        probe_class: public-ui
       targets:
         - https://alertmanager.lab.the-lab.zone
         - https://argocd.lab.the-lab.zone
@@ -24,6 +24,47 @@ spec:
         - https://grafana.lab.the-lab.zone
         - https://hubble.lab.the-lab.zone
         - https://langfuse.lab.the-lab.zone
-        - https://litellm.lab.the-lab.zone
         - https://memgraph.lab.the-lab.zone
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMProbe
+metadata:
+  name: public-api
+  namespace: observability
+spec:
+  jobName: blackbox-public-api
+  module: http_2xx
+  interval: 30s
+  scrapeTimeout: 10s
+  vmProberSpec:
+    url: blackbox-exporter.observability.svc.cluster.local:9115
+    scheme: http
+    path: /probe
+  targets:
+    staticConfig:
+      labels:
+        probe_class: public-api
+      targets:
+        - https://litellm.lab.the-lab.zone
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMProbe
+metadata:
+  name: special-health
+  namespace: observability
+spec:
+  jobName: blackbox-special-health
+  module: http_2xx
+  interval: 30s
+  scrapeTimeout: 10s
+  vmProberSpec:
+    url: blackbox-exporter.observability.svc.cluster.local:9115
+    scheme: http
+    path: /probe
+  targets:
+    staticConfig:
+      labels:
+        probe_class: special-health
+        app_protocol: vllm
+      targets:
         - https://next-edit.lab.the-lab.zone/health

@@ -850,7 +850,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "probe_duration_seconds{job=\"blackbox-public-routes\"}",
+              "expr": "probe_duration_seconds{job=~\"blackbox-.*\"}",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }

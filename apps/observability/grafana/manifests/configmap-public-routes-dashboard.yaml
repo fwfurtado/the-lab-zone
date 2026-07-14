@@ -97,7 +97,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "sum(probe_success{job=\"blackbox-public-routes\"} == 0) or vector(0)",
+              "expr": "sum(probe_success{job=~\"blackbox-.*\"} == 0) or vector(0)",
               "instant": true,
               "refId": "A"
             }
@@ -162,7 +162,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "sum((probe_ssl_earliest_cert_expiry{job=\"blackbox-public-routes\"} - time()) < 14 * 24 * 3600) or vector(0)",
+              "expr": "sum((probe_ssl_earliest_cert_expiry{job=~\"blackbox-.*\"} - time()) < 14 * 24 * 3600) or vector(0)",
               "instant": true,
               "refId": "A"
             }
@@ -227,7 +227,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "max(probe_duration_seconds{job=\"blackbox-public-routes\"})",
+              "expr": "max(probe_duration_seconds{job=~\"blackbox-.*\"})",
               "instant": true,
               "refId": "A"
             }
@@ -288,7 +288,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "count(probe_success{job=\"blackbox-public-routes\"})",
+              "expr": "count(probe_success{job=~\"blackbox-.*\"})",
               "instant": true,
               "refId": "A"
             }
@@ -364,7 +364,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "probe_success{job=\"blackbox-public-routes\"}",
+              "expr": "probe_success{job=~\"blackbox-.*\"}",
               "format": "table",
               "instant": true,
               "refId": "A"
@@ -454,7 +454,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "probe_duration_seconds{job=\"blackbox-public-routes\"}",
+              "expr": "probe_duration_seconds{job=~\"blackbox-.*\"}",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -543,7 +543,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "probe_http_status_code{job=\"blackbox-public-routes\"}",
+              "expr": "probe_http_status_code{job=~\"blackbox-.*\"}",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -607,7 +607,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "(probe_ssl_earliest_cert_expiry{job=\"blackbox-public-routes\"} - time()) / 86400",
+              "expr": "(probe_ssl_earliest_cert_expiry{job=~\"blackbox-.*\"} - time()) / 86400",
               "format": "table",
               "instant": true,
               "refId": "A"
@@ -650,7 +650,7 @@ data:
       },
       "timepicker": {},
       "timezone": "browser",
-      "title": "Public Routes",
+      "title": "Synthetic Probes",
       "uid": "public-routes",
       "version": 1
     }
