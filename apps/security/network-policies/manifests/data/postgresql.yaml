@@ -45,6 +45,7 @@ spec:
     # instance manager status port.
     - fromEntities:
         - kube-apiserver
+        - remote-node
       toPorts:
         - ports:
             - port: "8000"
