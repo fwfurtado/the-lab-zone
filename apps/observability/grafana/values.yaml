@@ -125,6 +125,8 @@ datasources:
         orgId: 1
       - name: Pyroscope
         orgId: 1
+      - name: grafana-pyroscope-datasource
+        orgId: 1
 
     datasources:
       - name: VictoriaMetrics
@@ -179,7 +181,7 @@ datasources:
         url: http://pyroscope.observability.svc.cluster.local:4040
         access: proxy
         jsonData:
-          minStep: '15s'
+          pdcInjected: false
 
       # Tempo: backend de traces do cluster (Fase 7). A porta 3200 é a API HTTP de
       # query; o ingest OTLP (4317/4318) só o Collector usa.
