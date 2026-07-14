@@ -1,0 +1,16 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: barman-cloud-plugin
+  namespace: observability
+spec:
+  namespaceSelector:
+    matchNames:
+      - cnpg-system
+  selector:
+    matchLabels:
+      app: barman-cloud
+      cnpg.io/pluginName: barman-cloud.cloudnative-pg.io
+  endpoints:
+    - port: metrics
+      path: /metrics

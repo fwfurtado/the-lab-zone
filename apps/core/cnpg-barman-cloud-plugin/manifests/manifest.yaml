@@ -893,6 +893,23 @@ spec:
   selector:
     app: barman-cloud
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: barman-cloud
+    cnpg.io/pluginName: barman-cloud.cloudnative-pg.io
+  name: barman-cloud-metrics
+  namespace: cnpg-system
+spec:
+  ports:
+  - name: metrics
+    port: 8080
+    protocol: TCP
+    targetPort: metrics
+  selector:
+    app: barman-cloud
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -919,6 +936,8 @@ spec:
         - --server-key=/server/tls.key
         - --client-cert=/client/tls.crt
         - --server-address=:9090
+        - --metrics-bind-address=:8080
+        - --metrics-secure=false
         - --leader-elect
         - --log-level=debug
         env:
@@ -931,6 +950,9 @@ spec:
         name: barman-cloud
         ports:
         - containerPort: 9090
+          protocol: TCP
+        - containerPort: 8080
+          name: metrics
           protocol: TCP
         readinessProbe:
           initialDelaySeconds: 10
