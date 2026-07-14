@@ -100,6 +100,9 @@ rules:
   - apiGroups: ["clickhouse.altinity.com"]
     resources: ["*"]
     verbs: ["get", "list"]
+  - apiGroups: ["velero.io"]
+    resources: ["*"]
+    verbs: ["get", "list"]
 
   # 3) Cluster-scoped nativos que a `view` deixa de fora (uteis p/ triagem)
   - apiGroups: [""]
