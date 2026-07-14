@@ -9,7 +9,12 @@ spec:
       rules:
         - alert: CNPGBaseBackupStale
           expr: |
-            (time() - max by (namespace) (cnpg_collector_last_available_backup_timestamp{namespace="data"})) > 93600
+            (
+              time() -
+              max by (namespace) (
+                barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="data"} > 0
+              )
+            ) > 93600
           for: 15m
           labels:
             severity: warning
@@ -18,13 +23,12 @@ spec:
           annotations:
             summary: "Backup base do CNPG envelhecido"
             description: >-
-              O namespace {{ $labels.namespace }} não tem base backup CNPG
-              disponível há mais de 26h. Verifique:
-              kubectl -n data get backup,scheduledbackup
+              O namespace {{ $labels.namespace }} não tem base backup CNPG disponível há mais de 26h.
+              Verifique: kubectl -n data get backup,scheduledbackup
 
         - alert: CNPGBackupMetricMissing
           expr: |
-            absent(cnpg_collector_last_available_backup_timestamp{namespace="data"})
+            absent(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="data"})
           for: 30m
           labels:
             severity: warning
@@ -33,5 +37,21 @@ spec:
           annotations:
             summary: "Métrica de backup do CNPG ausente"
             description: >-
-              O VictoriaMetrics não recebeu cnpg_collector_last_available_backup_timestamp
-              por 30m. Verifique o VMPodScrape cnpg-cluster e os pods do CNPG.
+              O VictoriaMetrics não recebeu barman_cloud_cloudnative_pg_io_last_available_backup_timestamp por 30m.
+              Verifique o VMPodScrape cnpg-cluster e os pods do CNPG.
+
+        - alert: CNPGBackupMetricZero
+          expr: |
+            max by (namespace) (
+              barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{namespace="data"}
+            ) == 0
+          for: 30m
+          labels:
+            severity: warning
+            component: cnpg
+            triage: "true"
+          annotations:
+            summary: "Métrica de backup do CNPG sem backup disponível"
+            description: >-
+              O plugin Barman Cloud está expondo last_available_backup_timestamp como 0 no namespace {{ $labels.namespace }}.
+              Verifique o status do ObjectStore: kubectl -n data get objectstore cnpg-garage-store -o yaml

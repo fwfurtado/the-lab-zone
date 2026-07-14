@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: objectstores.barmancloud.cnpg.io
 spec:
   group: barmancloud.cnpg.io
@@ -107,6 +107,11 @@ spec:
                         - key
                         - name
                         type: object
+                      useDefaultAzureCredentials:
+                        description: |-
+                          Use the default Azure authentication flow, which includes DefaultAzureCredential.
+                          This allows authentication using environment variables and managed identities.
+                        type: boolean
                     type: object
                   data:
                     description: |-
@@ -138,10 +143,11 @@ spec:
                         description: |-
                           Compress a backup file (a tar file per tablespace) while streaming it
                           to the object store. Available options are empty string (no
-                          compression, default), `gzip`, `bzip2`, and `snappy`.
+                          compression, default), `gzip`, `bzip2`, `lz4`, and `snappy`.
                         enum:
                         - bzip2
                         - gzip
+                        - lz4
                         - snappy
                         type: string
                       encryption:
@@ -169,6 +175,25 @@ spec:
                         format: int32
                         minimum: 1
                         type: integer
+                      restoreAdditionalCommandArgs:
+                        description: |-
+                          Additional arguments that can be appended to the 'barman-cloud-restore'
+                          command-line invocation. These arguments provide flexibility to customize
+                          the data restore process further, according to specific requirements or
+                          configurations.
+
+                          Example:
+                          In a scenario where specialized restore options are required, such as setting
+                          a specific read timeout or defining custom behavior, users can use this field
+                          to specify additional command arguments.
+
+                          Note:
+                          It's essential to ensure that the provided arguments are valid and supported
+                          by the 'barman-cloud-restore' command, to avoid potential errors or unintended
+                          behavior during execution.
+                        items:
+                          type: string
+                        type: array
                     type: object
                   destinationPath:
                     description: |-
@@ -390,6 +415,19 @@ spec:
                 description: The configuration for the sidecar that runs in the instance
                   pods
                 properties:
+                  additionalContainerArgs:
+                    description: |-
+                      AdditionalContainerArgs is an optional list of command-line arguments
+                      to be passed to the sidecar container when it starts.
+                      The provided arguments are appended to the container’s default arguments.
+                    items:
+                      type: string
+                    type: array
+                    x-kubernetes-validations:
+                    - message: do not set --log-level in additionalContainerArgs;
+                        use spec.instanceSidecarConfiguration.logLevel
+                      reason: FieldValueForbidden
+                      rule: '!self.exists(a, a.startsWith(''--log-level''))'
                   env:
                     description: The environment to be explicitly passed to the sidecar
                     items:
@@ -397,8 +435,9 @@ spec:
                         in a Container.
                       properties:
                         name:
-                          description: Name of the environment variable. Must be a
-                            C_IDENTIFIER.
+                          description: |-
+                            Name of the environment variable.
+                            May consist of any printable ASCII characters except '='.
                           type: string
                         value:
                           description: |-
@@ -456,6 +495,43 @@ spec:
                               - fieldPath
                               type: object
                               x-kubernetes-map-type: atomic
+                            fileKeyRef:
+                              description: |-
+                                FileKeyRef selects a key of the env file.
+                                Requires the EnvFiles feature gate to be enabled.
+                              properties:
+                                key:
+                                  description: |-
+                                    The key within the env file. An invalid key will prevent the pod from starting.
+                                    The keys defined within a source may consist of any printable ASCII characters except '='.
+                                    During Alpha stage of the EnvFiles feature gate, the key size is limited to 128 characters.
+                                  type: string
+                                optional:
+                                  default: false
+                                  description: |-
+                                    Specify whether the file or its key must be defined. If the file or key
+                                    does not exist, then the env var is not published.
+                                    If optional is set to true and the specified key does not exist,
+                                    the environment variable will not be set in the Pod's containers.
+
+                                    If optional is set to false and the specified key does not exist,
+                                    an error will be returned during Pod creation.
+                                  type: boolean
+                                path:
+                                  description: |-
+                                    The path within the volume from which to select the file.
+                                    Must be relative and may not contain the '..' path or start with '..'.
+                                  type: string
+                                volumeName:
+                                  description: The name of the volume mount containing
+                                    the env file.
+                                  type: string
+                              required:
+                              - key
+                              - path
+                              - volumeName
+                              type: object
+                              x-kubernetes-map-type: atomic
                             resourceFieldRef:
                               description: |-
                                 Selects a resource of the container: only resources limits and requests
@@ -510,6 +586,17 @@ spec:
                       - name
                       type: object
                     type: array
+                  logLevel:
+                    default: info
+                    description: 'The log level for PostgreSQL instances. Valid values
+                      are: `error`, `warning`, `info` (default), `debug`, `trace`'
+                    enum:
+                    - error
+                    - warning
+                    - info
+                    - debug
+                    - trace
+                    type: string
                   resources:
                     description: Resources define cpu/memory requests and limits for
                       the sidecar that runs in the instance pods.
@@ -519,7 +606,7 @@ spec:
                           Claims lists the names of resources, defined in spec.resourceClaims,
                           that are used by this container.
 
-                          This is an alpha field and requires enabling the
+                          This field depends on the
                           DynamicResourceAllocation feature gate.
 
                           This field is immutable. It can only be set for containers.
@@ -608,7 +695,11 @@ spec:
                         restored.
                       format: date-time
                       type: string
-                    lastSuccussfulBackupTime:
+                    lastFailedBackupTime:
+                      description: The last failed backup time
+                      format: date-time
+                      type: string
+                    lastSuccessfulBackupTime:
                       description: The last successful backup time
                       format: date-time
                       type: string
@@ -641,7 +732,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: plugin-barman-cloud
-  name: leader-election-role
+  name: barman-plugin-leader-election-role
   namespace: cnpg-system
 rules:
 - apiGroups:
@@ -679,7 +770,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: metrics-auth-role
+  name: barman-plugin-metrics-auth-role
 rules:
 - apiGroups:
   - authentication.k8s.io
@@ -697,7 +788,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: metrics-reader
+  name: barman-plugin-metrics-reader
 rules:
 - nonResourceURLs:
   - /metrics
@@ -710,7 +801,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: plugin-barman-cloud
-  name: objectstore-editor-role
+  name: barman-plugin-objectstore-editor-role
 rules:
 - apiGroups:
   - barmancloud.cnpg.io
@@ -737,7 +828,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: plugin-barman-cloud
-  name: objectstore-viewer-role
+  name: barman-plugin-objectstore-viewer-role
 rules:
 - apiGroups:
   - barmancloud.cnpg.io
@@ -804,6 +895,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - postgresql.cnpg.io
+  resources:
+  - clusters/finalizers
+  verbs:
+  - update
+- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - rolebindings
@@ -822,12 +919,12 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: plugin-barman-cloud
-  name: leader-election-rolebinding
+  name: barman-plugin-leader-election-rolebinding
   namespace: cnpg-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: leader-election-role
+  name: barman-plugin-leader-election-role
 subjects:
 - kind: ServiceAccount
   name: plugin-barman-cloud
@@ -836,11 +933,11 @@ subjects:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: metrics-auth-rolebinding
+  name: barman-plugin-metrics-auth-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: metrics-auth-role
+  name: barman-plugin-metrics-auth-role
 subjects:
 - kind: ServiceAccount
   name: plugin-barman-cloud
@@ -866,10 +963,10 @@ apiVersion: v1
 data:
   SIDECAR_IMAGE: |
     Z2hjci5pby9jbG91ZG5hdGl2ZS1wZy9wbHVnaW4tYmFybWFuLWNsb3VkLXNpZGVjYXI6dj
-    AuNS4w
+    AuMTMuMA==
 kind: Secret
 metadata:
-  name: plugin-barman-cloud-gt85cmh99d
+  name: plugin-barman-cloud-m5m67kfh8f
   namespace: cnpg-system
 type: Opaque
 ---
@@ -890,23 +987,6 @@ spec:
   - port: 9090
     protocol: TCP
     targetPort: 9090
-  selector:
-    app: barman-cloud
----
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: barman-cloud
-    cnpg.io/pluginName: barman-cloud.cloudnative-pg.io
-  name: barman-cloud-metrics
-  namespace: cnpg-system
-spec:
-  ports:
-  - name: metrics
-    port: 8080
-    protocol: TCP
-    targetPort: metrics
   selector:
     app: barman-cloud
 ---
@@ -936,8 +1016,6 @@ spec:
         - --server-key=/server/tls.key
         - --client-cert=/client/tls.crt
         - --server-address=:9090
-        - --metrics-bind-address=:8080
-        - --metrics-secure=false
         - --leader-elect
         - --log-level=debug
         env:
@@ -945,14 +1023,11 @@ spec:
           valueFrom:
             secretKeyRef:
               key: SIDECAR_IMAGE
-              name: plugin-barman-cloud-gt85cmh99d
-        image: ghcr.io/cloudnative-pg/plugin-barman-cloud:v0.5.0
+              name: plugin-barman-cloud-m5m67kfh8f
+        image: ghcr.io/cloudnative-pg/plugin-barman-cloud:v0.13.0
         name: barman-cloud
         ports:
         - containerPort: 9090
-          protocol: TCP
-        - containerPort: 8080
-          name: metrics
           protocol: TCP
         readinessProbe:
           initialDelaySeconds: 10
