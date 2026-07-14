@@ -1,0 +1,37 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: cnpg-cluster-backups
+  namespace: observability
+spec:
+  groups:
+    - name: cnpg-cluster-backups
+      rules:
+        - alert: CNPGBaseBackupStale
+          expr: |
+            (time() - max by (namespace) (cnpg_collector_last_available_backup_timestamp{namespace="data"})) > 93600
+          for: 15m
+          labels:
+            severity: warning
+            component: cnpg
+            triage: "true"
+          annotations:
+            summary: "Backup base do CNPG envelhecido"
+            description: >-
+              O namespace {{ $labels.namespace }} não tem base backup CNPG
+              disponível há mais de 26h. Verifique:
+              kubectl -n data get backup,scheduledbackup
+
+        - alert: CNPGBackupMetricMissing
+          expr: |
+            absent(cnpg_collector_last_available_backup_timestamp{namespace="data"})
+          for: 30m
+          labels:
+            severity: warning
+            component: cnpg
+            triage: "true"
+          annotations:
+            summary: "Métrica de backup do CNPG ausente"
+            description: >-
+              O VictoriaMetrics não recebeu cnpg_collector_last_available_backup_timestamp
+              por 30m. Verifique o VMPodScrape cnpg-cluster e os pods do CNPG.

@@ -1,0 +1,42 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: qdrant-backup
+  namespace: data
+  labels:
+    app.kubernetes.io/name: qdrant-backup
+spec:
+  groups:
+    - name: qdrant-backup
+      rules:
+        - alert: QdrantBackupFailed
+          expr: |
+            sum by (status) (
+              increase(argo_workflows_qdrant_backup_runs_total{status=~"Failed|Error"}[26h])
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: qdrant-backup
+            triage: "true"
+          annotations:
+            summary: "Backup do Qdrant falhou"
+            description: >-
+              O CronWorkflow qdrant-backup registrou {{ $value }} falha(s)
+              nas últimas 26h. Verifique: argo -n data list --completed --prefix
+              qdrant-backup && argo -n data logs @latest
+
+        - alert: QdrantBackupMissing
+          expr: |
+            sum(increase(argo_workflows_qdrant_backup_runs_total[26h])) < 1
+          for: 15m
+          labels:
+            severity: warning
+            component: qdrant-backup
+            triage: "true"
+          annotations:
+            summary: "Backup do Qdrant não executou"
+            description: >-
+              Nenhuma execução do qdrant-backup foi registrada em 26h (esperado
+              diariamente às 03:00 UTC). Verifique: kubectl -n data get
+              cronworkflow qdrant-backup -o wide

@@ -33,6 +33,30 @@ spec:
             summary: "Backup do Velero com falha parcial"
             description: "{{ $value }} backup(s) parcialmente falho(s) nas últimas 6h."
 
+        # Restore falhando é sinal direto de DR quebrado ou incompleto.
+        - alert: VeleroRestoreFailed
+          expr: increase(velero_restore_failed_total[6h]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: velero
+            triage: "true"
+          annotations:
+            summary: "Restore do Velero falhou"
+            description: "Houve {{ $value }} falha(s) de restore do Velero nas últimas 6h."
+
+        # Restore parcial também precisa paging: pode esconder item/PV que não voltou.
+        - alert: VeleroRestorePartialFailure
+          expr: increase(velero_restore_partial_failure_total[6h]) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: velero
+            triage: "true"
+          annotations:
+            summary: "Restore do Velero com falha parcial"
+            description: "{{ $value }} restore(s) parcialmente falho(s) nas últimas 6h."
+
         # Nenhum backup bem-sucedido há mais de 26h (schedule diário + folga).
         - alert: VeleroBackupStale
           expr: (time() - velero_backup_last_successful_timestamp) > 93600
@@ -46,6 +70,7 @@ spec:
             description: "O schedule {{ $labels.schedule }} não tem sucesso há mais de 26h."
 
         # node-agent down = FSB dos órfãos não roda (Memgraph fica sem backup).
+        # Esse schedule também cobre Valkey, que persiste AOF/PVC hoje.
         - alert: VeleroNodeAgentDown
           expr: kube_daemonset_status_desired_number_scheduled{daemonset="node-agent", namespace="velero"} - kube_daemonset_status_number_ready{daemonset="node-agent", namespace="velero"} > 0
           for: 10m
@@ -56,3 +81,6 @@ spec:
           annotations:
             summary: "Velero node-agent indisponível em {{ $labels.pod }}"
             description: "node-agent {{ $labels.pod }} está down — FSB dos PVs nesse nó parou."
+
+        # Não há alerta de BackupStorageLocation aqui porque a stack atual não expõe
+        # métrica de status/phase do BSL no VictoriaMetrics; só métricas de API server.

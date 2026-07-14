@@ -1,0 +1,42 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: offsite-sync
+  namespace: data
+  labels:
+    app.kubernetes.io/name: offsite-sync
+spec:
+  groups:
+    - name: offsite-sync
+      rules:
+        - alert: OffsiteSyncFailed
+          expr: |
+            sum by (status) (
+              increase(argo_workflows_offsite_sync_runs_total{status=~"Failed|Error"}[4h])
+            ) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: offsite-sync
+            triage: "true"
+          annotations:
+            summary: "Sync off-site falhou"
+            description: >-
+              O CronWorkflow offsite-sync registrou {{ $value }} falha(s) nas
+              últimas 4h. Verifique: argo -n data list --completed --prefix
+              offsite-sync && argo -n data logs @latest
+
+        - alert: OffsiteSyncMissing
+          expr: |
+            sum(increase(argo_workflows_offsite_sync_runs_total[4h])) < 1
+          for: 15m
+          labels:
+            severity: warning
+            component: offsite-sync
+            triage: "true"
+          annotations:
+            summary: "Sync off-site não executou"
+            description: >-
+              Nenhuma execução do offsite-sync foi registrada em 4h (esperado a
+              cada 2h). Verifique: kubectl -n data get cronworkflow offsite-sync
+              -o wide
