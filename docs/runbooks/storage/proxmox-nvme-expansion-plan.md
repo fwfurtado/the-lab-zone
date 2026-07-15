@@ -206,3 +206,134 @@ Permanecem:
 - o ganho real da Fase 1 e isolamento de I/O, nao alta disponibilidade
 - o ganho real da Fase 2 e redundancia
 - este plano e mais importante do que aumentar CPU/RAM para o incidente observado
+
+## Execucao da Fase 1
+
+Data: 2026-07-15
+
+Status: concluida.
+
+### Pool criado
+
+Foi criado o storage ZFS `cp-nvme` no Proxmox, com:
+
+- RAID level: `Single Disk`
+- compression: `on`
+- `ashift`: `12`
+- Add Storage: habilitado
+- disco: `nvme-Samsung_SSD_990_EVO_Plus_2TB_S7U6NU0YA96489E_1`
+
+Estado validado:
+
+```console
+pool: cp-nvme
+state: ONLINE
+errors: No known data errors
+```
+
+O storage ficou ativo no Proxmox, com:
+
+- tipo: `zfspool`
+- status: `active`
+- total: `1885863936 KiB`
+- usado: `191703384 KiB`
+- disponivel: `1694160552 KiB`
+- uso: `10.17%`
+
+### VMs migradas
+
+Foram migrados somente os discos de boot `virtio0` dos control planes:
+
+- `talos-cp-1` / VM `100`
+- `talos-cp-2` / VM `101`
+- `talos-cp-3` / VM `102`
+
+Estado final validado:
+
+```console
+virtio0: cp-nvme:vm-100-disk-0,aio=io_uring,backup=1,cache=none,discard=on,iothread=1,replicate=1,size=60G
+virtio0: cp-nvme:vm-101-disk-0,aio=io_uring,backup=1,cache=none,discard=on,iothread=1,replicate=1,size=60G
+virtio0: cp-nvme:vm-102-disk-0,aio=io_uring,backup=1,cache=none,discard=on,iothread=1,replicate=1,size=60G
+```
+
+Os workers permaneceram no `local-nvme`, como planejado.
+
+### Procedimento usado
+
+Cada control plane foi migrado individualmente:
+
+1. `kubectl cordon` no node alvo
+2. shutdown da VM pelo Proxmox
+3. move do disco `virtio0` para `cp-nvme`
+4. `Delete source` habilitado no move
+5. start da VM
+6. validacao do health do Talos e do Kubernetes
+7. `kubectl uncordon` no node alvo
+
+O `cordon` foi operacionalmente opcional, porque os control planes ja possuem
+o taint `node-role.kubernetes.io/control-plane:NoSchedule`, mas foi usado para
+deixar a manutencao explicita.
+
+### Validacoes realizadas
+
+Validacoes executadas apos as migracoes:
+
+```bash
+kubectl get nodes
+kubectl -n kube-system get pods -o wide
+zpool status cp-nvme
+pvesm status
+qm config 100 | grep virtio0
+qm config 101 | grep virtio0
+qm config 102 | grep virtio0
+```
+
+O health do Talos foi executado apontando um node alvo por vez e declarando todos
+os control planes e workers:
+
+```bash
+talosctl \
+  --talosconfig=infra/prod/talos/clusterconfig/talosconfig \
+  --nodes=10.40.6.11 \
+  --endpoints=10.40.6.11 \
+  --control-plane-nodes=10.40.6.11,10.40.6.12,10.40.6.13 \
+  --worker-nodes=10.40.6.21,10.40.6.22,10.40.6.23 \
+  health
+```
+
+Observacao: `talosctl health` nao aceita multiplos valores em `--nodes` nessa
+versao. Para validar o cluster completo, usar `--control-plane-nodes` e
+`--worker-nodes`.
+
+### Terraform
+
+O Terraform em `infra/prod/talos` foi atualizado para refletir a migracao:
+
+- `cp-1`, `cp-2` e `cp-3` usam `boot_datastore = "cp-nvme"`
+- workers usam o fallback `local-nvme`
+- o disco de boot usa `coalesce(each.value.boot_datastore, "local-nvme")`
+
+Validacao:
+
+```console
+No changes. Your infrastructure matches the configuration.
+```
+
+Nao foi necessario executar `terraform apply`, pois o plan ficou sem mudancas.
+
+### Estado final da Fase 1
+
+- control plane fora do `local-nvme`
+- `cp-nvme` online, sem erros conhecidos
+- tres VMs de control plane rodando com `virtio0` em `cp-nvme`
+- cluster Kubernetes com todos os nodes `Ready`
+- Terraform alinhado com a infraestrutura real
+
+### Proximo passo
+
+Na Fase 2, comprar outro `Samsung 990 EVO Plus 2TB` identico e converter o pool
+`cp-nvme` para mirror.
+
+Importante: usar `zpool attach` para anexar o segundo disco ao vdev existente.
+Nao usar `zpool add`, porque isso adicionaria outro vdev em vez de converter o
+disco atual para mirror.

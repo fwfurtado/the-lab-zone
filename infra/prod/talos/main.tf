@@ -14,7 +14,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
 
   cpu {
     cores = each.value.vcpus
-    type  = "host"                    # importante: Talos/Cilium querem as flags reais da CPU
+    type  = "host" # importante: Talos/Cilium querem as flags reais da CPU
   }
 
   memory {
@@ -22,7 +22,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
   }
 
   disk {
-    datastore_id = "local-nvme"             # seu storage NVMe no Proxmox
+    datastore_id = coalesce(each.value.boot_datastore, "local-nvme")
     interface    = "virtio0"
     size         = each.value.disk
     iothread     = true
@@ -34,7 +34,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
     for_each = try(each.value.pv_disk_size, null) != null ? [1] : []
     content {
       datastore_id = "local-nvme"
-      interface    = "virtio1"        # ← virtio1 → /dev/vdb
+      interface    = "virtio1" # ← virtio1 → /dev/vdb
       size         = each.value.pv_disk_size
       iothread     = true
       discard      = "on"
@@ -47,7 +47,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
     for_each = try(each.value.pv_ssd_disk_size, null) != null ? [1] : []
     content {
       datastore_id = "local-ssd"
-      interface    = "virtio2"        # ← virtio2 → /dev/vdc
+      interface    = "virtio2" # ← virtio2 → /dev/vdc
       size         = each.value.pv_ssd_disk_size
       iothread     = true
       discard      = "on"
@@ -56,7 +56,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
   }
 
   network_device {
-    bridge = "vmbr0"                  # ajuste se usar VLAN: vlan_id = 30
+    bridge = "vmbr0" # ajuste se usar VLAN: vlan_id = 30
   }
 
   cdrom {
@@ -64,12 +64,12 @@ resource "proxmox_virtual_environment_vm" "talos" {
   }
 
   agent {
-    enabled = true                    # o qemu-guest-agent do schematic
+    enabled = true # o qemu-guest-agent do schematic
   }
 
   operating_system { type = "l26" }
 
   lifecycle {
-    ignore_changes = [cdrom]          # depois do install, a ISO sai sem o TF brigar
+    ignore_changes = [cdrom] # depois do install, a ISO sai sem o TF brigar
   }
 }
