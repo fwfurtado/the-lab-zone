@@ -115,7 +115,7 @@ data:
                 "type": "prometheus",
                 "uid": "${ds}"
               },
-              "expr": "time() - max(cnpg_collector_last_available_backup_timestamp)",
+              "expr": "time() - max(barman_cloud_cloudnative_pg_io_last_available_backup_timestamp)",
               "instant": true,
               "refId": "A"
             }
