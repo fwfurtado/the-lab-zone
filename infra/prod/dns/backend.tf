@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket = "the-lab-zone-tf-state"
-    key    = "prod/dns/terraform.tfstate"     # state separado do talos
+    key    = "prod/dns/terraform.tfstate" # state separado do talos
     region = "us-east-005"
     endpoints = {
       s3 = "https://s3.us-east-005.backblazeb2.com"

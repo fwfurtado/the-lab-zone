@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     proxmox = {
-      source = "bpg/proxmox"
+      source  = "bpg/proxmox"
       version = "~> 0.109.0"
     }
   }
@@ -9,7 +9,7 @@ terraform {
 
 
 provider "proxmox" {
-  endpoint = var.proxmox_endpoint
+  endpoint  = var.proxmox_endpoint
   api_token = var.proxmox_api_token
-  insecure = true
+  insecure  = true
 }
