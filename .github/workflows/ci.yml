@@ -35,9 +35,37 @@ jobs:
           tool_versions: |
             terraform 1.15.6
             pipx:yamllint 1.38.0
+            trivy 0.72.0
+            aqua:koalaman/shellcheck 0.11.0
+            aqua:yannh/kubeconform 0.8.0
+
+      - name: Install Python validation dependencies
+        run: python3 -m pip install --user PyYAML
 
       - name: Lint YAML
         run: yamllint .
+
+      - name: Check YAML duplicate keys
+        run: python3 scripts/check-yaml-duplicate-keys.py
+
+      - name: Validate Kubernetes manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t manifests < <(
+            find apps projects bootstrap \
+              -type f \
+              \( -name '*.yaml' -o -name '*.yml' \) \
+              -not -name 'Chart.yaml' \
+              -not -path 'apps/core/gateway-api-crds/crd/*' \
+              -not -path 'apps/data/dbt-analytics/chart/templates/*' \
+              -print0 \
+              | xargs -0 grep -lE '^(apiVersion|kind):' \
+              | sort
+          )
+
+          kubeconform -strict -summary -ignore-missing-schemas "${manifests[@]}"
 
       - name: Check Terraform formatting
         run: terraform fmt -check -recursive
@@ -69,3 +97,15 @@ jobs:
           set -euo pipefail
           bash -n scripts/*.sh infra/prod/harbor/*.sh
           python3 -m py_compile scripts/*.py
+
+      - name: Lint shell scripts
+        run: shellcheck scripts/*.sh infra/prod/harbor/*.sh
+
+      - name: Scan IaC and Kubernetes configs
+        run: |
+          trivy config \
+            --exit-code 0 \
+            --severity HIGH,CRITICAL \
+            --skip-dirs apps/core/gateway-api-crds \
+            --skip-dirs 'infra/prod/*/.terraform' \
+            .

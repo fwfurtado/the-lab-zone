@@ -39,12 +39,13 @@ Legenda:
    - Critério de saída: dados restaurados e verificados no destino, não apenas backup existente.
 
 2. **Fortalecer CI**
-   - Manter a GitHub Action atual como baseline.
-   - Adicionar `kubeconform` para manifests Kubernetes.
-   - Adicionar detecção de chaves YAML duplicadas.
-   - Adicionar `trivy config`.
-   - Adicionar `shellcheck`.
-   - Critério de saída: PR inválido falha antes do merge.
+   - Baseline implementado com `yamllint`, detecção de chaves YAML duplicadas,
+     `kubeconform`, Terraform fmt/validate, sintaxe Bash/Python, `shellcheck` e
+     `trivy config`.
+   - `trivy config` ainda roda em modo informativo (`exit-code 0`) porque há achados
+     conhecidos de hardening que serão tratados nos itens de segurança.
+   - Próximo critério de saída: transformar achados novos de segurança em falha sem
+     bloquear o backlog já conhecido.
 
 3. **Remover imagens mutáveis**
    - Substituir `:latest` por versões fixas.
@@ -152,24 +153,27 @@ Legenda:
 
 ## CI atual
 
-Baseline inicial:
+Baseline atual:
 
 - `yamllint .`
-- `terraform fmt -check -recursive`
-- `terraform init -backend=false`
-- `terraform validate`
-- `bash -n`
-- `python3 -m py_compile`
+- verificação explícita de chaves YAML duplicadas;
+- `kubeconform -strict -ignore-missing-schemas` para manifests Kubernetes;
+- `terraform fmt -check -recursive`;
+- `terraform init -backend=false`;
+- `terraform validate`;
+- `bash -n`;
+- `python3 -m py_compile`;
+- `shellcheck`;
+- `trivy config` em modo informativo.
 
 Próximos incrementos sugeridos:
 
-- `kubeconform` com schemas de CRDs;
-- `trivy config`;
-- `shellcheck`;
+- transformar `trivy config` em bloqueante após registrar/mitigar o baseline conhecido;
 - verificação de links Markdown;
 - verificação de imagens `:latest`;
 - validação de ApplicationSet/AppProject;
-- renderização de Helm charts críticos.
+- renderização de Helm charts críticos;
+- schema validation mais forte para CRDs próprios ou vendorizados.
 
 ## Decisões abertas
 
