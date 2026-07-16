@@ -1,0 +1,181 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":separateMultipleMajorReleases"
+  ],
+  "timezone": "America/Sao_Paulo",
+  "labels": [
+    "dependencies"
+  ],
+  "prConcurrentLimit": 6,
+  "prHourlyLimit": 2,
+  "rebaseWhen": "behind-base-branch",
+  "rangeStrategy": "pin",
+  "commitMessagePrefix": "chore(deps):",
+  "dependencyDashboardTitle": "Dependency Dashboard",
+  "assigneesFromCodeOwners": true,
+  "ignorePaths": [
+    "apps/core/gateway-api-crds/crd/**",
+    "**/.terraform/**",
+    "**/target/**"
+  ],
+  "packageRules": [
+    {
+      "description": "GitHub Actions",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "Terraform providers and modules",
+      "matchManagers": [
+        "terraform"
+      ],
+      "groupName": "terraform"
+    },
+    {
+      "description": "mise tool versions",
+      "matchManagers": [
+        "mise"
+      ],
+      "groupName": "mise-tools"
+    },
+    {
+      "description": "Core platform Helm charts",
+      "matchFileNames": [
+        "apps/core/**/app.yaml"
+      ],
+      "matchDatasources": [
+        "helm",
+        "docker"
+      ],
+      "groupName": "helm-core"
+    },
+    {
+      "description": "Observability Helm charts",
+      "matchFileNames": [
+        "apps/observability/**/app.yaml"
+      ],
+      "matchDatasources": [
+        "helm",
+        "docker"
+      ],
+      "groupName": "helm-observability"
+    },
+    {
+      "description": "Data platform Helm charts",
+      "matchFileNames": [
+        "apps/data/**/app.yaml"
+      ],
+      "matchDatasources": [
+        "helm",
+        "docker",
+        "git-tags"
+      ],
+      "groupName": "helm-data"
+    },
+    {
+      "description": "AI Helm charts",
+      "matchFileNames": [
+        "apps/ai/**/app.yaml"
+      ],
+      "matchDatasources": [
+        "helm",
+        "docker"
+      ],
+      "groupName": "helm-ai"
+    },
+    {
+      "description": "Security Helm charts",
+      "matchFileNames": [
+        "apps/security/**/app.yaml"
+      ],
+      "matchDatasources": [
+        "helm",
+        "docker"
+      ],
+      "groupName": "helm-security"
+    },
+    {
+      "description": "Container images outside Argo CD app chart definitions",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "apps/**/manifests/**/*.yaml",
+        "apps/**/manifests/**/*.yml",
+        "apps/**/values.yaml",
+        "apps/data/dbt-analytics/chart/values.yaml",
+        "infra/**/*.yaml",
+        "infra/**/*.yml"
+      ],
+      "groupName": "container-images",
+      "separateMajorMinor": true,
+      "matchPackageNames": [
+        "/.*/"
+      ]
+    },
+    {
+      "description": "Do not automerge infrastructure updates",
+      "matchManagers": [
+        "terraform",
+        "github-actions",
+        "mise",
+        "kubernetes",
+        "custom.regex"
+      ],
+      "automerge": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Argo CD Helm charts from HTTP Helm repositories",
+      "managerFilePatterns": [
+        "/(^|/)apps/.+/app\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\n)-\\s+repoURL:\\s+(?<registryUrl>https?://[^\\s#]+)[^\\n]*\\n\\s+chart:\\s+(?<depName>[^\\s#]+)\\n\\s+targetRevision:\\s+[\"']?(?<currentValue>[^\"'\\s#]+)"
+      ],
+      "datasourceTemplate": "helm"
+    },
+    {
+      "customType": "regex",
+      "description": "Argo CD Helm charts from OCI registries",
+      "managerFilePatterns": [
+        "/(^|/)apps/.+/app\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\n)-\\s+repoURL:\\s+(?<registryUrl>(?:ghcr\\.io|docker\\.io|quay\\.io|registry\\.k8s\\.io)/[^\\s#]+)[^\\n]*\\n\\s+chart:\\s+(?<depName>[^\\s#]+)\\n\\s+targetRevision:\\s+[\"']?(?<currentValue>[^\"'\\s#]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "{{{registryUrl}}}/{{{depName}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Garage Helm chart from upstream Git tag",
+      "managerFilePatterns": [
+        "/^apps/data/garage/app\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "repoURL:\\s+(?<depName>https://git\\.deuxfleurs\\.fr/Deuxfleurs/garage\\.git)[\\s\\S]*?path:\\s+script/helm/garage[\\s\\S]*?targetRevision:\\s+(?<currentValue>v?[^\\s#]+)"
+      ],
+      "datasourceTemplate": "git-tags"
+    },
+    {
+      "customType": "regex",
+      "description": "Container images in YAML, including CRDs and Helm values",
+      "managerFilePatterns": [
+        "/(^|/)(apps|infra)/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "(?:^|\\n)\\s*image:\\s+[\"']?(?<depName>[^\\s\"'{}@#:]+(?:/[^\\s\"'{}@#:]+)*):(?<currentValue>[^\\s\"'{}@#]+)"
+      ],
+      "datasourceTemplate": "docker"
+    }
+  ]
+}

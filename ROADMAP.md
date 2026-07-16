@@ -60,9 +60,12 @@ Legenda:
 ### P1 — Supply chain e governança
 
 5. **Renovate ou equivalente**
-   - Atualizar Helm charts, imagens OCI, providers Terraform e ferramentas do `mise`.
-   - Agrupar updates por domínio.
-   - Exigir CI verde.
+   - Baseline implementado com `renovate.json`.
+   - Cobre GitHub Actions, Terraform, `.mise.toml`, charts Helm em apps Argo CD,
+     charts OCI, tag Git do Garage e imagens em manifests/values.
+   - Updates agrupados por domínio para reduzir ruído.
+   - Próximo critério de saída: habilitar o Renovate no repositório e ajustar o
+     primeiro Dependency Dashboard conforme os PRs reais gerados.
 
 6. **Políticas Kyverno adicionais**
    - Bloquear `:latest`.
