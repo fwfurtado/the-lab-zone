@@ -1,0 +1,18 @@
+extends: default
+
+# CRDs vendorizados e templates Helm não são YAML puro mantido diretamente aqui.
+ignore: |
+  apps/core/gateway-api-crds/crd/
+  apps/data/dbt-analytics/chart/templates/
+
+rules:
+  # O repositório contém expressões de Helm e Argo, além de comentários extensos.
+  # Mantemos no CI as verificações estruturais, incluindo sintaxe e chaves duplicadas.
+  braces: disable
+  colons: disable
+  commas: disable
+  comments: disable
+  comments-indentation: disable
+  document-start: disable
+  indentation: disable
+  line-length: disable

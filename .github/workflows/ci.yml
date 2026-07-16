@@ -1,0 +1,71 @@
+name: CI
+
+"on":
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install validation tools
+        uses: jdx/mise-action@v3
+        with:
+          cache: true
+          tool_versions: |
+            terraform 1.15.6
+            pipx:yamllint 1.38.0
+
+      - name: Lint YAML
+        run: yamllint .
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+
+      - name: Validate Terraform modules
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r module; do
+            echo "::group::terraform validate: ${module}"
+
+            # Não reutiliza inicializações locais que possam apontar para o backend S3.
+            module_id="${module//\//-}"
+            export TF_DATA_DIR="${RUNNER_TEMP}/terraform-data/${module_id}"
+            mkdir -p "${TF_DATA_DIR}"
+
+            terraform -chdir="${module}" init \
+              -backend=false \
+              -input=false \
+              -lockfile=readonly
+            terraform -chdir="${module}" validate -no-color
+            echo "::endgroup::"
+          done < <(find infra/prod -type f -name backend.tf -printf '%h\n' | sort)
+
+      - name: Check script syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/*.sh infra/prod/harbor/*.sh
+          python3 -m py_compile scripts/*.py
