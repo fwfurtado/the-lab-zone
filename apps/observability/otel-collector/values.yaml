@@ -438,9 +438,3 @@ tolerations:
     operator: Equal
     value: present
     effect: NoSchedule
-
-# A porta de métricas é DESABILITADA por default no chart; sem ela não há o que
-# scrapear (VMPodScrape em manifests/vmpod-scrape.yaml).
-ports:
-  metrics:
-    enabled: true
