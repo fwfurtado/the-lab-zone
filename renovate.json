@@ -10,8 +10,8 @@
   "labels": [
     "dependencies"
   ],
-  "prConcurrentLimit": 6,
-  "prHourlyLimit": 2,
+  "prConcurrentLimit": 8,
+  "prHourlyLimit": 10,
   "rebaseWhen": "behind-base-branch",
   "rangeStrategy": "replace",
   "commitMessagePrefix": "chore(deps):",
