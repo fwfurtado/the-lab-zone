@@ -69,10 +69,10 @@ spec:
         repeat_interval: 6h
         continue: false
 
-      # Jobs e pipelines de dados/AI.
+      # Stores, jobs e pipelines de dados/AI.
       - receiver: slack
         matchers:
-          - component =~ "qa-indexer|analytics-elt"
+          - component =~ "redpanda|qa-indexer|analytics-elt"
         group_by: ["component", "namespace", "alertname"]
         group_wait: 1m
         group_interval: 10m

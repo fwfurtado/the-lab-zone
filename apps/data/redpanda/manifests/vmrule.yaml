@@ -1,0 +1,51 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: redpanda
+  namespace: observability
+spec:
+  groups:
+    - name: redpanda
+      rules:
+        - alert: RedpandaMetricsDown
+          expr: |
+            min(up{namespace="data", pod=~"redpanda.*"}) == 0
+            or absent(up{namespace="data", pod=~"redpanda.*"})
+          for: 5m
+          labels:
+            severity: warning
+            component: redpanda
+            triage: "true"
+          annotations:
+            summary: "Redpanda metrics target is down"
+            description: "VictoriaMetrics is not scraping Redpanda /public_metrics from the admin listener."
+
+        - alert: RedpandaPVCLowSpace
+          expr: |
+            (
+              kubelet_volume_stats_available_bytes{namespace="data", persistentvolumeclaim=~".*redpanda.*"}
+              /
+              kubelet_volume_stats_capacity_bytes{namespace="data", persistentvolumeclaim=~".*redpanda.*"}
+            ) < 0.15
+          for: 15m
+          labels:
+            severity: warning
+            component: redpanda
+            triage: "true"
+          annotations:
+            summary: "Redpanda PVC has less than 15% free space"
+            description: "PVC {{ $labels.persistentvolumeclaim }} in namespace data is low on free space."
+
+        - alert: RedpandaContainerRestarting
+          expr: |
+            sum by (namespace, pod, container) (
+              increase(kube_pod_container_status_restarts_total{namespace="data", pod=~"redpanda.*"}[15m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: warning
+            component: redpanda
+            triage: "true"
+          annotations:
+            summary: "Redpanda container restarted"
+            description: "{{ $labels.container }} in {{ $labels.pod }} restarted in the last 15 minutes."

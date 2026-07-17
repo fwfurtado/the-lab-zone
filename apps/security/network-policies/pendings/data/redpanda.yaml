@@ -1,0 +1,103 @@
+# PENDING/AUDIT ONLY: do not promote to manifests/data until labels and ports are
+# validated in-cluster with Hubble. Redpanda chart/operator labels below are likely
+# selectors, not a proven contract for this cluster yet.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: redpanda-pending-default-deny-ingress
+  namespace: data
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: redpanda
+      app.kubernetes.io/instance: redpanda
+  ingress:
+    # Operator reconcile traffic. Validate source labels with:
+    # hubble observe --namespace data --to-pod redpanda-0 --protocol TCP
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: redpanda-operator
+            app.kubernetes.io/instance: redpanda-operator
+      toPorts:
+        - ports:
+            - port: "9093" # Kafka API
+              protocol: TCP
+            - port: "9644" # Admin API and metrics
+              protocol: TCP
+            - port: "8081" # Schema Registry
+              protocol: TCP
+            - port: "8082" # HTTP Proxy
+              protocol: TCP
+    # Console is public on LAN through Gateway, but talks to Kafka only inside the cluster.
+    # Validate the Console pod labels before promoting this policy.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app.kubernetes.io/name: redpanda-console
+      toPorts:
+        - ports:
+            - port: "9093" # Kafka API
+              protocol: TCP
+            - port: "9644" # Admin API
+              protocol: TCP
+            - port: "8081" # Schema Registry
+              protocol: TCP
+            - port: "8082" # HTTP Proxy
+              protocol: TCP
+    # VictoriaMetrics scrapes /public_metrics from the Admin listener.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "9644"
+              protocol: TCP
+    # Single broker today, but keep self-traffic explicit for chart/operator readiness
+    # probes and future scale-out. Validate whether RPC 33145 is required before enforce.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app.kubernetes.io/name: redpanda
+            app.kubernetes.io/instance: redpanda
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
+            - port: "9644"
+              protocol: TCP
+            - port: "8081"
+              protocol: TCP
+            - port: "8082"
+              protocol: TCP
+            - port: "33145" # internal RPC
+              protocol: TCP
+---
+# PENDING/AUDIT ONLY: Console labels are operator-generated and must be validated
+# with Hubble before this policy moves out of pending.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: redpanda-console-pending-default-deny-ingress
+  namespace: data
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: redpanda-console
+  ingress:
+    # Public LAN route terminates at Gateway/Cilium ingress and reaches Console on 8080.
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Keep only if Console exposes useful metrics on 8080 in-cluster.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: observability
+            app.kubernetes.io/name: vmagent
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP

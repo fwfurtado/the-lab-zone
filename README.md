@@ -36,7 +36,7 @@ Kubernetes/Talos
 |---|---|
 | `core` | Argo CD, Cilium, Gateway API, cert-manager, External Secrets, OpenEBS, CNPG operator, ToolHive, Kyverno, Velero |
 | `observability` | VictoriaMetrics, VictoriaLogs, Grafana, Alertmanager, OTel Collector, Tempo, Pyroscope, blackbox-exporter |
-| `data` | Garage, CNPG/PostgreSQL, ClickHouse, Valkey, Qdrant, Memgraph, dbt/ELT, off-site sync |
+| `data` | Garage, CNPG/PostgreSQL, ClickHouse, Valkey, Redpanda, Qdrant, Memgraph, dbt/ELT, off-site sync |
 | `ai` | Ollama, LiteLLM, Open WebUI, Langfuse, MCP servers, bots/agentes, indexadores e triagem por alerta |
 | `security` | NetworkPolicies Cilium, Trivy Operator, Tetragon, Policy Reporter |
 

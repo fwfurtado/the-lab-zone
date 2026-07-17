@@ -1,7 +1,7 @@
 ---
 tipo: adr
 numero: 9
-titulo: Plataforma de dados — Garage, CNPG, Valkey, ClickHouse, Qdrant, Memgraph
+titulo: Plataforma de dados — Garage, CNPG, Valkey, ClickHouse, Redpanda, Qdrant, Memgraph
 status: aceito
 fases: [6]
 relacionado: [runbooks/data-platform]
@@ -24,14 +24,18 @@ pra que falha de store nunca se confunda com falha de app.
 | Object storage | **Garage** | S3-compatible, Rust, single-node honesto, sem dependências externas |
 | PostgreSQL | **CNPG + PG18** | Operator maduro, WAL→Garage via barman, PITR real |
 | Cache/fila | **Valkey** | Redis-compatible, licença limpa, `noeviction` pra queue do Langfuse |
+| Event streaming/cache | **Redpanda** | Kafka-compatible, OSS single-node, apenas eventos/cache reconstruíveis no primeiro corte |
 | Analytics/eventos | **ClickHouse (Altinity operator)** | Backend nativo do Langfuse, reusado na Fase 8 |
 | Vector store | **Qdrant** | Pipeline RAG (LightRAG, Fase 7) |
 | Graph store | **Memgraph** | LightRAG híbrido (grafo + vetor) |
 
-Operators (CNPG, ClickHouse) vão pro AppProject `core`; workloads pro AppProject `data`.
+Operators (CNPG, ClickHouse, Redpanda) vão pro AppProject `core`; workloads pro AppProject `data`.
 
 ## Consequências
 - Garage tem quirks de S3 (alias global, `region=garage`, path-style, world-readable
   secrets) — ver runbook data-platform.
 - Memgraph métricas exigem Enterprise (sem dashboard na community).
 - Object storage único (Garage) é tier on-site; DR vai pro B2 (ADR-0014).
+
+- Redpanda nasce com 1 broker, RF=1, OSS, sem Enterprise/Tiered Storage e sem promessa de DR:
+  só armazenar eventos/cache reconstruíveis até decisão nova antes de virar fonte durável.
