@@ -52,7 +52,7 @@ spec:
           factor: "2"
           maxDuration: "5m"
       container:
-        image: curlimages/curl:8.20.0   # pinar por digest
+        image: curlimages/curl:8.21.0   # pinar por digest
         command: [sh, -c]
         args:
           - |
