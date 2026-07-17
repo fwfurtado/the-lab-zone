@@ -112,24 +112,104 @@
       "groupName": "helm-security"
     },
     {
-      "description": "Container images outside Argo CD app chart definitions",
+      "description": "Utility container images",
       "matchDatasources": [
         "docker"
       ],
-      "matchFileNames": [
-        "apps/**/manifests/**/*.yaml",
-        "apps/**/manifests/**/*.yml",
-        "apps/**/values.yaml",
-        "apps/data/dbt-analytics/chart/values.yaml",
-        "infra/**/*.yaml",
-        "infra/**/*.yml"
-      ],
-      "groupName": "container-images",
-      "separateMajorMinor": true,
       "matchPackageNames": [
-        "/.*/"
-      ]
+        "alpine/git",
+        "busybox",
+        "curlimages/curl",
+        "rclone/rclone"
+      ],
+      "groupName": "container-images-utils",
+      "separateMajorMinor": true
     },
+    {
+      "description": "MCP container images",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "docker.io/grafana/mcp-grafana",
+        "docker.io/isokoliuk/mcp-searxng",
+        "ghcr.io/containers/kubernetes-mcp-server",
+        "ghcr.io/fwfurtado/mcp-server-qdrant",
+        "ghcr.io/github/github-mcp-server",
+        "ghcr.io/victoriametrics/mcp-victorialogs",
+        "ghcr.io/victoriametrics/mcp-victoriametrics",
+        "ofwfurtado/mcp-for-argocd",
+        "ofwfurtado/mcp-server-qdrant"
+      ],
+      "groupName": "container-images-mcp",
+      "separateMajorMinor": true
+    },
+    {
+      "description": "AI runtime container images",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/us/crw",
+        "ollama/ollama",
+        "vllm/vllm-openai"
+      ],
+      "groupName": "container-images-ai-runtime",
+      "separateMajorMinor": true
+    },
+    {
+      "description": "Data store container images",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "clickhouse/clickhouse-server",
+        "docker.io/library/postgres",
+        "docker.io/library/redis"
+      ],
+      "groupName": "container-images-data",
+      "separateMajorMinor": true
+    },
+    {
+      "description": "Backup and DR container images",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "altinity/clickhouse-backup",
+        "velero/velero-plugin-for-aws"
+      ],
+      "groupName": "container-images-backup-dr",
+      "separateMajorMinor": true
+    },
+    {
+      "description": "Authentik VM container images",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/goauthentik/server"
+      ],
+      "groupName": "container-images-authentik",
+      "separateMajorMinor": true
+    },
+    {
+      "description": "Application-owned container images",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/fwfurtado/dbt-runner",
+        "ghcr.io/fwfurtado/goose-runner",
+        "ghcr.io/fwfurtado/qa-indexer",
+        "ghcr.io/fwfurtado/the-lab-zone-agents-core",
+        "ghcr.io/fwfurtado/the-lab-zone-agents-triage-webhook",
+        "ghcr.io/fwfurtado/triage-indexer"
+      ],
+      "groupName": "container-images-apps",
+      "separateMajorMinor": true
+    },
+
     {
       "description": "Do not automerge infrastructure updates",
       "matchManagers": [
