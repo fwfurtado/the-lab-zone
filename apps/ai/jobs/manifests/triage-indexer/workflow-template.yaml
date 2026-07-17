@@ -95,7 +95,7 @@ spec:
         backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
       container:
         name: main
-        image: rclone/rclone:1.69.0
+        image: rclone/rclone:1.74.4
         env:
           - name: RCLONE_CONFIG_GARAGE_TYPE
             value: s3
@@ -197,7 +197,7 @@ spec:
         backoff: { duration: "30s", factor: "2", maxDuration: "5m" }
       container:
         name: main
-        image: rclone/rclone:1.69.0
+        image: rclone/rclone:1.74.4
         env:
           - name: RCLONE_CONFIG_GARAGE_TYPE
             value: s3
