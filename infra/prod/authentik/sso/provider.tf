@@ -1,10 +1,10 @@
 terraform {
-  required_version = ">= 1.6"
+  required_version = "1.15.8"
 
   required_providers {
     authentik = {
       source  = "goauthentik/authentik"
-      version = "~> 2026.5" # casa com o server 2026.5.3 que o vm/ subiu
+      version = "2026.5.0" # casa com o server 2026.5.3 que o vm/ subiu
     }
   }
 }

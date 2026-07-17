@@ -3,10 +3,21 @@
 
 provider "registry.terraform.io/bpg/proxmox" {
   version     = "0.109.0"
-  constraints = "~> 0.109.0"
+  constraints = "0.109.0"
   hashes = [
     "h1:0SKYtkE0VmH8x/CXe2BrbuchL1D4c5b8BuWI9YnQV3Y=",
+    "h1:4Ui47d5rk9CXP31sL3gnJqOD54EsOR5PBFy96WA1nYU=",
     "h1:7WUepUyfX6ss8bmtp0YJRgfJfmwutG+bSq0ZGTHh9L4=",
+    "h1:ARiwhhzxSXR2w3yzaKk2QxOWHH9MvGgKWpfQndZbq1s=",
+    "h1:MU27+18+AuTaP8+hIltiF8GUexIXNwnE6F6Ds9NZYAc=",
+    "h1:RKTeE+jzdvEgwQRitAnz/w7QjD+oEdpsCVQ3jqHpa4k=",
+    "h1:bbo2Jshd1JKfUXga4lFD4/BYpLS6MytVOVbYozHMuNU=",
+    "h1:flxPeJognN173pEG6jz6SjPXR7kxMm1EFZ0/3qmPtbI=",
+    "h1:h3gAI1Mg1Wf5Jix8LsMCwpf++vlVE3dip32W3c2KCTQ=",
+    "h1:l+f/EXDWkWlOFSgr8/zgGYH1CB5DhmH0rtgZ2Tn+yYY=",
+    "h1:wxhxeGzlBSt42f/LiiUB30bwFZLCNrlUW7PVgqk4QIs=",
+    "h1:xL5TmSbV9279+8BWcauBLkbqZUp+HDXHBMRhTwhh8x4=",
+    "h1:yFSWf3RxDBXI/EX4Z/NhLycsG63vfshymBSWU4rN0QA=",
     "zh:05b1e1e8c149be25e151f5c0e76cf94cb9b61979b962778ae79b27182961ebe6",
     "zh:471650b7477343423f0e700c85fb5cbc309f72e490314db839885be7c0a161d0",
     "zh:51298968a55885158ac51015deb59b3d5ed65b5f4141026f43ed63a37d54e002",
@@ -26,10 +37,21 @@ provider "registry.terraform.io/bpg/proxmox" {
 
 provider "registry.terraform.io/pan-net/powerdns" {
   version     = "1.5.0"
-  constraints = "~> 1.5"
+  constraints = "1.5.0"
   hashes = [
+    "h1:5PzcoEtTNx8rkrgl+WAKP6kAPk7M11gdK397nHIlFVg=",
+    "h1:7kz5zgR3ecuDbU3i+j15B6qzoABhGm+JU3tvlqjhf5s=",
+    "h1:81rMSTXMLe0WK3q1iXv2fOXifIQrM7CLD4b5jREuCZI=",
+    "h1:Bg7PI8JY9s6fGudFoPw9UjRVVECBmvUUWS4853l0R5A=",
+    "h1:CoAOHoUt9oN6F00y5RQ3PlLAJ8C7xYgMQo7fno+ns/A=",
+    "h1:Nn61FL6WdidqUEc4OFemK40Ff48+7TGhU6N7zH3bov8=",
+    "h1:Sy7XuCJh4qKGwLYYtOPw3NuIw/qWkSdc87SCJ0QmzVc=",
     "h1:bsz18KLloevlTZkXwZr8u0sFCZKcOYyts2RaWkV6YNc=",
+    "h1:i3N96lgrL7cxJAuzWWrTfT6mS2sOxwi5aANJU7+p0+8=",
     "h1:oMzrqQGFY88Cwx06YkFHP6io3jow/22FRZkeK0UZtGY=",
+    "h1:rOXguHd1Bnkrp+Tp7kUCv3CLmE7Jnkq/7JCkyuCcFgk=",
+    "h1:tTmFZZSqViNBhjk8tznYSfbWpYc/5HNbr+6REsZL+cc=",
+    "h1:xZz19PcYCyqLTEcvIgAuIqybd656tMOJrF1u6DrOuOg=",
     "zh:02d1a87c28635779f66d1dcf165b5f16530f809deb6c71c35c3e58d715a88bf4",
     "zh:1285a419c7fd2947f891771bd77d2f6e7dd0cb00621c547b6993947085616009",
     "zh:340faecd0a0036e721480564acbad2ba0da6a9c0c0cd633957dcde76a4ba3798",
