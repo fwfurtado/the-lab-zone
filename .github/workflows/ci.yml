@@ -32,12 +32,6 @@ jobs:
         uses: jdx/mise-action@v3
         with:
           cache: true
-          tool_versions: |
-            terraform 1.15.6
-            pipx:yamllint 1.38.0
-            trivy 0.72.0
-            aqua:koalaman/shellcheck 0.11.0
-            aqua:yannh/kubeconform 0.8.0
 
       - name: Install Python validation dependencies
         run: python3 -m pip install --user PyYAML

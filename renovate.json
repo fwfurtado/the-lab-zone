@@ -13,7 +13,7 @@
   "prConcurrentLimit": 6,
   "prHourlyLimit": 2,
   "rebaseWhen": "behind-base-branch",
-  "rangeStrategy": "pin",
+  "rangeStrategy": "replace",
   "commitMessagePrefix": "chore(deps):",
   "dependencyDashboardTitle": "Dependency Dashboard",
   "assigneesFromCodeOwners": true,
@@ -35,7 +35,18 @@
       "matchManagers": [
         "terraform"
       ],
-      "groupName": "terraform"
+      "groupName": "terraform",
+      "rangeStrategy": "replace"
+    },
+    {
+      "description": "Terraform Core runtime is controlled by .mise.toml",
+      "matchManagers": [
+        "terraform"
+      ],
+      "matchDatasources": [
+        "terraform-version"
+      ],
+      "enabled": false
     },
     {
       "description": "mise tool versions",
