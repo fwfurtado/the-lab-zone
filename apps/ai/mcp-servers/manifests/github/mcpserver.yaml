@@ -10,7 +10,7 @@ metadata:
   name: github
   namespace: ai
 spec:
-  image: ghcr.io/github/github-mcp-server:v1.4.0
+  image: ghcr.io/github/github-mcp-server:v1.6.0
   transport: stdio
   proxyMode: streamable-http   # clientes falam streamable-http no proxy; backend stdio
   proxyPort: 8080

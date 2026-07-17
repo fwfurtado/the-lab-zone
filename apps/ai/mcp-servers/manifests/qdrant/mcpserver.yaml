@@ -4,7 +4,7 @@ metadata:
   name: qdrant-mcp
   namespace: ai
 spec:
-  image: ghcr.io/fwfurtado/mcp-server-qdrant:0.1.0
+  image: ghcr.io/fwfurtado/mcp-server-qdrant:0.2.0
   transport: streamable-http
   mcpPort: 8000
   proxyPort: 8080
