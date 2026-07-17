@@ -7,7 +7,7 @@
 # Plugin S3 (B2 fala S3). initContainer copia o binário do plugin pro /plugins.
 initContainers:
   - name: velero-plugin-for-aws
-    image: velero/velero-plugin-for-aws:v1.11.1   # casa Velero 1.15.2 (chart 8.7.2)
+    image: velero/velero-plugin-for-aws:v1.14.2   # casa Velero 1.15.2 (chart 8.7.2)
     imagePullPolicy: IfNotPresent
     volumeMounts:
       - mountPath: /target
