@@ -23,7 +23,7 @@ spec:
       runtimeClassName: nvidia # injeta nodeSelector + toleration + runtime GPU (via RuntimeClass scheduling)
       containers:
         - name: ollama
-          image: ollama/ollama:0.30.10
+          image: ollama/ollama:0.32.1
           ports:
             - name: http
               containerPort: 11434
