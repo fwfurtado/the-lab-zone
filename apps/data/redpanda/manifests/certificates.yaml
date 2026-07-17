@@ -1,0 +1,76 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: redpanda-selfsigned-issuer
+  namespace: data
+  annotations:
+    argocd.argoproj.io/sync-wave: "-3"
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: redpanda-root-ca
+  namespace: data
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  isCA: true
+  commonName: redpanda-root-ca
+  secretName: redpanda-root-ca
+  duration: 43800h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: redpanda-selfsigned-issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: redpanda-ca-issuer
+  namespace: data
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  ca:
+    secretName: redpanda-root-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: redpanda-default-cert
+  namespace: data
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  secretName: redpanda-default-cert
+  duration: 43800h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - redpanda.data
+    - redpanda.data.svc
+    - redpanda.data.svc.cluster.local
+    - "*.redpanda.data"
+    - "*.redpanda.data.svc"
+    - "*.redpanda.data.svc.cluster.local"
+    - redpanda-cluster.redpanda.data
+    - redpanda-cluster.redpanda.data.svc
+    - redpanda-cluster.redpanda.data.svc.cluster.local
+    - "*.redpanda-cluster.redpanda.data"
+    - "*.redpanda-cluster.redpanda.data.svc"
+    - "*.redpanda-cluster.redpanda.data.svc.cluster.local"
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: redpanda-ca-issuer

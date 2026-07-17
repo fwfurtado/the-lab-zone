@@ -1,0 +1,104 @@
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Redpanda
+metadata:
+  name: redpanda
+  namespace: data
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  chartRef:
+    chartVersion: 26.1.9
+  clusterSpec:
+    image:
+      repository: docker.redpanda.com/redpandadata/redpanda
+      tag: v26.1.13
+    statefulset:
+      replicas: 1
+    external:
+      enabled: false
+      service:
+        enabled: false
+    storage:
+      persistentVolume:
+        enabled: true
+        size: 50Gi
+        storageClass: openebs-hostpath-ssd
+    auth:
+      sasl:
+        enabled: true
+        mechanism: SCRAM-SHA-512
+        secretRef: redpanda-superusers
+        bootstrapUser:
+          mechanism: SCRAM-SHA-512
+          secretKeyRef:
+            name: redpanda-bootstrap-user
+            key: password
+    tls:
+      enabled: true
+      certs:
+        default:
+          secretRef:
+            name: redpanda-default-cert
+          caEnabled: true
+    listeners:
+      admin:
+        port: 9644
+        authenticationMethod: http_basic
+        tls:
+          enabled: true
+          cert: default
+          requireClientAuth: false
+        external: {}
+      kafka:
+        port: 9093
+        authenticationMethod: sasl
+        tls:
+          enabled: true
+          cert: default
+          requireClientAuth: false
+        external: {}
+      schemaRegistry:
+        enabled: true
+        port: 8081
+        authenticationMethod: http_basic
+        tls:
+          enabled: true
+          cert: default
+          requireClientAuth: false
+        external: {}
+      http:
+        enabled: true
+        port: 8082
+        authenticationMethod: http_basic
+        tls:
+          enabled: true
+          cert: default
+          requireClientAuth: false
+        external: {}
+      rpc:
+        port: 33145
+        tls:
+          enabled: true
+          cert: default
+          requireClientAuth: false
+    console:
+      enabled: false
+    monitoring:
+      enabled: false
+    logging:
+      usageStats:
+        enabled: false
+    config:
+      cluster:
+        default_topic_replications: 1
+        internal_topic_replication_factor: 1
+        transaction_coordinator_replication: 1
+        id_allocator_replication: 1
+        default_topic_partitions: 3
+    resources:
+      cpu:
+        cores: 1
+      memory:
+        container:
+          min: 2Gi
+          max: 2Gi

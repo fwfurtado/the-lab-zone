@@ -4,7 +4,7 @@ metadata:
   name: data
   namespace: argocd
 spec:
-  description: "Fase 6 — backends stateful: Garage, CNPG, Valkey, ClickHouse, Qdrant, Memgraph"
+  description: "Fase 6 — backends stateful: Garage, CNPG, Valkey, ClickHouse, Qdrant, Memgraph, Redpanda"
 
   sourceRepos:
     - https://github.com/fwfurtado/the-lab-zone.git

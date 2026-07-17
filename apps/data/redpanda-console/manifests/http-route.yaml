@@ -1,0 +1,25 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: redpanda-console
+  namespace: data
+spec:
+  parentRefs:
+    - name: main
+      namespace: gateway
+      sectionName: https-wildcard
+      group: gateway.networking.k8s.io
+      kind: Gateway
+  hostnames:
+    - "redpanda-console.lab.the-lab.zone"
+  rules:
+    - backendRefs:
+        - name: redpanda-console
+          port: 8080
+          group: ''
+          kind: Service
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /

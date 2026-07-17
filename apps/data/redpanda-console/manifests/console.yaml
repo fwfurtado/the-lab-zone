@@ -1,0 +1,48 @@
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Console
+metadata:
+  name: redpanda-console
+  namespace: data
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  config:
+    server:
+      listenPort: 8080
+    kafka:
+      brokers:
+        - redpanda.data.svc.cluster.local:9093
+      sasl:
+        enabled: true
+        mechanism: SCRAM-SHA-256
+        username: console-user
+      tls:
+        enabled: true
+        caFilepath: /etc/redpanda/tls/ca.crt
+  extraEnv:
+    - name: KAFKA_SASL_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: redpanda-console-auth
+          key: password
+  extraVolumes:
+    - name: redpanda-ca
+      secret:
+        secretName: redpanda-default-cert
+        items:
+          - key: ca.crt
+            path: ca.crt
+  extraVolumeMounts:
+    - name: redpanda-ca
+      mountPath: /etc/redpanda/tls
+      readOnly: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
