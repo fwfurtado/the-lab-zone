@@ -63,7 +63,7 @@ spec:
         containers:
           # Step 1: cria snapshot de storage (full) via API e baixa local.
           - name: snapshot
-            image: curlimages/curl:8.20.0   # pinar por digest
+            image: curlimages/curl:8.21.0   # pinar por digest
             env:
               - name: QDRANT_API_KEY
                 valueFrom:
@@ -94,7 +94,7 @@ spec:
                 echo "Download complete."
           # Step 2: upload pro Garage via rclone (depende do snapshot).
           - name: upload
-            image: rclone/rclone:1.69.0     # pinar por digest
+            image: rclone/rclone:1.74.4     # pinar por digest
             dependencies: [snapshot]
             env:
               - name: S3_ACCESS_KEY

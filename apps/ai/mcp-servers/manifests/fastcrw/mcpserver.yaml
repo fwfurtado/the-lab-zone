@@ -14,7 +14,7 @@ metadata:
   name: fastcrw
   namespace: ai
 spec:
-  image: ghcr.io/us/crw:0.16.0
+  image: ghcr.io/us/crw:0.25.1
   transport: stdio
   proxyMode: streamable-http      # so vale com transport: stdio — expoe HTTP no proxy
   proxyPort: 8080

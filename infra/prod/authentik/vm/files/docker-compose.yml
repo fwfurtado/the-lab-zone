@@ -13,7 +13,7 @@
 # container expande a env), e fica intacto porque o arquivo não passa pelo TF.
 
 x-authentik: &authentik
-  image: ghcr.io/goauthentik/server:2026.5.3
+  image: ghcr.io/goauthentik/server:2026.5.5
   restart: unless-stopped
   env_file:
     - .env
