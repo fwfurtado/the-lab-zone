@@ -64,8 +64,10 @@ Legenda:
    - Cobre GitHub Actions, Terraform, `.mise.toml`, charts Helm em apps Argo CD,
      charts OCI, tag Git do Garage e imagens em manifests/values.
    - Updates agrupados por domínio para reduzir ruído.
-   - Próximo critério de saída: habilitar o Renovate no repositório e ajustar o
-     primeiro Dependency Dashboard conforme os PRs reais gerados.
+   - Execução via GitHub Actions adicionada em `.github/workflows/renovate.yml`,
+     usando o secret `RENOVATE_TOKEN`.
+   - Próximo critério de saída: configurar o token no GitHub, executar o workflow
+     manualmente e ajustar o primeiro Dependency Dashboard conforme os PRs reais gerados.
 
 6. **Políticas Kyverno adicionais**
    - Bloquear `:latest`.
