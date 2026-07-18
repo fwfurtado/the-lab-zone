@@ -183,6 +183,16 @@
       "separateMajorMinor": true
     },
     {
+      "description": "Pin Velero AWS plugin for Backblaze B2 compatibility",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "velero/velero-plugin-for-aws"
+      ],
+      "allowedVersions": "/^v1\\.11\\.1$/"
+    },
+    {
       "description": "Authentik VM container images",
       "matchDatasources": [
         "docker"
