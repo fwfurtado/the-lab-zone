@@ -14,7 +14,7 @@ spec:
     - "redpanda.lab.the-lab.zone"
   rules:
     - backendRefs:
-        - name: redpanda-console
+        - name: redpanda-console-console
           port: 8080
           group: ''
           kind: Service
