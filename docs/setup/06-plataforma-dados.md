@@ -16,8 +16,8 @@ Operators (CNPG wave 5, ClickHouse/Redpanda wave 6) no AppProject `core`; worklo
 project `data` tem `observability` como destination adicional pros VMPodScrape.
 Criar no vault `the-lab-zone` (antes do push): `garage`, `cnpg`, `valkey`, `clickhouse`,
 `redpanda`, `qdrant`, `memgraph` + as keys S3 por serviço (`garage-cnpg`,
-`garage-clickhouse`, `garage-qdrant`). O item `redpanda` deve conter `superuser.username`,
-`superuser.password`, `bootstrap.password` e `console.password` para External Secrets.
+`garage-clickhouse`, `garage-qdrant`). O item `redpanda` deve conter `superuser-username`,
+`superuser-password`, `bootstrap-password` e `console-password` para External Secrets.
 
 ## Ordem de deploy
 ```bash
