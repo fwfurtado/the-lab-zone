@@ -16,6 +16,8 @@ spec:
       enabled: false
       service:
         enabled: false
+    enterprise:
+      license: ""
     storage:
       persistentVolume:
         enabled: true
