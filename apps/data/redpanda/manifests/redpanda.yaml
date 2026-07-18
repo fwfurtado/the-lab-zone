@@ -86,6 +86,8 @@ spec:
     logging:
       usageStats:
         enabled: false
+    tuning:
+      tune_aio_events: false
     config:
       cluster:
         default_topic_replications: 1
