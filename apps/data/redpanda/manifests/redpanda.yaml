@@ -92,8 +92,6 @@ spec:
       cluster:
         default_topic_replications: 1
         internal_topic_replication_factor: 1
-        transaction_coordinator_replication_factor: 1
-        id_allocator_replication_factor: 1
         default_topic_partitions: 3
     resources:
       cpu:
