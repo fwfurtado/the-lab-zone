@@ -20,7 +20,12 @@ spec:
     spark.hadoop.fs.s3a.endpoint: "http://garage.data.svc.cluster.local:3900"
     spark.hadoop.fs.s3a.path.style.access: "true"
     spark.hadoop.fs.s3a.endpoint.region: "garage"
-    spark.hadoop.fs.s3a.aws.credentials.provider: "org.apache.hadoop.fs.s3a.EnvironmentVariableCredentialsProvider"
+    # FQCN é do AWS SDK v2 (software.amazon.awssdk...), não do pacote org.apache.hadoop.fs.s3a
+    # -- não existe classe EnvironmentVariableCredentialsProvider nesse pacote do Hadoop.
+    # Confirmado em CredentialProviderListFactory.java (hadoop-aws 3.4.2): esta classe já é a
+    # PRIMEIRA da lista default (STANDARD_AWS_PROVIDERS) quando esta chave nem é declarada --
+    # deixamos explícito por clareza de intenção, não porque seja estritamente necessário.
+    spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider"
     spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
     # ---- fim do bloco s3a canônico ----
   driver:
