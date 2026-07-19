@@ -104,9 +104,15 @@ spec:
           # mode, o que sobe um JupyterLab acidental em localhost e bloqueia o launch.
           # A SparkSession nasce dentro do kernel (startup do IPython + spark-defaults).
           command: ["/bin/sh", "-c"]
+          # O cp roda porque montar o ConfigMap direto em ~/.ipython/... faz o kubelet
+          # criar os dirs-pai como ROOT -> IPython não consegue escrever no profile e
+          # cai num perfil temporário, ignorando o startup. /home/spark é gravável
+          # pelo uid 185 (chown no Dockerfile), então copiamos no boot do container.
           args:
             - >-
-              jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser
+              mkdir -p /home/spark/.ipython/profile_default/startup &&
+              cp /etc/ipython-startup/*.py /home/spark/.ipython/profile_default/startup/ &&
+              exec jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser
               --ServerApp.root_dir=/home/spark/notebooks
               --IdentityProvider.token=${JUPYTER_TOKEN}
           env:
@@ -129,7 +135,7 @@ spec:
             - name: spark-defaults
               mountPath: /etc/spark-conf
             - name: ipython-startup
-              mountPath: /home/spark/.ipython/profile_default/startup
+              mountPath: /etc/ipython-startup
             - name: notebooks
               mountPath: /home/spark/notebooks
           resources:
