@@ -9,10 +9,10 @@ metadata:
 spec:
   type: Python
   mode: cluster
-  image: ghcr.io/fwfurtado/spark-delta:0.1.0
+  image: ghcr.io/fwfurtado/spark-delta:0.2.0
   imagePullPolicy: IfNotPresent
   mainApplicationFile: local:///opt/spark/scripts/bootstrap_accounts.py
-  sparkVersion: "4.1.2"
+  sparkVersion: "4.1.1"
   restartPolicy:
     type: Never
   sparkConf:
