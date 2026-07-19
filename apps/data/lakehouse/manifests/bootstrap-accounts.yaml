@@ -1,0 +1,53 @@
+# Blocos canônicos (comentário abaixo) repetidos nas próximas SparkApplications do
+# lakehouse -- repo não usa Kustomize, esta é a fonte de verdade textual; ao editar
+# aqui, replicar nos demais arquivos que tocam a tabela Delta.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: bootstrap-accounts
+  namespace: data
+spec:
+  type: Python
+  mode: cluster
+  image: ghcr.io/fwfurtado/spark-delta:0.1.0
+  imagePullPolicy: IfNotPresent
+  mainApplicationFile: local:///opt/spark/scripts/bootstrap_accounts.py
+  sparkVersion: "4.1.2"
+  restartPolicy:
+    type: Never
+  sparkConf:
+    # ---- bloco s3a canônico (Garage) -- usado por TODA SparkApplication do lakehouse ----
+    spark.hadoop.fs.s3a.endpoint: "http://garage.data.svc.cluster.local:3900"
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.endpoint.region: "garage"
+    spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    # ---- fim do bloco s3a canônico ----
+    # ---- bloco Delta canônico -- usado por toda SparkApplication que toca a tabela accounts ----
+    spark.sql.extensions: "io.delta.sql.DeltaSparkSessionExtension"
+    spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+    # ---- fim do bloco Delta canônico ----
+  driver:
+    serviceAccount: spark-operator-spark
+    cores: 1
+    memory: "768m"
+    envFrom:
+      - secretRef:
+          name: spark-garage-credentials
+    volumeMounts:
+      - name: job-scripts
+        mountPath: /opt/spark/scripts
+  executor:
+    instances: 2
+    cores: 1
+    memory: "768m"
+    envFrom:
+      - secretRef:
+          name: spark-garage-credentials
+    volumeMounts:
+      - name: job-scripts
+        mountPath: /opt/spark/scripts
+  volumes:
+    - name: job-scripts
+      configMap:
+        name: lakehouse-job-scripts
