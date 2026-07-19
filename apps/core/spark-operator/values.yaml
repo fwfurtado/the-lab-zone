@@ -1,0 +1,52 @@
+# Values para o chart kubeflow/spark-operator 2.4.0.
+# Referência completa: https://github.com/kubeflow/spark-operator/blob/v2.4.0/charts/spark-operator-chart/values.yaml
+
+# Mantém CRDs em dia em upgrades futuros de targetRevision (helm upgrade não
+# atualiza CRDs sozinho; isto cria um Job pre-upgrade com `kubectl apply --server-side`).
+# A instalação inicial das CRDs já é coberta pelo ServerSideApply=true do syncOptions
+# do app.yaml (via pasta crds/ do chart, renderizada normalmente pelo ArgoCD).
+hook:
+  upgradeCrd: true
+
+controller:
+  replicas: 1
+  # Cada submissão de SparkApplication spawna, DENTRO do pod do controller, uma JVM
+  # de spark-submit (-Xmx128m por padrão). Isso é diferente do driver: o controller
+  # paga esse custo de heap para TODA submissão em andamento, não só o processamento
+  # do CRD. Sizing generoso aqui evita que o cgroup do controller mate essas JVMs.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+webhook:
+  enable: true
+  # Sem cert-manager: usa a rotação de certificado self-signed embutida no
+  # próprio controller (gera e faz patch do CA bundle no startup). Evita
+  # acoplar o spark-operator a outro app core (cert-manager) só para isso;
+  # revisar se algum dia padronizarmos certs via cert-manager no repo todo.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+
+certManager:
+  enable: false
+
+spark:
+  # Único namespace autorizado a rodar SparkApplications. O chart cria Role+RoleBinding
+  # (não ClusterRole) escopados a este namespace para a ServiceAccount das aplicações
+  # -- consistente com a política de no-wildcard.
+  jobNamespaces:
+    - data
+
+# Métricas do controller ficam disponíveis em :8080/metrics (default do chart),
+# mas o scrape (VMPodScrape) entra junto com a observabilidade dos jobs na
+# etapa 1.5 -- mesmo padrão do redpanda-operator, que também não é scrapeado
+# isoladamente; só as instâncias em apps/data o são.
