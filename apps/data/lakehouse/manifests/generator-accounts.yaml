@@ -1,0 +1,79 @@
+# Gerador de carga: ÚNICO writer da tabela accounts (MERGE + OPTIMIZE/VACUUM no mesmo
+# processo -- Delta OSS em S3-compatível não suporta multi-writer sem DynamoDB LogStore).
+# NUNCA criar outra SparkApplication que escreva nesta tabela enquanto este roda.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: generator-accounts
+  namespace: data
+spec:
+  type: Python
+  mode: cluster
+  image: ghcr.io/fwfurtado/spark-delta:0.1.0
+  imagePullPolicy: IfNotPresent
+  mainApplicationFile: local:///opt/spark/scripts/generator_accounts.py
+  sparkVersion: "4.1.2"
+  # loop infinito: qualquer término é anômalo -- sempre reiniciar (retoma lendo
+  # max(account_id); rounds usam seed própria, restart não corrompe nada)
+  restartPolicy:
+    type: Always
+    onFailureRetries: 5
+    onFailureRetryInterval: 30
+    onSubmissionFailureRetries: 5
+    onSubmissionFailureRetryInterval: 60
+  sparkConf:
+    # ---- bloco s3a canônico (Garage) ----
+    spark.hadoop.fs.s3a.endpoint: "http://garage.data.svc.cluster.local:3900"
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.endpoint.region: "garage"
+    spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    # ---- bloco Delta canônico ----
+    spark.sql.extensions: "io.delta.sql.DeltaSparkSessionExtension"
+    spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+    # tabela pequena + cluster pequeno: 200 partições de shuffle (default) só geram
+    # overhead de task scheduling no MERGE
+    spark.sql.shuffle.partitions: "8"
+  driver:
+    serviceAccount: spark-operator-spark
+    cores: 1
+    memory: "1g"
+    env:
+      - name: TABLE_PATH
+        value: "s3a://lakehouse/tables/accounts"
+      - name: BATCH_SIZE
+        value: "5000"
+      - name: SLEEP_SECONDS
+        value: "30"
+      - name: INSERT_PCT
+        value: "0.15"
+      - name: UPDATE_PCT
+        value: "0.75"
+      - name: DELETE_PCT
+        value: "0.10"
+      - name: ZIPF_S
+        value: "1.1"
+      - name: MAINTENANCE_EVERY
+        value: "120"
+      - name: VACUUM_RETAIN_HOURS
+        value: "6"
+    envFrom:
+      - secretRef:
+          name: spark-garage-credentials
+    volumeMounts:
+      - name: job-scripts
+        mountPath: /opt/spark/scripts
+  executor:
+    instances: 1
+    cores: 1
+    memory: "1g"
+    envFrom:
+      - secretRef:
+          name: spark-garage-credentials
+    volumeMounts:
+      - name: job-scripts
+        mountPath: /opt/spark/scripts
+  volumes:
+    - name: job-scripts
+      configMap:
+        name: lakehouse-job-scripts
