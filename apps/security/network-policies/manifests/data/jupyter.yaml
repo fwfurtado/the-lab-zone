@@ -1,0 +1,20 @@
+# JupyterLab do lakehouse: só o Gateway (identidade `ingress` do Cilium/Envoy) fala
+# com ele, na 8888. Auth de aplicação é o token do Jupyter (secret jupyter-lakehouse).
+# Egress do pod (Garage) é coberto pela regra spark-role na CNP do garage -- egress
+# não é default-deny no namespace, só ingress.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: spark-jupyter-default-deny-ingress
+  namespace: data
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: spark-jupyter
+  ingress:
+    - fromEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8888"
+              protocol: TCP

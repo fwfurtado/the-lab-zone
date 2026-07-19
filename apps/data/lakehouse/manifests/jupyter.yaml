@@ -1,0 +1,166 @@
+# JupyterLab para queries ad-hoc no lakehouse.
+# O pod carrega DOIS papéis de rede: app.kubernetes.io/name=spark-jupyter (CNP própria,
+# ingress do Gateway) e spark-role=driver (pega carona na regra do Spark na CNP do Garage).
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: jupyter-lakehouse-token
+  namespace: data
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: jupyter-lakehouse-token
+    creationPolicy: Owner
+  data:
+    - secretKey: JUPYTER_TOKEN
+      remoteRef:
+        key: jupyter-lakehouse
+        property: token
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jupyter-notebooks
+  namespace: data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: openebs-hostpath
+  resources:
+    requests:
+      storage: 2Gi
+---
+# Confs canônicos via spark-defaults.conf (SPARK_CONF_DIR aponta pra cá) -- no Jupyter
+# você nunca digita --conf. Mesmo conteúdo dos blocos canônicos das SparkApplications;
+# ao editar lá, replicar aqui.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jupyter-spark-defaults
+  namespace: data
+data:
+  spark-defaults.conf: |
+    # ---- bloco s3a canônico (Garage) ----
+    spark.hadoop.fs.s3a.endpoint                  http://garage.data.svc.cluster.local:3900
+    spark.hadoop.fs.s3a.path.style.access         true
+    spark.hadoop.fs.s3a.endpoint.region           garage
+    spark.hadoop.fs.s3a.aws.credentials.provider  software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider
+    spark.hadoop.fs.s3a.connection.ssl.enabled    false
+    # ---- bloco Delta canônico ----
+    spark.sql.extensions                          io.delta.sql.DeltaSparkSessionExtension
+    spark.sql.catalog.spark_catalog               org.apache.spark.sql.delta.catalog.DeltaCatalog
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-jupyter
+  namespace: data
+  labels:
+    app.kubernetes.io/name: spark-jupyter
+spec:
+  replicas: 1   # escalar pra 0 quando não estiver em uso poupa memória do T630
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: spark-jupyter
+  strategy:
+    type: Recreate   # PVC RWO + hostpath: nunca dois pods disputando o volume
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: spark-jupyter
+        spark-role: driver   # cobre o pod na regra Spark->Garage da CNP do garage
+    spec:
+      containers:
+        - name: jupyter
+          image: ghcr.io/fwfurtado/spark-jupyter:0.1.0
+          command: ["/bin/sh", "-c"]
+          args:
+            - >-
+              PYSPARK_DRIVER_PYTHON=jupyter-lab
+              PYSPARK_DRIVER_PYTHON_OPTS="--ip=0.0.0.0 --port=8888 --no-browser
+              --ServerApp.root_dir=/home/spark/notebooks
+              --IdentityProvider.token=${JUPYTER_TOKEN}"
+              /opt/spark/bin/pyspark --master local[2]
+          env:
+            - name: SPARK_CONF_DIR
+              value: /etc/spark-conf
+          envFrom:
+            - secretRef:
+                name: spark-garage-credentials
+            - secretRef:
+                name: jupyter-lakehouse-token
+          ports:
+            - containerPort: 8888
+              name: http
+          volumeMounts:
+            - name: spark-defaults
+              mountPath: /etc/spark-conf
+            - name: notebooks
+              mountPath: /home/spark/notebooks
+          resources:
+            requests:
+              cpu: 100m
+              memory: 768Mi
+            limits:
+              memory: 2Gi
+          readinessProbe:
+            httpGet:
+              path: /api
+              port: 8888
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: spark-defaults
+          configMap:
+            name: jupyter-spark-defaults
+        - name: notebooks
+          persistentVolumeClaim:
+            claimName: jupyter-notebooks
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spark-jupyter
+  namespace: data
+  labels:
+    app.kubernetes.io/name: spark-jupyter
+spec:
+  selector:
+    app.kubernetes.io/name: spark-jupyter
+  ports:
+    - name: http
+      port: 8888
+      targetPort: 8888
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: spark-jupyter
+  namespace: data
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: main
+      namespace: gateway
+      sectionName: https-wildcard
+  hostnames:
+    - "jupyter.lab.the-lab.zone"
+  rules:
+    - backendRefs:
+        - name: spark-jupyter
+          port: 8888
+          group: ""
+          kind: Service
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /
