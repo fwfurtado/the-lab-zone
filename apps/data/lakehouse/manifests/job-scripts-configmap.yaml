@@ -179,12 +179,13 @@ data:
         it_insert = iter(insert_ids)
         it_touch = iter(touch_ids)
         now = datetime.now(timezone.utc)
-        for op in ops:
+        for seq, op in enumerate(ops):
             acc = int(next(it_insert) if op == "insert" else next(it_touch))
             rows.append(
                 (
+                    seq,
                     acc,
-                    op,
+                    str(op),  # numpy.str_ quebra a inferência de schema do createDataFrame
                     str(rng.choice(STATUS)),
                     str(rng.choice(TIER)),
                     str(rng.choice(REGIONS)),
@@ -194,7 +195,7 @@ data:
             )
 
         df = spark.createDataFrame(
-            rows, ["account_id", "op", "status", "tier", "region", "balance", "updated_at"]
+            rows, ["seq", "account_id", "op", "status", "tier", "region", "balance", "updated_at"]
         )
         # MERGE exige fonte com no máx. 1 linha por chave; Zipf GARANTE colisão nas
         # quentes. Dedup: fica a última op gerada por chave (row_number por ordem de
@@ -202,8 +203,10 @@ data:
         # verificação de aceite usa os counts do CDF, não a intenção.
         from pyspark.sql.window import Window
 
-        w = Window.partitionBy("account_id").orderBy(F.monotonically_increasing_id().desc())
-        df = df.withColumn("_rn", F.row_number().over(w)).filter("_rn = 1").drop("_rn")
+        # seq explícita da geração: dedup determinístico ("última op gerada vence"),
+        # sem expressão não-determinística no order by da window
+        w = Window.partitionBy("account_id").orderBy(F.col("seq").desc())
+        df = df.withColumn("_rn", F.row_number().over(w)).filter("_rn = 1").drop("_rn", "seq")
         return df, int(insert_ids[-1]) if n_insert > 0 else max_existing_id
 
 
