@@ -1,0 +1,49 @@
+# Bloco s3a canônico (comentário abaixo) é repetido nas próximas SparkApplications
+# do lakehouse (gerador, streaming CDF, manutenção) -- repo não usa Kustomize, então
+# esta é a fonte de verdade textual; ao editar aqui, replicar nos demais arquivos.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: smoke-s3a
+  namespace: data
+spec:
+  type: Python
+  mode: cluster
+  image: ghcr.io/fwfurtado/spark-delta:0.1.0
+  imagePullPolicy: IfNotPresent
+  mainApplicationFile: local:///opt/spark/scripts/smoke_s3a.py
+  sparkVersion: "4.1.2"
+  restartPolicy:
+    type: Never
+  sparkConf:
+    # ---- bloco s3a canônico (Garage) ----
+    spark.hadoop.fs.s3a.endpoint: "http://garage.data.svc.cluster.local:3900"
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.endpoint.region: "garage"
+    spark.hadoop.fs.s3a.aws.credentials.provider: "org.apache.hadoop.fs.s3a.EnvironmentVariableCredentialsProvider"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    # ---- fim do bloco s3a canônico ----
+  driver:
+    serviceAccount: spark-operator-spark
+    cores: 1
+    memory: "512m"
+    envFrom:
+      - secretRef:
+          name: spark-garage-credentials
+    volumeMounts:
+      - name: job-scripts
+        mountPath: /opt/spark/scripts
+  executor:
+    instances: 1
+    cores: 1
+    memory: "512m"
+    envFrom:
+      - secretRef:
+          name: spark-garage-credentials
+    volumeMounts:
+      - name: job-scripts
+        mountPath: /opt/spark/scripts
+  volumes:
+    - name: job-scripts
+      configMap:
+        name: lakehouse-job-scripts

@@ -1,0 +1,26 @@
+# Scripts PySpark dos jobs do lakehouse, montados via volumeMount nas SparkApplications.
+# Cresce nas próximas etapas (gerador, streaming CDF, manutenção) — uma chave por script.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lakehouse-job-scripts
+  namespace: data
+data:
+  smoke_s3a.py: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.appName("smoke-s3a").getOrCreate()
+
+    path = "s3a://lakehouse/smoke/write-read-test"
+
+    data = [(1, "a"), (2, "b"), (3, "c")]
+    df = spark.createDataFrame(data, ["id", "value"])
+    df.write.mode("overwrite").parquet(path)
+
+    read_back = spark.read.parquet(path)
+    count = read_back.count()
+    assert count == 3, f"esperava 3 linhas, veio {count}"
+    read_back.orderBy("id").show()
+
+    print(f"SMOKE_S3A_OK rows={count}")
+    spark.stop()

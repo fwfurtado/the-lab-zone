@@ -84,6 +84,18 @@ spec:
         - matchLabels:
             io.kubernetes.pod.namespace: ai
             app.kubernetes.io/name: slack-qa-bot
+        # lakehouse (Spark/Delta, etapa 1.2): driver e executor leem/escrevem Parquet
+        # via s3a no bucket `lakehouse`. Pods do spark-operator NÃO carregam
+        # app.kubernetes.io/name -- o label real é spark-role (driver/executor),
+        # setado pelo próprio Spark, não pelo operator. Cobre qualquer SparkApplication
+        # em `data`, não só uma app específica -- o Role escopado por namespace do
+        # operator já limita quem pode rodar SparkApplication ali.
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            spark-role: driver
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            spark-role: executor
       toPorts:
         - ports:
             - port: "3900"
