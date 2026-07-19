@@ -56,6 +56,24 @@ data:
     # ---- bloco Delta canônico ----
     spark.sql.extensions                          io.delta.sql.DeltaSparkSessionExtension
     spark.sql.catalog.spark_catalog               org.apache.spark.sql.delta.catalog.DeltaCatalog
+    # ---- sessão local do Jupyter (a SparkSession nasce DENTRO do kernel via
+    # getOrCreate(); o master precisa vir daqui, não há mais bin/pyspark no launch) ----
+    spark.master                                  local[2]
+    spark.app.name                                jupyter-lakehouse
+---
+# Todo kernel nasce com `spark` pronto (mesma UX do pyspark REPL). getOrCreate() lê
+# SPARK_CONF_DIR -> spark-defaults.conf (blocos canônicos + master local[2]).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jupyter-ipython-startup
+  namespace: data
+data:
+  00-spark.py: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    print(f"SparkSession pronta: {spark.version} (master={spark.sparkContext.master})")
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -80,17 +98,25 @@ spec:
       containers:
         - name: jupyter
           image: ghcr.io/fwfurtado/spark-jupyter:0.1.0
+          # Jupyter roda DIRETO (não via bin/pyspark): o Spark 4 quebrou o padrão
+          # PYSPARK_DRIVER_PYTHON=jupyter -- bin/pyspark agora executa
+          # `$PYSPARK_DRIVER_PYTHON -c "...spark_connect_mode..."` p/ detectar connect
+          # mode, o que sobe um JupyterLab acidental em localhost e bloqueia o launch.
+          # A SparkSession nasce dentro do kernel (startup do IPython + spark-defaults).
           command: ["/bin/sh", "-c"]
           args:
             - >-
-              PYSPARK_DRIVER_PYTHON=jupyter-lab
-              PYSPARK_DRIVER_PYTHON_OPTS="--ip=0.0.0.0 --port=8888 --no-browser
+              jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser
               --ServerApp.root_dir=/home/spark/notebooks
-              --IdentityProvider.token=${JUPYTER_TOKEN}"
-              /opt/spark/bin/pyspark --master local[2]
+              --IdentityProvider.token=${JUPYTER_TOKEN}
           env:
             - name: SPARK_CONF_DIR
               value: /etc/spark-conf
+            # pyspark importado direto do SPARK_HOME (não pip: pip traria jars próprios,
+            # divergindo da matriz curada da imagem). Zip do py4j acompanha a versão do
+            # Spark -- conferir no bump de imagem.
+            - name: PYTHONPATH
+              value: /opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.9-src.zip
           envFrom:
             - secretRef:
                 name: spark-garage-credentials
@@ -102,6 +128,8 @@ spec:
           volumeMounts:
             - name: spark-defaults
               mountPath: /etc/spark-conf
+            - name: ipython-startup
+              mountPath: /home/spark/.ipython/profile_default/startup
             - name: notebooks
               mountPath: /home/spark/notebooks
           resources:
@@ -120,6 +148,9 @@ spec:
         - name: spark-defaults
           configMap:
             name: jupyter-spark-defaults
+        - name: ipython-startup
+          configMap:
+            name: jupyter-ipython-startup
         - name: notebooks
           persistentVolumeClaim:
             claimName: jupyter-notebooks
