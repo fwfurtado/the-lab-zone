@@ -10,5 +10,6 @@ output "buckets" {
     triage_reports    = aws_s3_bucket.triages.bucket
     tempo             = aws_s3_bucket.tempo.bucket
     pyroscope         = aws_s3_bucket.pyroscope.bucket
+    lakehouse         = aws_s3_bucket.lakehouse.bucket
   }
 }
