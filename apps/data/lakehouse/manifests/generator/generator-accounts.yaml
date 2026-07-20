@@ -38,6 +38,16 @@ spec:
     serviceAccount: spark-operator-spark
     cores: 1
     memory: "1g"
+    # Não co-locar Spark com Garage: o tráfego S3/Delta força leituras frias no
+    # Garage e dispara major page faults quando ambos disputam o mesmo page cache.
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: garage
+                app.kubernetes.io/instance: garage
+            topologyKey: kubernetes.io/hostname
     env:
       - name: TABLE_PATH
         value: "s3a://lakehouse/tables/accounts"
@@ -71,6 +81,14 @@ spec:
     # em 1g não estoura cgroup sozinho -- o excesso é NATIVO (buffers Netty/Parquet +
     # fonte materializada do MERGE via localCheckpoint). Sobe a fatia nativa, não o heap.
     memoryOverhead: "1g"
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: garage
+                app.kubernetes.io/instance: garage
+            topologyKey: kubernetes.io/hostname
     envFrom:
       - secretRef:
           name: spark-garage-credentials

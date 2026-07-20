@@ -31,6 +31,16 @@ spec:
     serviceAccount: spark-operator-spark
     cores: 1
     memory: "768m"
+    # Não co-locar Spark com Garage: o tráfego S3/Delta força leituras frias no
+    # Garage e dispara major page faults quando ambos disputam o mesmo page cache.
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: garage
+                app.kubernetes.io/instance: garage
+            topologyKey: kubernetes.io/hostname
     envFrom:
       - secretRef:
           name: spark-garage-credentials
@@ -41,6 +51,14 @@ spec:
     instances: 2
     cores: 1
     memory: "768m"
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/name: garage
+                app.kubernetes.io/instance: garage
+            topologyKey: kubernetes.io/hostname
     envFrom:
       - secretRef:
           name: spark-garage-credentials

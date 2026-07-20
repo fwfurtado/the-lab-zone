@@ -123,11 +123,13 @@ monitoring:
       enabled: false
 
 resources:
+  # Garage atende S3 sobre LMDB/arquivos locais; limite baixo expulsa page cache do
+  # cgroup e gera NodeMemoryMajorPagesFaults sob leitura Spark/Delta.
   requests:
     cpu: 100m
-    memory: 256Mi
+    memory: 1Gi
   limits:
-    memory: 512Mi
+    memory: 2Gi
 
 livenessProbe:
   httpGet:

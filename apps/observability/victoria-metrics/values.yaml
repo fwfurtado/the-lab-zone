@@ -26,9 +26,9 @@ vmsingle:
     resources:
       requests:
         cpu: 200m
-        memory: 512Mi
-      limits:
         memory: 2Gi
+      limits:
+        memory: 4Gi
 
 vmagent:
   enabled: true
