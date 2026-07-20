@@ -50,15 +50,18 @@ spec:
     type: simple
     acls:
       - type: allow
+        host: '*'
         resource:
           type: topic
           name: accounts.cdf
           patternType: literal
         operations: [Write, Describe]
       - type: allow
+        host: '*'
         resource:
           type: cluster
           # regra CEL do CRD: p/ type cluster o name é estruturalmente obrigatório
           # mas DEVE ser string vazia (self.name == "")
           name: ""
+          patternType: literal
         operations: [IdempotentWrite]
