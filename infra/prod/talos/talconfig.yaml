@@ -106,6 +106,31 @@ nodes:
           - network: 0.0.0.0/0
             gateway: 10.40.0.1
 
+  - hostname: worker-4-compute
+    ipAddress: 10.40.6.24
+    controlPlane: false
+    talosImageURL: factory.talos.dev/installer/ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515
+    installDiskSelector:
+      size: ">= 190GB" # pega o boot disk de 200GB; exclui o disco de user volume
+    nodeLabels:
+      node-role.lab/compute: "true"
+    patches:
+      - |-
+        machine:
+          kubelet:
+            extraConfig:
+              registerWithTaints:
+                - key: "workload.lab/compute"
+                  value: "true"
+                  effect: "NoSchedule"
+    networkInterfaces:
+      - deviceSelector:
+          busPath: "0*"
+        addresses:
+          - 10.40.6.24/21
+        routes:
+          - network: 0.0.0.0/0
+            gateway: 10.40.0.1
   - hostname: worker-3-gpu
     ipAddress: 10.40.6.23
     controlPlane: false
