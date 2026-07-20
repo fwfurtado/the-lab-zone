@@ -97,7 +97,7 @@ spec:
     spec:
       containers:
         - name: jupyter
-          image: ghcr.io/fwfurtado/spark-jupyter:0.1.1
+          image: ghcr.io/fwfurtado/spark-jupyter:0.2.0
           # Jupyter roda DIRETO (não via bin/pyspark): o Spark 4 quebrou o padrão
           # PYSPARK_DRIVER_PYTHON=jupyter -- bin/pyspark agora executa
           # `$PYSPARK_DRIVER_PYTHON -c "...spark_connect_mode..."` p/ detectar connect
