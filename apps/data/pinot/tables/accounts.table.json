@@ -17,7 +17,9 @@
   },
   "upsertConfig": {
     "mode": "FULL",
-    "comparisonColumns": ["_commit_version"],
+    "comparisonColumns": [
+      "_commit_version"
+    ],
     "deleteRecordColumn": "deleted"
   },
   "ingestionConfig": {
@@ -33,11 +35,11 @@
           "stream.kafka.consumer.prop.auto.offset.reset": "smallest",
           "realtime.segment.flush.threshold.rows": "500000",
           "realtime.segment.flush.threshold.time": "6h",
-          "stream.kafka.consumer.prop.security.protocol": "SASL_SSL",
-          "stream.kafka.consumer.prop.sasl.mechanism": "SCRAM-SHA-512",
-          "stream.kafka.consumer.prop.sasl.jaas.config": "org.apache.kafka.common.security.scram.ScramLoginModule required username=\"pinot-cdf\" password=\"${KAFKA_PASSWORD}\";",
-          "stream.kafka.consumer.prop.ssl.truststore.type": "PEM",
-          "stream.kafka.consumer.prop.ssl.truststore.location": "/etc/redpanda-ca/ca.crt"
+          "security.protocol": "SASL_SSL",
+          "sasl.mechanism": "SCRAM-SHA-512",
+          "sasl.jaas.config": "org.apache.kafka.common.security.scram.ScramLoginModule required username=\"pinot-cdf\" password=\"${KAFKA_PASSWORD}\";",
+          "ssl.truststore.type": "PEM",
+          "ssl.truststore.location": "/etc/redpanda-ca/ca.crt"
         }
       ]
     }
