@@ -48,7 +48,9 @@ data:
     TBLPROPERTIES (
       'delta.enableChangeDataFeed' = 'true',
       'delta.logRetentionDuration' = 'interval 1 days',
-      'delta.deletedFileRetentionDuration' = 'interval 1 hours'
+      -- 6h casa com VACUUM_RETAIN_HOURS do gerador: esta property é o guard de
+      -- leitura do CDF/time-travel (a promessa), o RETAIN do VACUUM é a prática
+      'delta.deletedFileRetentionDuration' = 'interval 6 hours'
     )
     """)
 
