@@ -1,0 +1,63 @@
+# Credencial SASL do job de streaming: 1Password é a fonte (convenção ESO do repo);
+# o User CR consome a MESMA secret que o job -- rotação no 1Password converge os dois.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: spark-kafka-credentials
+  namespace: data
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: spark-kafka-credentials
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        KAFKA_PASSWORD: "{{ .password }}"
+  data:
+    - secretKey: password
+      remoteRef:
+        key: redpanda-spark
+        property: password
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore
+---
+# Username = metadata.name (spark-cdf). ACLs mínimas de producer:
+# Write+Describe no tópico, IdempotentWrite no cluster (o producer do
+# kafka-clients 3.x liga idempotence por default e exige essa ACL).
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: User
+metadata:
+  name: spark-cdf
+  namespace: data
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  authentication:
+    type: scram-sha-512
+    password:
+      valueFrom:
+        secretKeyRef:
+          name: spark-kafka-credentials
+          key: KAFKA_PASSWORD
+  authorization:
+    type: simple
+    acls:
+      - type: allow
+        resource:
+          type: topic
+          name: accounts.cdf
+          patternType: literal
+        operations: [Write, Describe]
+      - type: allow
+        resource:
+          type: cluster
+          name: kafka-cluster
+          patternType: literal
+        operations: [IdempotentWrite]

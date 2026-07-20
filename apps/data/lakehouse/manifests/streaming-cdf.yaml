@@ -1,0 +1,89 @@
+# Streaming CDF -> Redpanda: só LÊ a tabela accounts (o único writer segue sendo o
+# gerador). restartPolicy Always + checkpoint no Garage = resume exato pós-crash.
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: streaming-cdf
+  namespace: data
+spec:
+  type: Python
+  mode: cluster
+  image: ghcr.io/fwfurtado/spark-delta:0.2.0
+  imagePullPolicy: IfNotPresent
+  mainApplicationFile: local:///opt/spark/scripts/cdf_to_kafka.py
+  sparkVersion: "4.1.1"
+  restartPolicy:
+    type: Always
+    onFailureRetries: 10
+    onFailureRetryInterval: 30
+    onSubmissionFailureRetries: 5
+    onSubmissionFailureRetryInterval: 60
+  sparkConf:
+    # ---- bloco s3a canônico (Garage) ----
+    spark.hadoop.fs.s3a.endpoint: "http://garage.data.svc.cluster.local:3900"
+    spark.hadoop.fs.s3a.path.style.access: "true"
+    spark.hadoop.fs.s3a.endpoint.region: "garage"
+    spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider"
+    spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
+    # ---- bloco Delta canônico ----
+    spark.sql.extensions: "io.delta.sql.DeltaSparkSessionExtension"
+    spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+    spark.sql.shuffle.partitions: "8"
+  driver:
+    serviceAccount: spark-operator-spark
+    cores: 1
+    memory: "1g"
+    env:
+      - name: TABLE_PATH
+        value: "s3a://lakehouse/tables/accounts"
+      - name: KAFKA_TOPIC
+        value: "accounts.cdf"
+      - name: KAFKA_BOOTSTRAP
+        value: "redpanda.data.svc.cluster.local:9093"
+      - name: CHECKPOINT_PATH
+        value: "s3a://lakehouse/_checkpoints/accounts-cdf"
+      - name: TRIGGER_SECONDS
+        value: "30"
+      - name: KAFKA_USERNAME
+        value: "spark-cdf"
+    envFrom:
+      - secretRef:
+          name: spark-garage-credentials
+      - secretRef:
+          name: spark-kafka-credentials
+    volumeMounts:
+      - name: job-scripts
+        mountPath: /opt/spark/scripts
+      - name: redpanda-ca
+        mountPath: /etc/redpanda-ca
+        readOnly: true
+  executor:
+    instances: 1
+    cores: 1
+    memory: "1g"
+    # mesma lição do gerador: fatia nativa (buffers do producer Kafka + Netty)
+    memoryOverhead: "512m"
+    env:
+      - name: KAFKA_USERNAME
+        value: "spark-cdf"
+    envFrom:
+      - secretRef:
+          name: spark-garage-credentials
+      - secretRef:
+          name: spark-kafka-credentials
+    volumeMounts:
+      - name: job-scripts
+        mountPath: /opt/spark/scripts
+      - name: redpanda-ca
+        mountPath: /etc/redpanda-ca
+        readOnly: true
+  volumes:
+    - name: job-scripts
+      configMap:
+        name: lakehouse-job-scripts
+    - name: redpanda-ca
+      secret:
+        secretName: redpanda-default-cert
+        items:
+          - key: ca.crt
+            path: ca.crt

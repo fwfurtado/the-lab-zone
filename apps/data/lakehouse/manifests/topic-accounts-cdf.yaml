@@ -1,0 +1,18 @@
+# Tópico do CDF. clusterRef delega ao operator a conexão/auth com o cluster.
+# cleanup.policy=delete (NÃO compact): deletes viajam como registro completo com
+# deleted=true (deleteRecordColumn do Pinot), não como tombstone null de compactação.
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: Topic
+metadata:
+  name: accounts-cdf
+  namespace: data
+spec:
+  overwriteTopicName: accounts.cdf   # nome do CR não aceita ponto; o tópico real aceita
+  partitions: 3
+  replicationFactor: 1
+  additionalConfig:
+    retention.ms: "86400000"   # 24h: Pinot consome em segundos; janela é p/ replay/debug
+    cleanup.policy: "delete"
+  cluster:
+    clusterRef:
+      name: redpanda
