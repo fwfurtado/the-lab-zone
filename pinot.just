@@ -19,7 +19,7 @@ TABLES_DIR := "apps/data/pinot/tables"
     set -euo pipefail
     PASS=$(op read "op://the-lab-zone/redpanda-pinot/password")
     sed "s|\${KAFKA_PASSWORD}|${PASS}|" {{TABLES_DIR}}/accounts.table.json \
-      | curl -sf -X POST "{{CONTROLLER}}/tables" -H "Content-Type: application/json" -d @- \
+      | curl -sf --max-time 90 -X POST "{{CONTROLLER}}/tables" -H "Content-Type: application/json" -d @- \
       && echo "" && echo "tabela accounts_REALTIME OK"
 
 @update-table:
