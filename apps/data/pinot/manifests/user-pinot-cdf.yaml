@@ -50,6 +50,7 @@ spec:
     type: simple
     acls:
       - type: allow
+        host: '*'
         resource:
           type: topic
           name: accounts.cdf
