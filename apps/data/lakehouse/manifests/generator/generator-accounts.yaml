@@ -9,9 +9,9 @@ metadata:
 spec:
   type: Python
   mode: cluster
-  image: ghcr.io/fwfurtado/spark-delta:0.2.0
+  image: ghcr.io/fwfurtado/lakehouse-jobs:0.1.0
   imagePullPolicy: IfNotPresent
-  mainApplicationFile: local:///opt/spark/scripts/generator_accounts.py
+  mainApplicationFile: local:///opt/spark/app/generator.py
   sparkVersion: "4.1.1"
   # loop infinito: qualquer término é anômalo -- sempre reiniciar (retoma lendo
   # max(account_id); rounds usam seed própria, restart não corrompe nada)
@@ -70,9 +70,6 @@ spec:
     envFrom:
       - secretRef:
           name: spark-garage-credentials
-    volumeMounts:
-      - name: job-scripts
-        mountPath: /opt/spark/scripts
   executor:
     instances: 1
     cores: 1
@@ -92,10 +89,3 @@ spec:
     envFrom:
       - secretRef:
           name: spark-garage-credentials
-    volumeMounts:
-      - name: job-scripts
-        mountPath: /opt/spark/scripts
-  volumes:
-    - name: job-scripts
-      configMap:
-        name: lakehouse-job-scripts

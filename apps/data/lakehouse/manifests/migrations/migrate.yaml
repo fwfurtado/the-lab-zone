@@ -1,36 +1,44 @@
-# Blocos canônicos (comentário abaixo) repetidos nas próximas SparkApplications do
-# lakehouse -- repo não usa Kustomize, esta é a fonte de verdade textual; ao editar
-# aqui, replicar nos demais arquivos que tocam a tabela Delta.
+# Runner de migrations do lakehouse (one-shot). O bootstrap antigo virou a m001.
+# Migrations ESCREVEM na tabela => contrato single-writer. Procedimento de rerun:
+#   1. kubectl -n data patch sparkapplication generator-accounts --type merge -p '{"spec":{"suspend":true}}'
+#   2. kubectl -n data delete sparkapplication lakehouse-migrate   # ArgoCD recria e roda
+#   3. kubectl -n data logs lakehouse-migrate-driver -f            # até MIGRATE_OK
+#   4. kubectl -n data patch sparkapplication generator-accounts --type merge -p '{"spec":{"suspend":false}}'
+# Migration nova = release nova da imagem lakehouse-jobs + bump da tag aqui e nos
+# demais jobs + rerun acima.
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: bootstrap-accounts
+  name: lakehouse-migrate
   namespace: data
 spec:
   type: Python
   mode: cluster
-  image: ghcr.io/fwfurtado/spark-delta:0.2.0
+  image: ghcr.io/fwfurtado/lakehouse-jobs:0.1.0
   imagePullPolicy: IfNotPresent
-  mainApplicationFile: local:///opt/spark/scripts/bootstrap_accounts.py
+  mainApplicationFile: local:///opt/spark/app/migrate.py
   sparkVersion: "4.1.1"
   restartPolicy:
-    type: Never
+    type: OnFailure
+    onFailureRetries: 2
+    onFailureRetryInterval: 30
+    onSubmissionFailureRetries: 3
+    onSubmissionFailureRetryInterval: 60
   sparkConf:
-    # ---- bloco s3a canônico (Garage) -- usado por TODA SparkApplication do lakehouse ----
+    # ---- bloco s3a canônico (Garage) ----
     spark.hadoop.fs.s3a.endpoint: "http://garage.data.svc.cluster.local:3900"
     spark.hadoop.fs.s3a.path.style.access: "true"
     spark.hadoop.fs.s3a.endpoint.region: "garage"
     spark.hadoop.fs.s3a.aws.credentials.provider: "software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider"
     spark.hadoop.fs.s3a.connection.ssl.enabled: "false"
-    # ---- fim do bloco s3a canônico ----
-    # ---- bloco Delta canônico -- usado por toda SparkApplication que toca a tabela accounts ----
+    # ---- bloco Delta canônico ----
     spark.sql.extensions: "io.delta.sql.DeltaSparkSessionExtension"
     spark.sql.catalog.spark_catalog: "org.apache.spark.sql.delta.catalog.DeltaCatalog"
-    # ---- fim do bloco Delta canônico ----
+    spark.sql.shuffle.partitions: "8"
   driver:
     serviceAccount: spark-operator-spark
     cores: 1
-    memory: "768m"
+    memory: "1g"
     # Não co-locar Spark com Garage: o tráfego S3/Delta força leituras frias no
     # Garage e dispara major page faults quando ambos disputam o mesmo page cache.
     affinity:
@@ -44,13 +52,10 @@ spec:
     envFrom:
       - secretRef:
           name: spark-garage-credentials
-    volumeMounts:
-      - name: job-scripts
-        mountPath: /opt/spark/scripts
   executor:
-    instances: 2
+    instances: 1
     cores: 1
-    memory: "768m"
+    memory: "1g"
     affinity:
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -62,10 +67,3 @@ spec:
     envFrom:
       - secretRef:
           name: spark-garage-credentials
-    volumeMounts:
-      - name: job-scripts
-        mountPath: /opt/spark/scripts
-  volumes:
-    - name: job-scripts
-      configMap:
-        name: lakehouse-job-scripts

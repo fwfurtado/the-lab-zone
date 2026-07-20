@@ -8,9 +8,9 @@ metadata:
 spec:
   type: Python
   mode: cluster
-  image: ghcr.io/fwfurtado/spark-delta:0.2.0
+  image: ghcr.io/fwfurtado/lakehouse-jobs:0.1.0
   imagePullPolicy: IfNotPresent
-  mainApplicationFile: local:///opt/spark/scripts/cdf_to_kafka.py
+  mainApplicationFile: local:///opt/spark/app/cdf_to_kafka.py
   sparkVersion: "4.1.1"
   restartPolicy:
     type: Always
@@ -62,8 +62,6 @@ spec:
       - secretRef:
           name: spark-kafka-credentials
     volumeMounts:
-      - name: job-scripts
-        mountPath: /opt/spark/scripts
       - name: redpanda-ca
         mountPath: /etc/redpanda-ca
         readOnly: true
@@ -90,15 +88,10 @@ spec:
       - secretRef:
           name: spark-kafka-credentials
     volumeMounts:
-      - name: job-scripts
-        mountPath: /opt/spark/scripts
       - name: redpanda-ca
         mountPath: /etc/redpanda-ca
         readOnly: true
   volumes:
-    - name: job-scripts
-      configMap:
-        name: lakehouse-job-scripts
     - name: redpanda-ca
       secret:
         secretName: redpanda-default-cert

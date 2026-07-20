@@ -74,6 +74,16 @@ data:
 
     spark = SparkSession.builder.getOrCreate()
     print(f"SparkSession pronta: {spark.version} (master={spark.sparkContext.master})")
+
+    # habilita as células %%sparksql (jupyterlab-sql-editor); o pacote sozinho
+    # não registra o magic -- o load_ext é obrigatório
+    _ip = get_ipython()
+    if _ip is not None:
+        try:
+            _ip.run_line_magic("load_ext", "jupyterlab_sql_editor.ipython_magic.sparksql")
+            print("magic %%sparksql habilitado")
+        except Exception as e:
+            print(f"aviso: %%sparksql indisponível ({e})")
 ---
 apiVersion: apps/v1
 kind: Deployment
