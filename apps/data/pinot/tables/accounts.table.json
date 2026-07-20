@@ -1,0 +1,46 @@
+{
+  "tableName": "accounts",
+  "tableType": "REALTIME",
+  "segmentsConfig": {
+    "schemaName": "accounts",
+    "timeColumnName": "_commit_timestamp",
+    "retentionTimeUnit": "DAYS",
+    "retentionTimeValue": "3",
+    "replication": "1"
+  },
+  "tenants": {},
+  "tableIndexConfig": {
+    "loadMode": "MMAP"
+  },
+  "routing": {
+    "instanceSelectorType": "strictReplicaGroup"
+  },
+  "upsertConfig": {
+    "mode": "FULL",
+    "comparisonColumns": ["_commit_version"],
+    "deleteRecordColumn": "deleted"
+  },
+  "ingestionConfig": {
+    "streamIngestionConfig": {
+      "streamConfigMaps": [
+        {
+          "streamType": "kafka",
+          "stream.kafka.topic.name": "accounts.cdf",
+          "stream.kafka.broker.list": "redpanda.data.svc.cluster.local:9093",
+          "stream.kafka.consumer.type": "lowlevel",
+          "stream.kafka.consumer.factory.class.name": "org.apache.pinot.plugin.stream.kafka30.KafkaConsumerFactory",
+          "stream.kafka.decoder.class.name": "org.apache.pinot.plugin.stream.kafka.KafkaJSONMessageDecoder",
+          "stream.kafka.consumer.prop.auto.offset.reset": "smallest",
+          "realtime.segment.flush.threshold.rows": "500000",
+          "realtime.segment.flush.threshold.time": "6h",
+          "stream.kafka.consumer.prop.security.protocol": "SASL_SSL",
+          "stream.kafka.consumer.prop.sasl.mechanism": "SCRAM-SHA-512",
+          "stream.kafka.consumer.prop.sasl.jaas.config": "org.apache.kafka.common.security.scram.ScramLoginModule required username=\"pinot-cdf\" password=\"${KAFKA_PASSWORD}\";",
+          "stream.kafka.consumer.prop.ssl.truststore.type": "PEM",
+          "stream.kafka.consumer.prop.ssl.truststore.location": "/etc/redpanda-ca/ca.crt"
+        }
+      ]
+    }
+  },
+  "metadata": {}
+}

@@ -1,0 +1,57 @@
+# Credencial SASL do consumo do Pinot: 1Password é a fonte; o User CR consome a
+# mesma secret referenciada pelo recipe de apply da tabela.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: pinot-kafka-credentials
+  namespace: data
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: pinot-kafka-credentials
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        KAFKA_PASSWORD: "{{ .password }}"
+  data:
+    - secretKey: password
+      remoteRef:
+        key: redpanda-pinot
+        property: password
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore
+---
+# ACLs mínimas de CONSUMER lowlevel do Pinot: Read+Describe no tópico, SEM ACL de
+# group -- o Pinot faz assign manual de partições e guarda offsets no metadata dos
+# próprios segmentos (não usa consumer group do Kafka).
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: User
+metadata:
+  name: pinot-cdf
+  namespace: data
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  authentication:
+    type: scram-sha-512
+    password:
+      valueFrom:
+        secretKeyRef:
+          name: pinot-kafka-credentials
+          key: KAFKA_PASSWORD
+  authorization:
+    type: simple
+    acls:
+      - type: allow
+        resource:
+          type: topic
+          name: accounts.cdf
+          patternType: literal
+        operations: [Read, Describe]

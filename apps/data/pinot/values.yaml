@@ -23,6 +23,18 @@ controller:
   persistence:
     storageClass: openebs-hostpath
     size: 2G
+    # CA do Redpanda (TLS na 9093): metadata de partições do stream na criação da tabela
+    extraVolumes:
+      - name: redpanda-ca
+        secret:
+          secretName: redpanda-default-cert
+          items:
+            - key: ca.crt
+              path: ca.crt
+    extraVolumeMounts:
+      - name: redpanda-ca
+        mountPath: /etc/redpanda-ca
+        readOnly: true
   jvmOpts: "-Xms512M -Xmx1G -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
   resources:
     requests:
@@ -88,6 +100,18 @@ server:
   persistence:
     storageClass: openebs-hostpath
     size: 20G
+    # CA do Redpanda (TLS na 9093): consumo do tópico
+    extraVolumes:
+      - name: redpanda-ca
+        secret:
+          secretName: redpanda-default-cert
+          items:
+            - key: ca.crt
+              path: ca.crt
+    extraVolumeMounts:
+      - name: redpanda-ca
+        mountPath: /etc/redpanda-ca
+        readOnly: true
   # heap 2G: mapa de upsert (~500k PKs) + consuming segments; headroom aprovado
   jvmOpts: "-Xms2G -Xmx2G -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
   resources:

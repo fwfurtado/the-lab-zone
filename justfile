@@ -3,6 +3,7 @@ import "infra/prod/justfile"
 mod bootstrap
 mod argo
 mod garage
+mod pinot
 mod litellm
 mod docker
 mod apps

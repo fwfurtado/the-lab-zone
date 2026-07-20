@@ -1,0 +1,31 @@
+{
+  "schemaName": "accounts",
+  "primaryKeyColumns": ["account_id"],
+  "dimensionFieldSpecs": [
+    {"name": "account_id", "dataType": "LONG"},
+    {"name": "status", "dataType": "STRING"},
+    {"name": "tier", "dataType": "STRING"},
+    {"name": "region", "dataType": "STRING"},
+    {"name": "deleted", "dataType": "BOOLEAN"},
+    {"name": "_change_type", "dataType": "STRING"},
+    {"name": "_commit_version", "dataType": "LONG"}
+  ],
+  "metricFieldSpecs": [
+    {"name": "balance", "dataType": "DOUBLE"},
+    {"name": "version", "dataType": "LONG"}
+  ],
+  "dateTimeFieldSpecs": [
+    {
+      "name": "updated_at",
+      "dataType": "TIMESTAMP",
+      "format": "1:MILLISECONDS:SIMPLE_DATE_FORMAT:yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+      "granularity": "1:MILLISECONDS"
+    },
+    {
+      "name": "_commit_timestamp",
+      "dataType": "TIMESTAMP",
+      "format": "1:MILLISECONDS:SIMPLE_DATE_FORMAT:yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+      "granularity": "1:MILLISECONDS"
+    }
+  ]
+}

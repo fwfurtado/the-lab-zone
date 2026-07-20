@@ -58,6 +58,15 @@ spec:
         - ports:
             - port: "9093"
               protocol: TCP
+    # Pinot (controller: metadata de partições; server: consumo lowlevel do CDF)
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app: pinot
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP
     # VictoriaMetrics scrapes /public_metrics from the Admin listener.
     - fromEndpoints:
         - matchLabels:
