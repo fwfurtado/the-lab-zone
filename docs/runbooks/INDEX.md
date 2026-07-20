@@ -18,6 +18,7 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 | Observability | [observability/alertas-operacionais.md](observability/alertas-operacionais.md) | Alertmanager routing, Blackbox, ArgoCD, cert-manager, External Secrets, metrics-server, Grafana, VM stack |
 | Data platform | [data-platform/garage-clickhouse-cnpg-stores.md](data-platform/garage-clickhouse-cnpg-stores.md) | Garage S3, ClickHouse Altinity, Memgraph, VMPodScrape |
 | Data platform | [data-platform/spark-garage-victoriametrics-memory-2026-07-20.md](data-platform/spark-garage-victoriametrics-memory-2026-07-20.md) | incidente Spark/Garage/VictoriaMetrics, major page faults, compute node, VMRule Spark |
+| Data platform | [data-platform/lakehouse-spark-delta-pinot.md](data-platform/lakehouse-spark-delta-pinot.md) | Delta×Spark patch releases, CDF retention, OOM nativo, Zipf/dedup, Spark 4×Jupyter, submission burst, props Kafka do Pinot, automaticReload, UpsertCompaction |
 | ToolHive/MCP | [toolhive-mcp/toolhive-mcp-servers.md](toolhive-mcp/toolhive-mcp-servers.md) | sessionAffinity, Kyverno, stdio+OAuth, bind 0.0.0.0, SearXNG |
 | GPU | [gpu/dcgm-runtimeclass-daemonset.md](gpu/dcgm-runtimeclass-daemonset.md) | DCGM (OOM/distroless), RuntimeClass+DaemonSet, taint+otel |
 | Argo Workflows | [argo-workflows/workflows-elt-clickhouse-dbt.md](argo-workflows/workflows-elt-clickhouse-dbt.md) | generateName, templateRef, Argo 3.6, dbt/goose/ClickHouse |

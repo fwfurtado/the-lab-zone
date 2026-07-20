@@ -24,6 +24,7 @@ Decisões registradas no formato Nygard (contexto → decisão → consequência
 | [0017](0017-triagem-por-alerta-borda-go-sidecar.md) | Triagem por alerta; borda Go sidecar do núcleo Python | 11 | Alertmanager→webhook Go→núcleo Python (loopback, sem Service); dedup in-memory até `replicas>1` |
 | [0018](0018-lightrag-desligado-rag-fora-de-escopo.md) | LightRAG desligado; RAG fora de escopo | 7 | Sem ganho no estado k8s; RAG sai de escopo (supersede parcial de 0009/0012) |
 | [0019](0019-severidade-de-log-por-formato-otel.md) | Severidade de log por formato (filelog OTel) | 5 | `noop`==`Unspecified`==`unknown`; severidade por formato; Tetragon=debug, onepassword pelo prefixo `(X)`, ClickHouse por `<>` |
+| [0020](0020-data-serving-lakehouse-cdf-pinot.md) | Data serving realtime sobre lakehouse (Delta CDF → Redpanda → Pinot upsert) | 12 | CDF só em mutável+near-realtime; single-writer; comparison `_commit_version` resolve hidratação sem coordenação; upsert é realtime-only |
 
 ## Não-decisões documentadas
 
