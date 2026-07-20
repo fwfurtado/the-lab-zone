@@ -1,0 +1,70 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: lakehouse-spark
+  namespace: data
+  labels:
+    app.kubernetes.io/name: lakehouse-spark
+spec:
+  groups:
+    - name: lakehouse-spark
+      rules:
+        - alert: SparkGeneratorAccountsNotRunning
+          expr: |
+            (
+              sum(kube_pod_status_phase{namespace="data", pod="generator-accounts-driver", phase="Running"} == 1)
+              or vector(0)
+            ) < 1
+          for: 10m
+          labels:
+            severity: warning
+            component: lakehouse-spark
+            spark_app: generator-accounts
+            triage: "true"
+          annotations:
+            summary: "Spark generator-accounts não está rodando"
+            description: >-
+              O driver pod generator-accounts-driver não está em Running há pelo
+              menos 10m. Se o app foi suspenso para migration, isso é esperado;
+              caso contrário verifique scheduling no worker compute:
+              kubectl -n data get sparkapplication generator-accounts -o wide &&
+              kubectl -n data get pods -o wide -l spark-app-name=generator-accounts
+
+        - alert: SparkStreamingCdfNotRunning
+          expr: |
+            (
+              sum(kube_pod_status_phase{namespace="data", pod="streaming-cdf-driver", phase="Running"} == 1)
+              or vector(0)
+            ) < 1
+          for: 10m
+          labels:
+            severity: warning
+            component: lakehouse-spark
+            spark_app: streaming-cdf
+            triage: "true"
+          annotations:
+            summary: "Spark streaming-cdf não está rodando"
+            description: >-
+              O driver pod streaming-cdf-driver não está em Running há pelo menos
+              10m. Verifique se o worker compute está Ready e se o driver/executor
+              ficaram Pending por nodeAffinity/taint:
+              kubectl -n data get sparkapplication streaming-cdf -o wide &&
+              kubectl -n data get pods -o wide -l spark-app-name=cdf-to-kafka
+
+        - alert: SparkLakehouseMigrateBlocked
+          expr: |
+            sum(kube_pod_status_phase{namespace="data", pod="lakehouse-migrate-driver", phase=~"Pending|Unknown|Failed"} == 1) > 0
+          for: 10m
+          labels:
+            severity: warning
+            component: lakehouse-spark
+            spark_app: lakehouse-migrate
+            triage: "true"
+          annotations:
+            summary: "Spark lakehouse-migrate bloqueado ou falhando"
+            description: >-
+              O migration runner é one-shot, então ausência/Succeeded é normal.
+              Este alerta dispara apenas quando o driver pod existe e fica em
+              Pending, Unknown ou Failed por 10m. Verifique:
+              kubectl -n data get sparkapplication lakehouse-migrate -o wide &&
+              kubectl -n data get pod lakehouse-migrate-driver -o wide
