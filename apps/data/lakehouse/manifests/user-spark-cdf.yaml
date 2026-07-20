@@ -57,7 +57,5 @@ spec:
         operations: [Write, Describe]
       - type: allow
         resource:
-          type: cluster
-          name: kafka-cluster
-          patternType: literal
+          type: cluster   # recurso singleton: o CRD proíbe name/patternType aqui
         operations: [IdempotentWrite]
