@@ -20,7 +20,8 @@
     "comparisonColumns": [
       "_commit_version"
     ],
-    "deleteRecordColumn": "deleted"
+    "deleteRecordColumn": "deleted",
+    "enableSnapshot": true
   },
   "ingestionConfig": {
     "streamIngestionConfig": {
@@ -44,5 +45,14 @@
       ]
     }
   },
-  "metadata": {}
+  "metadata": {},
+  "task": {
+    "taskTypeConfigsMap": {
+      "UpsertCompactionTask": {
+        "schedule": "0 0 * * * ?",
+        "bufferTimePeriod": "2h",
+        "invalidRecordsThresholdPercent": "30"
+      }
+    }
+  }
 }
