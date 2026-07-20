@@ -14,13 +14,17 @@ controller:
   # de spark-submit (-Xmx128m por padrão). Isso é diferente do driver: o controller
   # paga esse custo de heap para TODA submissão em andamento, não só o processamento
   # do CRD. Sizing generoso aqui evita que o cgroup do controller mate essas JVMs.
+  # Sizing p/ RAJADAS: bump de imagem compartilhada re-submete vários apps de uma
+  # vez (Argo sync) = N JVMs de spark-submit simultâneas. Com cpu limit 500m, 4
+  # submits concorrentes = throttling brutal no JIT -> event loop bloqueado
+  # (BlockedThreadChecker) -> SUBMISSION_FAILED coletivo (incidente 2026-07-20).
+  # CPU sem limit de propósito: burst de JVM curta é o pior caso de cgroup throttle.
   resources:
     requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
       cpu: 500m
       memory: 1Gi
+    limits:
+      memory: 2Gi
 
 webhook:
   enable: true
