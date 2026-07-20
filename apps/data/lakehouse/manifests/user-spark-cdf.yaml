@@ -57,5 +57,8 @@ spec:
         operations: [Write, Describe]
       - type: allow
         resource:
-          type: cluster   # recurso singleton: o CRD proíbe name/patternType aqui
+          type: cluster
+          # regra CEL do CRD: p/ type cluster o name é estruturalmente obrigatório
+          # mas DEVE ser string vazia (self.name == "")
+          name: ""
         operations: [IdempotentWrite]
