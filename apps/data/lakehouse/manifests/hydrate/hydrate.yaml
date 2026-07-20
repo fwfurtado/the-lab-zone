@@ -1,28 +1,25 @@
-# Runner de migrations do lakehouse (one-shot). O bootstrap antigo virou a m001.
-# Migrations ESCREVEM na tabela => contrato single-writer. Procedimento de rerun:
-#   1. kubectl -n data patch sparkapplication generator-accounts --type merge -p '{"spec":{"suspend":true}}'
-#   2. kubectl -n data delete sparkapplication lakehouse-migrate   # ArgoCD recria e roda
-#   3. kubectl -n data logs lakehouse-migrate-driver -f            # até MIGRATE_OK
-#   4. kubectl -n data patch sparkapplication generator-accounts --type merge -p '{"spec":{"suspend":false}}'
-# Migration nova = release nova da imagem lakehouse-jobs + bump da tag aqui e nos
-# demais jobs + rerun acima.
+# Hidratação one-shot do Pinot: snapshot@V da Delta -> tópico accounts.cdf com
+# _commit_version=V (o comparison column do upsert resolve o interleaving com o
+# stream vivo -- SEM suspend de nada). Idempotente; rerun:
+#   kubectl -n data delete sparkapplication lakehouse-hydrate   # ArgoCD recria
+# Reusa o user spark-cdf (já tem Write+Describe no tópico).
 apiVersion: sparkoperator.k8s.io/v1beta2
 kind: SparkApplication
 metadata:
-  name: lakehouse-migrate
+  name: lakehouse-hydrate
   namespace: data
 spec:
   type: Python
   mode: cluster
   image: ghcr.io/fwfurtado/lakehouse-jobs:0.2.0
   imagePullPolicy: IfNotPresent
-  mainApplicationFile: local:///opt/spark/app/migrate.py
+  mainApplicationFile: local:///opt/spark/app/hydrate.py
   sparkVersion: "4.1.1"
   restartPolicy:
     type: OnFailure
     onFailureRetries: 2
     onFailureRetryInterval: 30
-    onSubmissionFailureRetries: 3
+    onSubmissionFailureRetries: 5
     onSubmissionFailureRetryInterval: 60
   sparkConf:
     # ---- bloco s3a canônico (Garage) ----
@@ -62,13 +59,30 @@ spec:
         operator: Equal
         value: "true"
         effect: NoSchedule
+    env:
+      - name: TABLE_PATH
+        value: "s3a://lakehouse/tables/accounts"
+      - name: KAFKA_TOPIC
+        value: "accounts.cdf"
+      - name: KAFKA_BOOTSTRAP
+        value: "redpanda.data.svc.cluster.local:9093"
+      - name: KAFKA_USERNAME
+        value: "spark-cdf"
     envFrom:
       - secretRef:
           name: spark-garage-credentials
+      - secretRef:
+          name: spark-kafka-credentials
+    volumeMounts:
+      - name: redpanda-ca
+        mountPath: /etc/redpanda-ca
+        readOnly: true
   executor:
     instances: 1
     cores: 1
     memory: "1g"
+    # mesma lição do gerador: fatia nativa (buffers do producer Kafka + Netty)
+    memoryOverhead: "512m"
     affinity:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -90,6 +104,22 @@ spec:
         operator: Equal
         value: "true"
         effect: NoSchedule
+    env:
+      - name: KAFKA_USERNAME
+        value: "spark-cdf"
     envFrom:
       - secretRef:
           name: spark-garage-credentials
+      - secretRef:
+          name: spark-kafka-credentials
+    volumeMounts:
+      - name: redpanda-ca
+        mountPath: /etc/redpanda-ca
+        readOnly: true
+  volumes:
+    - name: redpanda-ca
+      secret:
+        secretName: redpanda-default-cert
+        items:
+          - key: ca.crt
+            path: ca.crt
