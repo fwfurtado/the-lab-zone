@@ -170,19 +170,30 @@ data:
             p=[INSERT_PCT, UPDATE_PCT, DELETE_PCT],
         )
         n_insert = int((ops == "insert").sum())
-        n_touch = BATCH_SIZE - n_insert
+        n_update = int((ops == "update").sum())
+        n_delete = BATCH_SIZE - n_insert - n_update
 
         # inserts: ids novos, contador monotônico acima do maior id existente
         insert_ids = np.arange(max_existing_id + 1, max_existing_id + 1 + n_insert)
-        # updates/deletes: chaves existentes via Zipf (hot keys)
-        touch_ids = zipf_keys(rng, n_touch, max_existing_id)
+        # updates: Zipf (hot keys concentram updates)
+        update_ids = zipf_keys(rng, n_update, max_existing_id)
+        # deletes: UNIFORME. Deletar via Zipf extinguia a cabeça da distribuição em
+        # poucos rounds (hot key morria; updates nela viravam no-op) e o CDF observava
+        # só a cauda morna -- distribuição achatada, inútil p/ estressar upsert quente.
+        delete_ids = rng.integers(0, max_existing_id + 1, size=n_delete)
 
         rows = []
         it_insert = iter(insert_ids)
-        it_touch = iter(touch_ids)
+        it_update = iter(update_ids)
+        it_delete = iter(delete_ids)
         now = datetime.now(timezone.utc)
         for seq, op in enumerate(ops):
-            acc = int(next(it_insert) if op == "insert" else next(it_touch))
+            if op == "insert":
+                acc = int(next(it_insert))
+            elif op == "update":
+                acc = int(next(it_update))
+            else:
+                acc = int(next(it_delete))
             rows.append(
                 (
                     seq,
