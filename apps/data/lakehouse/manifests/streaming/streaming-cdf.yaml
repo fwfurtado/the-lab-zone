@@ -36,6 +36,14 @@ spec:
     # Não co-locar Spark com Garage: o tráfego S3/Delta força leituras frias no
     # Garage e dispara major page faults quando ambos disputam o mesmo page cache.
     affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node-role.lab/compute
+                  operator: In
+                  values:
+                    - "true"
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
@@ -43,6 +51,11 @@ spec:
                 app.kubernetes.io/name: garage
                 app.kubernetes.io/instance: garage
             topologyKey: kubernetes.io/hostname
+    tolerations:
+      - key: workload.lab/compute
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
     env:
       - name: TABLE_PATH
         value: "s3a://lakehouse/tables/accounts"
@@ -72,6 +85,14 @@ spec:
     # mesma lição do gerador: fatia nativa (buffers do producer Kafka + Netty)
     memoryOverhead: "512m"
     affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node-role.lab/compute
+                  operator: In
+                  values:
+                    - "true"
       podAntiAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
@@ -79,6 +100,11 @@ spec:
                 app.kubernetes.io/name: garage
                 app.kubernetes.io/instance: garage
             topologyKey: kubernetes.io/hostname
+    tolerations:
+      - key: workload.lab/compute
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
     env:
       - name: KAFKA_USERNAME
         value: "spark-cdf"
