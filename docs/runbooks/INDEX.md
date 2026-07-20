@@ -17,6 +17,7 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 | Observability | [observability/victoriametrics-grafana-otel.md](observability/victoriametrics-grafana-otel.md) | VM stack, webhook cert churn, operator não materializa, OTel, severidade de log (filelog por formato), LogsQL |
 | Observability | [observability/alertas-operacionais.md](observability/alertas-operacionais.md) | Alertmanager routing, Blackbox, ArgoCD, cert-manager, External Secrets, metrics-server, Grafana, VM stack |
 | Data platform | [data-platform/garage-clickhouse-cnpg-stores.md](data-platform/garage-clickhouse-cnpg-stores.md) | Garage S3, ClickHouse Altinity, Memgraph, VMPodScrape |
+| Data platform | [data-platform/spark-garage-victoriametrics-memory-2026-07-20.md](data-platform/spark-garage-victoriametrics-memory-2026-07-20.md) | incidente Spark/Garage/VictoriaMetrics, major page faults, compute node, VMRule Spark |
 | ToolHive/MCP | [toolhive-mcp/toolhive-mcp-servers.md](toolhive-mcp/toolhive-mcp-servers.md) | sessionAffinity, Kyverno, stdio+OAuth, bind 0.0.0.0, SearXNG |
 | GPU | [gpu/dcgm-runtimeclass-daemonset.md](gpu/dcgm-runtimeclass-daemonset.md) | DCGM (OOM/distroless), RuntimeClass+DaemonSet, taint+otel |
 | Argo Workflows | [argo-workflows/workflows-elt-clickhouse-dbt.md](argo-workflows/workflows-elt-clickhouse-dbt.md) | generateName, templateRef, Argo 3.6, dbt/goose/ClickHouse |
@@ -33,6 +34,9 @@ todos os incidentes de um domínio no formato `Sintoma → Causa → Diagnóstic
 **Target/scrape/rule criado, correto, mas não aparece em `/targets`**
 → observability (operator não materializou → restart); checar também `matchExpressions`
 (backup-dr) e `namespaceSelector` cross-ns (argo-workflows).
+
+**`TooHighMemoryUsage` no `vmsingle` junto com `NodeMemoryMajorPagesFaults`**
+→ data-platform (Spark/Garage/VictoriaMetrics: vmsingle sem headroom + Garage faultando páginas por churn S3/Delta).
 
 **`arping` no VIP timeout, mas `kubectl` ok / Gateway some intermitente**
 → backup-dr (nó GPU `enp7s0` vira anunciante L2 quebrado) ou cilium-rede (regex/lease).
