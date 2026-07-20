@@ -24,6 +24,15 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: data
+  # o API server normaliza volumeClaimTemplates removendo apiVersion/kind ->
+  # drift perpétuo em todo StatefulSet do chart (mesmo quirk tratado no memgraph)
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      namespace: data
+      jqPathExpressions:
+        - .spec.volumeClaimTemplates[].apiVersion
+        - .spec.volumeClaimTemplates[].kind
   syncPolicy:
     automated:
       prune: true

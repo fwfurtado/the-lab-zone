@@ -36,13 +36,16 @@ controller:
   envFrom:
     - secretRef:
         name: pinot-garage-credentials
+  # deep store: value de 1ª classe do chart -- setar TAMBÉM via extra.configs
+  # duplicaria a chave e o parser do Pinot concatena com vírgula (visto no log)
+  data:
+    dir: s3://pinot/deepstore
   extra:
     configs: |-
       pinot.set.instance.id.to.hostname=true
       # scheduler de tasks de minion (UpsertCompaction na etapa 2.4)
       controller.task.scheduler.enabled=true
       # ---- deep store no Garage ----
-      controller.data.dir=s3://pinot/deepstore
       controller.local.temp.dir=/var/pinot/controller/data
       pinot.controller.storage.factory.class.s3=org.apache.pinot.plugin.filesystem.S3PinotFS
       pinot.controller.storage.factory.s3.endpoint=http://garage.data.svc.cluster.local:3900
