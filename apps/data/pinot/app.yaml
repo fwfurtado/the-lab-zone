@@ -1,0 +1,33 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pinot
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "8"   # depois do redpanda (7): consome o accounts.cdf
+spec:
+  project: data
+  sources:
+    - repoURL: https://raw.githubusercontent.com/apache/pinot/master/helm
+      chart: pinot
+      targetRevision: 1.0.0
+      helm:
+        releaseName: pinot
+        valueFiles:
+          - $values/apps/data/pinot/values.yaml
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/data/pinot/manifests
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=false

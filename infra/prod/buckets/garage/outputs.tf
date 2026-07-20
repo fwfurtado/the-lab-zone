@@ -11,5 +11,6 @@ output "buckets" {
     tempo             = aws_s3_bucket.tempo.bucket
     pyroscope         = aws_s3_bucket.pyroscope.bucket
     lakehouse         = aws_s3_bucket.lakehouse.bucket
+    pinot             = aws_s3_bucket.pinot.bucket
   }
 }

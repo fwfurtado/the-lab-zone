@@ -16,6 +16,7 @@ spec:
     - https://clickhouse.github.io/helm-charts
     - https://valkey.io/valkey-helm/
     - https://memgraph.github.io/helm-charts
+    - https://raw.githubusercontent.com/apache/pinot/master/helm
 
   destinations:
     - server: https://kubernetes.default.svc

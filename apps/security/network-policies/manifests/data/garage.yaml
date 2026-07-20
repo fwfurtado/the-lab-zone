@@ -100,3 +100,13 @@ spec:
         - ports:
             - port: "3900"
               protocol: TCP
+    # Pinot (controller/server/minion): deep store no bucket `pinot`.
+    # Labels verificados no _helpers.tpl do chart (pinot.matchLabels): app=pinot.
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: data
+            app: pinot
+      toPorts:
+        - ports:
+            - port: "3900"
+              protocol: TCP

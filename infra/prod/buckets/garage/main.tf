@@ -40,3 +40,7 @@ resource "aws_s3_bucket" "pyroscope" {
 resource "aws_s3_bucket" "lakehouse" {
   bucket = "lakehouse"
 }
+
+resource "aws_s3_bucket" "pinot" {
+  bucket = "pinot"
+}
