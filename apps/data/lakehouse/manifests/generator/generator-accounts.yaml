@@ -9,7 +9,7 @@ metadata:
 spec:
   type: Python
   mode: cluster
-  image: ghcr.io/fwfurtado/lakehouse-jobs:0.2.0
+  image: ghcr.io/fwfurtado/lakehouse-jobs:0.2.1
   imagePullPolicy: IfNotPresent
   mainApplicationFile: local:///opt/spark/app/generator.py
   sparkVersion: "4.1.1"
@@ -76,8 +76,8 @@ spec:
         value: "0.10"
       - name: ZIPF_S
         value: "1.1"
-      - name: MAINTENANCE_EVERY
-        value: "120"
+      - name: MAINTENANCE_INTERVAL_HOURS
+        value: "1"
       - name: VACUUM_RETAIN_HOURS
         value: "6"
     envFrom:
