@@ -1,0 +1,103 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: cluster-early-warning
+  namespace: observability
+spec:
+  groups:
+    - name: cluster-early-warning
+      rules:
+        - alert: ControlPlaneNodeNotReady
+          expr: |
+            max by (node) (
+              kube_node_status_condition{condition="Ready",status="true",node=~"cp-.+"}
+            ) == 0
+          for: 2m
+          labels:
+            severity: critical
+            component: control-plane
+            triage: "true"
+          annotations:
+            summary: "Control-plane node {{ $labels.node }} não está Ready"
+            description: "O node {{ $labels.node }} está Ready=False por pelo menos 2m. Verificar Talos, kubelet, etcd e pods estáticos antes que apps do ArgoCD degradem em massa."
+
+        - alert: ControlPlaneStaticPodRestarting
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="kube-system",pod=~"kube-(apiserver|controller-manager|scheduler)-cp-.+"}[10m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            component: control-plane
+            triage: "true"
+          annotations:
+            summary: "Static pod {{ $labels.pod }} reiniciou"
+            description: "O container {{ $labels.container }} em {{ $labels.pod }} reiniciou nos últimos 10m. Isso costuma preceder falhas de API, lease e reconciliação."
+
+        - alert: CiliumDaemonUnavailable
+          expr: |
+            (
+              kube_daemonset_status_desired_number_scheduled{namespace="kube-system",daemonset="cilium"}
+              - kube_daemonset_status_number_available{namespace="kube-system",daemonset="cilium"}
+            ) > 0
+          for: 2m
+          labels:
+            severity: critical
+            component: cilium
+            triage: "true"
+          annotations:
+            summary: "Cilium agent indisponível em pelo menos um node"
+            description: "O DaemonSet cilium tem {{ $value }} pod(s) desejado(s) sem disponibilidade há pelo menos 2m. Verificar node, kubelet e logs do cilium-agent."
+
+        - alert: CiliumEnvoyDaemonUnavailable
+          expr: |
+            (
+              kube_daemonset_status_desired_number_scheduled{namespace="kube-system",daemonset="cilium-envoy"}
+              - kube_daemonset_status_number_available{namespace="kube-system",daemonset="cilium-envoy"}
+            ) > 0
+          for: 2m
+          labels:
+            severity: critical
+            component: cilium
+            triage: "true"
+          annotations:
+            summary: "Cilium Envoy indisponível em pelo menos um node"
+            description: "O DaemonSet cilium-envoy tem {{ $value }} pod(s) desejado(s) sem disponibilidade há pelo menos 2m. Verificar startup/readiness/liveness probes e pressão do node."
+
+        - alert: CiliumEnvoyControlPlaneRestarting
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="kube-system",container="cilium-envoy",pod=~"cilium-envoy-.+"}[10m])
+            * on (namespace, pod) group_left(node)
+              kube_pod_info{namespace="kube-system",node=~"cp-.+"}
+            > 0
+          for: 2m
+          labels:
+            severity: warning
+            component: cilium
+            triage: "true"
+          annotations:
+            summary: "Cilium Envoy reiniciando no control-plane {{ $labels.node }}"
+            description: "O pod {{ $labels.pod }} reiniciou nos últimos 10m. No incidente anterior isso coincidiu com node NotReady e falhas no caminho node-local da API."
+
+        - alert: CoreDNSUnavailable
+          expr: |
+            kube_deployment_status_replicas_available{namespace="kube-system",deployment="coredns"} < 1
+          for: 2m
+          labels:
+            severity: critical
+            component: coredns
+            triage: "true"
+          annotations:
+            summary: "CoreDNS sem réplicas disponíveis"
+            description: "O deployment coredns está sem réplica disponível há pelo menos 2m. Isso pode quebrar ExternalSecrets e reconciliação de apps."
+
+        - alert: ExternalSecretSyncBlockedFast
+          expr: |
+            externalsecret_status_condition{condition="Ready",status!="True"} == 1
+          for: 5m
+          labels:
+            severity: warning
+            component: external-secrets
+            triage: "true"
+          annotations:
+            summary: "ExternalSecret {{ $labels.namespace }}/{{ $labels.name }} não está Ready"
+            description: "O ExternalSecret {{ $labels.namespace }}/{{ $labels.name }} está Ready!=True há pelo menos 5m. Verificar ClusterSecretStore, DNS e API interna antes que apps dependentes degradem."
