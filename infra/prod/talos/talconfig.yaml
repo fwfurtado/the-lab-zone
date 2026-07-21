@@ -16,6 +16,7 @@ cniConfig:
 controlPlane:
   patches:
     - "@patches/control-planes/bind-address.yaml"
+    - "@patches/control-planes/remote-logging-proxmox.yaml"
 worker:
   patches:
     - "@patches/workers/user-volume-config.yaml"

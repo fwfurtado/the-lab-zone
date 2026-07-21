@@ -1,0 +1,15 @@
+[Unit]
+Description=Talos remote log receiver
+Documentation=https://www.talos.dev/v1.13/talos-guides/configuration/logging/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/mkdir -p /var/log/talos
+ExecStart=/usr/bin/socat -u TCP-LISTEN:1514,bind=10.40.0.200,reuseaddr,fork OPEN:/var/log/talos/control-plane.jsonl,creat,append
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
