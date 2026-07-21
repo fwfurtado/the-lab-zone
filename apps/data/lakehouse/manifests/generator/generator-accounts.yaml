@@ -69,11 +69,11 @@ spec:
       - name: SLEEP_SECONDS
         value: "30"
       - name: INSERT_PCT
-        value: "0.15"
+        value: "0.125"
       - name: UPDATE_PCT
         value: "0.75"
       - name: DELETE_PCT
-        value: "0.10"
+        value: "0.125"
       - name: ZIPF_S
         value: "1.1"
       - name: MAINTENANCE_INTERVAL_HOURS
