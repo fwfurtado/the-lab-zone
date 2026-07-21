@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: data-serving
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "8"   # depois do redpanda (7): consome o accounts.cdf
+spec:
+  project: data
+  sources:
+    - repoURL: https://github.com/fwfurtado/the-lab-zone.git
+      targetRevision: main
+      path: apps/data/data-serving/manifests
+      # futuro: deployment da data-serving-api + kv-sink, CNPs e rotas; por
+      # enquanto só a credencial SASL do sink
+      directory:
+        recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: data
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=false

@@ -1,0 +1,66 @@
+# Credencial SASL do kv-sink: 1Password é a fonte; o User CR consome a mesma
+# secret que o deployment do sink referenciará (KAFKA_PASSWORD).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: kv-sink-kafka-credentials
+  namespace: data
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: onepassword
+    kind: ClusterSecretStore
+  target:
+    name: kv-sink-kafka-credentials
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      data:
+        KAFKA_PASSWORD: "{{ .password }}"
+  data:
+    - secretKey: password
+      remoteRef:
+        key: redpanda-kv-sink
+        property: password
+        conversionStrategy: Default
+        decodingStrategy: None
+        metadataPolicy: None
+        nullBytePolicy: Ignore
+---
+# ACLs de CONSUMER do kv-sink: Read+Describe no tópico E Read no GROUP —
+# diferente do pinot-cdf (lowlevel, assign manual, sem group), o sink usa
+# consumer group do Kafka (franz-go); sem a ACL de group o JoinGroup falha
+# com GROUP_AUTHORIZATION_FAILED.
+apiVersion: cluster.redpanda.com/v1alpha2
+kind: User
+metadata:
+  name: kv-sink
+  namespace: data
+spec:
+  cluster:
+    clusterRef:
+      name: redpanda
+  authentication:
+    type: scram-sha-512
+    password:
+      valueFrom:
+        secretKeyRef:
+          name: kv-sink-kafka-credentials
+          key: KAFKA_PASSWORD
+  authorization:
+    type: simple
+    acls:
+      - type: allow
+        host: '*'
+        resource:
+          type: topic
+          name: accounts.cdf
+          patternType: literal
+        operations: [Read, Describe]
+      - type: allow
+        host: '*'
+        resource:
+          type: group
+          name: kv-sink-accounts
+          patternType: literal
+        operations: [Read, Describe]
