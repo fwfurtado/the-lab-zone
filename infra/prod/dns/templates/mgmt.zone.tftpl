@@ -1,0 +1,15 @@
+; GERADO POR TERRAFORM - NAO EDITAR A MAO
+; fonte: infra/prod/dns/templates/mgmt.zone.tftpl (a partir de var.mgmt_records)
+; consumido como auth-zone pelo pdns-recursor local (break-glass quando o T630 esta fora)
+$TTL 300
+$ORIGIN ${origin}
+@       IN  SOA dns.${origin} root.the-lab.zone. (
+            1           ; serial fixo: auth-zone do recursor nao faz transfer
+            3600        ; refresh
+            600         ; retry
+            86400       ; expire
+            300 )       ; negative TTL
+@       IN  NS  dns.${origin}
+%{ for name, ip in records ~}
+${format("%-7s", name)} IN  A   ${ip}
+%{ endfor ~}

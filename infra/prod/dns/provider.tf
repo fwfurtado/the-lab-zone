@@ -8,6 +8,10 @@ terraform {
       source  = "pan-net/powerdns"
       version = "~> 1.5"
     }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.5"
+    }
   }
 }
 
