@@ -1,0 +1,6 @@
+# GERADO POR TERRAFORM - NAO EDITAR A MAO
+# fonte: infra/prod/dns/templates/hosts.mgmt.tftpl (a partir de var.mgmt_records)
+# consumido pelo sing-box (dns.servers[].type=hosts) como break-glass quando o T630 esta fora
+%{ for name, ip in records ~}
+${format("%-12s", ip)} ${name}.${domain}
+%{ endfor ~}
