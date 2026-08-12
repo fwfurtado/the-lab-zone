@@ -240,6 +240,7 @@ datasources:
 plugins:
   - victoriametrics-logs-datasource
   - grafana-pyroscope-app
+  - grafana-lokiexplore-app
 
 resources:
   requests:
