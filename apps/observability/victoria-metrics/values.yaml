@@ -73,6 +73,19 @@ grafana:
 # node-exporter e kube-state-metrics incluídos no stack
 prometheus-node-exporter:
   enabled: true
+  # Propaga o node onde o DaemonSet está rodando para todas as séries do
+  # node-exporter. Assim, silences do Alertmanager podem usar node=<nome>.
+  vmScrape:
+    spec:
+      endpoints:
+        - port: metrics
+          metricRelabelConfigs:
+            - action: drop
+              source_labels: [mountpoint]
+              regex: "/var/lib/kubelet/pods.+"
+          relabelConfigs:
+            - sourceLabels: [__meta_kubernetes_endpoint_node_name]
+              targetLabel: node
 
 kube-state-metrics:
   enabled: true
@@ -130,6 +143,21 @@ victoria-metrics-operator:
 # kube-controller-manager e kube-scheduler: defaultRules desabilitados.
 # VMServiceScrapes customizados com insecureSkipVerify em manifests/vmservicescrapes-control-plane.yaml
 # O TLS desses componentes no Talos só é válido para localhost — não para o IP do nó.
+# O VMNodeScrape do kubelet já descobre cada node individualmente. Este
+# relabel transforma o nome descoberto em um label persistido nas métricas.
+kubelet:
+  vmScrape:
+    spec:
+      relabelConfigs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - sourceLabels: [__meta_kubernetes_node_name]
+          targetLabel: node
+        - sourceLabels: [__metrics_path__]
+          targetLabel: metrics_path
+        - targetLabel: job
+          replacement: kubelet
+
 kubeControllerManager:
   enabled: false
 
