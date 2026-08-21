@@ -58,13 +58,15 @@ spec:
             # Cache do HF no PVC -> baixa o modelo uma vez, reusa em todo restart.
             - name: HF_HOME
               value: /data/hf
+            - name: VLLM_ATTENTION_BACKEND
+              value: TRITON_ATTN
             # Modelo e publico (open-weights); token so ajuda contra rate limit anonimo.
             # Descomente + crie a ExternalSecret se bater em 429 no pull:
-            # - name: HF_TOKEN
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: next-edit-hf
-            #       key: HF_TOKEN
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: nextedit-secrets
+                  key: hf-token
           ports:
             - name: http
               containerPort: 8000
