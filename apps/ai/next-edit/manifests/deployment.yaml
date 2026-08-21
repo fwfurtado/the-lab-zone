@@ -1,12 +1,6 @@
-# vLLM servindo sweepai/sweep-next-edit-v2-7B (next-edit prediction) 100% residente na 3090.
+# vLLM servindo zed-industries/zeta-2 (next-edit prediction) 100% residente na 3090.
 # runtimeClassName: nvidia -> injeta nodeSelector (nvidia.com/gpu.present) + toleration
 # do taint + runtime GPU. Com o Ollama em replicas:0, a 3090 esta livre e inteira.
-#
-# Numeros REAIS medidos no boot de 21/08 (v0.25.1, bf16, max-model-len 16384):
-#   pesos          14.29 GiB
-#   KV cache        4.68 GiB -> 87.696 tokens -> 5.35x de concorrencia @16k
-#   cudagraphs      0.05 GiB
-#   load do PVC   271 s (~54 MB/s) <- gargalo de cold start, ver bloco de resources
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -31,96 +25,63 @@ spec:
       runtimeClassName: nvidia
       containers:
         - name: vllm
-          # TODO: pinar por digest (vllm/vllm-openai@sha256:...). Com tag mutavel +
-          # IfNotPresent, uma troca de node pode entregar um binario diferente do
-          # que voce validou, sem nenhum sinal no rollout.
           image: vllm/vllm-openai:v0.25.1
           imagePullPolicy: IfNotPresent
           args:
-            # MUDOU: modelo como argumento posicional. O --model= esta deprecado
-            # (WARNING argparse_utils.py:257) e sera removido numa versao futura.
-            - sweepai/sweep-next-edit-v2-7B
-            # served-model-name = o que o Zed manda no campo "model".
-            # O prompt_format do lado do Zed precisa ser "sweep" (ou "infer", que
-            # detecta pelo nome sweep-next-edit-*). NAO deixe nome zeta* aqui: o
-            # cliente montaria o prompt no formato errado e as predicoes sairiam
-            # silenciosamente ruins, sem erro nenhum no log.
-            - --served-model-name=sweep-next-edit-v2-7B
+            - --model=zed-industries/zeta-2.1
+            # served-model-name = o que o Zed manda em "model". Com prompt_format:infer
+            # o Zed detecta o formato zeta2.1 (Multi-Region) a partir desse nome.
+            - --served-model-name=zeta2.1
             # 3090 (Ampere) NAO tem FP8 tensor cores -> bf16 nativo. Nada de fp8/fp8_e4m3.
             - --dtype=bfloat16
-            # Contexto do edit-predict (edits recentes + janela do arquivo + retrieval).
-            # Medido: sobram 4.68 GiB de KV = 87.696 tokens. Folgado pra 1 usuario.
+            # Contexto do edit-predict (edits recentes + janela do arquivo). 16k e folgado;
+            # ajuste se quiser mais KV cache livre.
             - --max-model-len=16384
+            # Card inteiro livre -> 0.90 seguro (~21.6GB pro modelo + KV pool).
             - --gpu-memory-utilization=0.90
-            # 1 usuario: fila de 2 (a request em voo + a que substitui ela quando
-            # voce digita de novo). Captura de cudagraph tambem fica mais rapida.
-            - --max-num-seqs=2
-            # Prefill inteiro num passo so -> melhor TTFT. Sem batch pra proteger.
-            - --max-num-batched-tokens=16384
             # Prompt reuse alto no edit-predict -> prefix caching ajuda muito.
             - --enable-prefix-caching
-            # NOVO: o generation_config.json do REPO DO MODELO (nao e nosso) forca
-            # max_tokens=2048 -> WARNING model.py:1528. O card declara 1024.
-            # Rede de seguranca: se os stop tokens (<|file_sep|>, <|endoftext|>)
-            # falharem, sem isso a geracao vai ate 2048 tokens (~30s a 55 tok/s).
-            # Alternativa mais grossa: --generation-config=vllm (ignora o arquivo).
-            - '--override-generation-config={"max_tokens":1024}'
-            # NAO use --enforce-eager. Em batch=1 os cudagraphs valem 15-20% do decode.
-            #
-            # ngram spec decoding: output do rewrite-window e quase todo copia do
-            # bloco current/, entao a aceitacao tende a ser alta. POREM custa dois
-            # WARNINGs no boot: desliga o async scheduling (vllm.py:1010) e cai do
-            # Model Runner V2 pro V1 (vllm.py:548) -- ou seja, voce abre mao do
-            # principal ganho da 0.25.0. Meca a aceitacao em /metrics (grep spec_decode)
-            # antes de assumir que compensa.
-#            - '--speculative-config={"method":"ngram","num_speculative_tokens":10,"prompt_lookup_max":6,"prompt_lookup_min":2}'
-            # --- Config alternativa do A/B: sem ngram, COM Model Runner V2 + async
-            # scheduling. Comente o --speculative-config acima e descomente a linha
-            # abaixo. Compare p50/p90 com payload REAL (prompt aleatorio zera o ngram).
-            # - --async-scheduling
             - --host=0.0.0.0
             - --port=8000
             # Corta o access log do uvicorn (INFO: <ip> - "POST /v1/... HTTP/1.1" 200),
-            # ~99% probe/health noise. Afeta so o logger uvicorn; os logs proprios do
+            # ~99% probe/health noise. Afeta só o logger uvicorn; os logs próprios do
             # vLLM (engine, throughput) ficam no logger `vllm`, intactos. Throughput
-            # real e observado via VMPodScrape, nao pelo access log.
-            # Alternativa mais cirurgica em vLLM novo: --disable-uvicorn-access-log.
+            # real é observado via VMPodScrape, não pelo access log.
+            # Alternativa mais cirúrgica em vLLM novo: --disable-uvicorn-access-log.
             - --uvicorn-log-level=warning
-            - --enforce-eager
+            # --- Speculative decoding (ngram): grande ganho de latencia p/ edit-predict,
+            # pois a maioria dos tokens ja esta no prompt (so gera o diff). MAS a sintaxe
+            # do flag VARIA por versao do vLLM. Habilite SO depois do boot baseline OK, e
+            # valide contra a tua tag pinada. Forma recente (vLLM novo):
+            #   - --speculative-config={"method":"ngram","num_speculative_tokens":8,"prompt_lookup_max":4,"prompt_lookup_min":2}
           env:
             # Cache do HF no PVC -> baixa o modelo uma vez, reusa em todo restart.
-            - name: HF_HOME          
+            - name: HF_HOME
               value: /data/hf
-            - name: VLLM_ATTENTION_BACKEND
-              value: TRITON_ATTN              
             # Modelo e publico (open-weights); token so ajuda contra rate limit anonimo.
-            - name: HF_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: nextedit-secrets
-                  key: hf-token
-            # NOTA: se o build da imagem/CI injeta VLLM_BUILD_COMMIT, VLLM_IMAGE_TAG,
-            # VLLM_BUILD_URL, VLLM_BUILD_PIPELINE nesse pod, o vLLM varre tudo com
-            # prefixo VLLM_ e loga "Unknown vLLM environment variable" pra cada uma.
-            # Renomeie pra BUILD_* ou mova pra annotations do pod.
+            # Descomente + crie a ExternalSecret se bater em 429 no pull:
+            # - name: HF_TOKEN
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: next-edit-hf
+            #       key: HF_TOKEN
           ports:
             - name: http
               containerPort: 8000
+          # vLLM usa /dev/shm; o default de 64Mi do container estoura mesmo em 1 GPU.
           volumeMounts:
             - name: models
               mountPath: /data/hf
-            # vLLM usa /dev/shm; o default de 64Mi do container estoura mesmo em 1 GPU.
             - name: dshm
               mountPath: /dev/shm
-          # 1o boot: download (~157s) + load do PVC (~271s) + compile/warmup (~47s).
-          # Medido end-to-end: 8m40s. Restart com cache quente ainda paga os ~271s
-          # de load. failureThreshold 90 x 10s = 15min de folga.
+          # 1o boot baixa ~16GB do HF + carrega na VRAM -> startupProbe generoso
+          # (nao deixa o liveness matar o pod durante o download).
           startupProbe:
             httpGet:
               path: /health
               port: http
             periodSeconds: 10
-            failureThreshold: 90
+            failureThreshold: 90 # ~15min de folga pro 1o pull
           readinessProbe:
             httpGet:
               path: /health
@@ -135,18 +96,10 @@ spec:
           resources:
             limits:
               nvidia.com/gpu: 1
-              # MUDOU: 16Gi -> 24Gi. O checkpoint tem 14.19 GiB e e lido via mmap;
-              # o page cache conta no cgroup. Com limite de 16Gi o kernel fica
-              # reclamando pagina no meio do load, o que provavelmente explica os
-              # 54 MB/s. Se o tempo de load nao cair com 24Gi, o gargalo e o
-              # storage class -> avaliar PV local em NVMe ou --load-format=instanttensor.
-              memory: "24Gi"
+              memory: "16Gi"
             requests:
-              # MUDOU: cpu 1 -> 2 (tokenizacao, loader, torch.compile).
-              # De proposito SEM limits.cpu: throttling durante o warmup e pior
-              # que vizinho barulhento num node que so roda isso.
-              cpu: "2"
-              memory: "8Gi"
+              cpu: "1"
+              memory: "4Gi"
       volumes:
         - name: models
           persistentVolumeClaim:
