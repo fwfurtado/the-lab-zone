@@ -28,10 +28,10 @@ spec:
           image: vllm/vllm-openai:v0.25.1
           imagePullPolicy: IfNotPresent
           args:
-            - --model=zed-industries/zeta-2.1
+            - --model=sweepai/sweep-next-edit-v2-7B
             # served-model-name = o que o Zed manda em "model". Com prompt_format:infer
             # o Zed detecta o formato zeta2.1 (Multi-Region) a partir desse nome.
-            - --served-model-name=zeta2.1
+            - --served-model-name=sweep-next-edit-v2-7B
             # 3090 (Ampere) NAO tem FP8 tensor cores -> bf16 nativo. Nada de fp8/fp8_e4m3.
             - --dtype=bfloat16
             # Contexto do edit-predict (edits recentes + janela do arquivo). 16k e folgado;
@@ -39,8 +39,15 @@ spec:
             - --max-model-len=16384
             # Card inteiro livre -> 0.90 seguro (~21.6GB pro modelo + KV pool).
             - --gpu-memory-utilization=0.90
+            # 1 usuario: fila de 2 (a request em voo + a que substitui ela quando
+            # voce digita de novo). Captura de cudagraph tambem fica mais rapida.
+            - --max-num-seqs=2            
+            # Prefill inteiro num passo so -> melhor TTFT. Sem batch pra proteger.
+            - --max-num-batched-tokens=16384            
             # Prompt reuse alto no edit-predict -> prefix caching ajuda muito.
             - --enable-prefix-caching
+            # NAO use --enforce-eager. Em batch=1 os cudagraphs valem 15-20% do decode.
+            - --speculative-config={"method":"ngram","num_speculative_tokens":10,"prompt_lookup_max":6,"prompt_lookup_min":2}
             - --host=0.0.0.0
             - --port=8000
             # Corta o access log do uvicorn (INFO: <ip> - "POST /v1/... HTTP/1.1" 200),
@@ -49,22 +56,17 @@ spec:
             # real é observado via VMPodScrape, não pelo access log.
             # Alternativa mais cirúrgica em vLLM novo: --disable-uvicorn-access-log.
             - --uvicorn-log-level=warning
-            # --- Speculative decoding (ngram): grande ganho de latencia p/ edit-predict,
-            # pois a maioria dos tokens ja esta no prompt (so gera o diff). MAS a sintaxe
-            # do flag VARIA por versao do vLLM. Habilite SO depois do boot baseline OK, e
-            # valide contra a tua tag pinada. Forma recente (vLLM novo):
-            #   - --speculative-config={"method":"ngram","num_speculative_tokens":8,"prompt_lookup_max":4,"prompt_lookup_min":2}
           env:
             # Cache do HF no PVC -> baixa o modelo uma vez, reusa em todo restart.
             - name: HF_HOME
               value: /data/hf
             # Modelo e publico (open-weights); token so ajuda contra rate limit anonimo.
             # Descomente + crie a ExternalSecret se bater em 429 no pull:
-            # - name: HF_TOKEN
-            #   valueFrom:
-            #     secretKeyRef:
-            #       name: next-edit-hf
-            #       key: HF_TOKEN
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: nextedit-secrets
+                  key: hf-token
           ports:
             - name: http
               containerPort: 8000
