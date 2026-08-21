@@ -73,7 +73,7 @@ spec:
             # Model Runner V2 pro V1 (vllm.py:548) -- ou seja, voce abre mao do
             # principal ganho da 0.25.0. Meca a aceitacao em /metrics (grep spec_decode)
             # antes de assumir que compensa.
-            - '--speculative-config={"method":"ngram","num_speculative_tokens":10,"prompt_lookup_max":6,"prompt_lookup_min":2}'
+#            - '--speculative-config={"method":"ngram","num_speculative_tokens":10,"prompt_lookup_max":6,"prompt_lookup_min":2}'
             # --- Config alternativa do A/B: sem ngram, COM Model Runner V2 + async
             # scheduling. Comente o --speculative-config acima e descomente a linha
             # abaixo. Compare p50/p90 com payload REAL (prompt aleatorio zera o ngram).
