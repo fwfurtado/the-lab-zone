@@ -86,6 +86,7 @@ spec:
             # real e observado via VMPodScrape, nao pelo access log.
             # Alternativa mais cirurgica em vLLM novo: --disable-uvicorn-access-log.
             - --uvicorn-log-level=warning
+            - --enforce-eager
           env:
             # Cache do HF no PVC -> baixa o modelo uma vez, reusa em todo restart.
             - name: HF_HOME
