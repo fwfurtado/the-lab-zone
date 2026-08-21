@@ -89,8 +89,10 @@ spec:
             - --enforce-eager
           env:
             # Cache do HF no PVC -> baixa o modelo uma vez, reusa em todo restart.
-            - name: HF_HOME
+            - name: HF_HOME          
               value: /data/hf
+            - name: VLLM_ATTENTION_BACKEND
+              value: TRITON_ATTN              
             # Modelo e publico (open-weights); token so ajuda contra rate limit anonimo.
             - name: HF_TOKEN
               valueFrom:
