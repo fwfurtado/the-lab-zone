@@ -25,7 +25,7 @@ spec:
       runtimeClassName: nvidia
       containers:
         - name: vllm
-          image: vllm/vllm-openai:v0.24.0
+          image: vllm/vllm-openai:v0.27.1
           imagePullPolicy: IfNotPresent
           args:
             - --model=zed-industries/zeta-2.1
@@ -54,12 +54,11 @@ spec:
             # do flag VARIA por versao do vLLM. Habilite SO depois do boot baseline OK, e
             # valide contra a tua tag pinada. Forma recente (vLLM novo):
             #   - --speculative-config={"method":"ngram","num_speculative_tokens":8,"prompt_lookup_max":4,"prompt_lookup_min":2}
+            - --attention-backend=TRITON_ATTN
           env:
             # Cache do HF no PVC -> baixa o modelo uma vez, reusa em todo restart.
             - name: HF_HOME
               value: /data/hf
-            - name: VLLM_ATTENTION_BACKEND
-              value: TRITON_ATTN
             # Modelo e publico (open-weights); token so ajuda contra rate limit anonimo.
             # Descomente + crie a ExternalSecret se bater em 429 no pull:
             - name: HF_TOKEN
