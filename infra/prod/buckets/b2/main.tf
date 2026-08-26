@@ -4,10 +4,13 @@ resource "b2_bucket" "this" {
   bucket_name = each.key
   bucket_type = "allPrivate"
 
-  lifecycle_rules {
-    file_name_prefix              = "" # aplica a todos os objetos do bucket
-    days_from_uploading_to_hiding = each.value.retention_days
-    days_from_hiding_to_deleting  = 1
+  dynamic "lifecycle_rules" {
+    for_each = each.value.lifecycle_rules
+    content {
+      file_name_prefix              = lifecycle_rules.value.prefix
+      days_from_uploading_to_hiding = lifecycle_rules.value.retention_days
+      days_from_hiding_to_deleting  = 1
+    }
   }
 
   # O backup é a tábua de salvação do tier-0: NUNCA destruir junto de um rebuild

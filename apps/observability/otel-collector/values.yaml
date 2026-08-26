@@ -431,7 +431,7 @@ resources:
 # Tolera o taint do nó GPU para coletar telemetria do worker-3-gpu também.
 # O taint nvidia.com/gpu=present:NoSchedule existe para barrar workload genérico —
 # DaemonSet de telemetria é exceção: queremos observabilidade JUSTO no nó mais quente
-# (Ollama, DCGM, inferência). Sem isso o controller não agenda o agent lá e o
+# (Ollama, inferência e outros workloads GPU). Sem isso o controller não agenda o agent lá e o
 # pod pré-taint vira misscheduled (KubeDaemonSetMisScheduled + RolloutStuck).
 tolerations:
   - key: nvidia.com/gpu

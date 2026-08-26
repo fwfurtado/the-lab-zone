@@ -4,52 +4,63 @@ componente: gpu
 tags: [dcgm, runtimeclass, daemonset, nvidia, oomkill, distroless, otel-toleration]
 fases: [7, 9]
 relacionado: [runbooks/talos, runbooks/observability]
+status: arquivado
 ---
 
-# GPU: DCGM exporter, RuntimeClass e DaemonSet no nó GPU
+# GPU: histórico do DCGM exporter, RuntimeClass e DaemonSet
 
-Observabilidade da RTX 3090 no `worker-3-gpu`. O taint de GPU é armadilha tanto pro DCGM quanto
-pra DaemonSets de telemetria já agendados.
+> **Arquivado — não aplicar.** O DCGM exporter foi removido do setup ativo. Não há DaemonSet,
+> Service, `VMServiceScrape` ou instrução de instalação DCGM vigente. As seções abaixo registram
+> problemas e correções observados quando o exporter existia; não são um procedimento para
+> instalá-lo ou reintroduzi-lo.
 
-## RuntimeClass `scheduling` não basta para DaemonSet
+Observabilidade da RTX 3090 no `worker-3-gpu`: as orientações específicas de DCGM abaixo são
+somente contexto histórico. A orientação ainda vigente para o taint é a seção do otel-collector.
 
-**Sintoma:** ao subir o DCGM exporter (DaemonSet) só com `runtimeClassName: nvidia`, pods
-nascem `Pending`/`Unschedulable` em nós sem GPU.
-**Causa:** a injeção de nodeSelector/toleration do bloco `scheduling` da RuntimeClass acontece na
-**admissão**. O DaemonSet controller decide os nós lendo o **template** (antes da admissão) →
-cria pod em todo nó → os de não-GPU travam.
-**Fix:** declarar `nodeSelector` + `toleration` **explícitos** no template do DaemonSet. A
-injeção da RuntimeClass por cima é idempotente (mesma chave/valor).
-**Lição:** pra DaemonSet, scheduling tem que estar no template — RuntimeClass `scheduling` é
-tarde demais pro controller.
+## Histórico: RuntimeClass `scheduling` não bastava para DaemonSet
 
-## Tag da imagem DCGM: `-distroless`, não `-ubuntu22.04`
+**Situação registrada:** quando o DCGM exporter era um DaemonSet com apenas
+`runtimeClassName: nvidia`, pods nasciam `Pending`/`Unschedulable` em nós sem GPU.
+**Causa observada:** a injeção de nodeSelector/toleration do bloco `scheduling` da RuntimeClass
+acontecia na **admissão**. O DaemonSet controller decidia os nós lendo o **template** (antes da
+admissão) e criava pod em todo nó; os de não-GPU travavam.
+**Correção histórica:** declarar `nodeSelector` + `toleration` explicitamente no template do
+DaemonSet. A injeção da RuntimeClass por cima era idempotente (mesma chave/valor).
+**Lição:** para DaemonSets, scheduling tem que estar no template — RuntimeClass `scheduling` é
+tarde demais para o controller.
 
-**Sintoma:** pull de `...dcgm-exporter:4.5.3-4.8.2-ubuntu22.04` falha (tag inexistente).
-**Causa:** as versões 4.x passaram a publicar `-distroless` como padrão; o sufixo `-ubuntu22.04`
-foi descontinuado.
-**Fix:** usar `4.5.3-4.8.2-distroless`. Verificar com `skopeo list-tags` ou `crane ls`.
-**Lição:** distroless não tem shell/curl — probes viram `tcpSocket` e o teste de `/metrics` é
+## Histórico: tag da imagem DCGM era `-distroless`, não `-ubuntu22.04`
+
+**Situação registrada:** o pull de `...dcgm-exporter:4.5.3-4.8.2-ubuntu22.04` falhava (tag
+inexistente).
+**Causa observada:** as versões 4.x passaram a publicar `-distroless` como padrão; o sufixo
+`-ubuntu22.04` foi descontinuado.
+**Correção histórica:** a imagem usada era `4.5.3-4.8.2-distroless`, verificada com `skopeo
+list-tags` ou `crane ls`.
+**Lição:** distroless não tinha shell/curl — probes eram `tcpSocket` e o teste de `/metrics` era
 via port-forward, não `exec curl`.
 
-## DCGM exporter em OOMKill com 256Mi
+## Histórico: DCGM exporter em OOMKill com 256Mi
 
-**Sintoma:** o pod entra em OOMKill em loop.
-**Causa:** o DCGM roda o `nv-hostengine` **embutido** no container; com `SYS_ADMIN` + métricas
-de profiling (`DCGM_FI_PROF_*`) o uso no boot passa dos 256Mi do manifesto oficial.
-**Fix:** subir o limit pra `1Gi` (request `256Mi`). Opcional: `counters.csv` curado (sem
-`DCGM_FI_PROF_*`) reduz o footprint e tira a dependência do profiling — recomendado em GPU de
-consumidor sem MIG.
-**Lição:** o `256Mi` do exemplo oficial é otimista pro hostengine embutido + profiling.
+**Situação registrada:** o pod entrava em OOMKill em loop.
+**Causa observada:** o DCGM rodava o `nv-hostengine` **embutido** no container; com
+`SYS_ADMIN` + métricas de profiling (`DCGM_FI_PROF_*`) o uso no boot passava dos 256Mi do
+manifesto oficial.
+**Correção histórica:** o limite foi elevado para `1Gi` (request `256Mi`). Um `counters.csv`
+curado (sem `DCGM_FI_PROF_*`) reduzia o footprint e removia a dependência do profiling —
+recomendado em GPU de consumidor sem MIG.
+**Lição:** o `256Mi` do exemplo oficial era otimista para hostengine embutido + profiling.
+Esses valores não são requisitos de nenhum componente ativo.
 
-## Scrape novo invisível até o vmagent recarregar a config
+## Histórico: scrape novo invisível até o vmagent recarregar a config
 
-(Específico do DCGM mas vale pra qualquer scrape novo.) `VMServiceScrape` criado, endpoint vivo,
-`selectAllByDefault: true`, sem erro — mas a métrica não aparece e o pool não consta nos
-`activeTargets`. Fix: `rollout restart deploy/vmagent-victoria-metrics-vmks`. Ver
-`runbooks/observability/` (padrão "operator/vmagent não releu → restart").
+Este caso era específico do scrape do DCGM e ficou arquivado junto com ele. Um `VMServiceScrape`
+era criado, o endpoint estava vivo e `selectAllByDefault: true` não apresentava erro, mas a
+métrica não aparecia e o pool não constava nos `activeTargets`. A correção histórica foi
+`rollout restart deploy/vmagent-victoria-metrics-vmks`; ver `runbooks/observability/` para o
+padrão geral de "operator/vmagent não releu → restart".
 > Consumo de GPU por workload: filtrar `exported_namespace`/`exported_pod` (o `honor_labels`
-> renomeia as labels do PodMapper; `namespace`/`pod` crus = o próprio exporter).
+> renomeava as labels do PodMapper; `namespace`/`pod` crus eram o próprio exporter).
 
 ## otel-collector DaemonSet travado pelo taint de GPU (MisScheduled + RolloutStuck)
 
@@ -72,7 +83,8 @@ lista default inteira.
 
 ## Lição transversal
 
-O taint de GPU (`nvidia.com/gpu=present:NoSchedule`) é a raiz de vários incidentes: scheduling
-de DaemonSet precisa estar no template (RuntimeClass é tarde), telemetria que já rodava trava
-(toleration específica). DCGM precisa de 1Gi e tag distroless. O taint em si vai via
-`registerWithTaints` + imperativo — ver `runbooks/talos/`.
+O taint de GPU (`nvidia.com/gpu=present:NoSchedule`) continua sendo relevante para DaemonSets
+de telemetria ativos: toleration específica e scheduling no template. As orientações específicas
+de DCGM, inclusive tag, memória e scrape, são somente histórico do componente removido e não
+devem ser usadas para instalar nada no cluster atual. O taint em si vai via `registerWithTaints`
++ imperativo — ver `runbooks/talos/`.

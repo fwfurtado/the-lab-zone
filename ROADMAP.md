@@ -72,7 +72,7 @@ Legenda:
 6. **Políticas Kyverno adicionais**
    - Bloquear `:latest`.
    - Exigir `runAsNonRoot`, `allowPrivilegeEscalation: false`, capabilities dropadas e resources.
-   - Criar exceções explícitas para workloads como DCGM.
+   - Criar exceções explícitas para workloads GPU que exigem essas permissões.
 
 7. **Proteção de branch**
    - Exigir PR.
