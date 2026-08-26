@@ -14,6 +14,8 @@ spec:
       app.kubernetes.io/name: skillshare
   template:
     metadata:
+      annotations:
+        backup.velero.io/backup-volumes-excludes: skillshare-cache,skillshare-git,skillshare-tmp
       labels:
         app.kubernetes.io/name: skillshare
     spec:
