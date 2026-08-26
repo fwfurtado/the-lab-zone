@@ -26,6 +26,39 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        - name: ui-assets
+          image: ghcr.io/runkids/skillshare:0.20.25
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              set -eu
+              asset=/tmp/skillshare-ui-dist.tar.gz
+              trap 'rm -f "$asset"' EXIT
+              mkdir -p /home/skillshare/.cache/skillshare/ui/dev
+              curl --fail --location --retry 3 --output "$asset" \
+                https://github.com/runkids/skillshare/releases/download/v0.20.25/skillshare-ui-dist.tar.gz
+              printf '%s  %s\n' \
+                da92e758342e032e79483697fcfbd26b62fc439dbe184e9151d3be31ea51abed \
+                "$asset" | sha256sum --check --status
+              tar -xzf "$asset" -C /home/skillshare/.cache/skillshare/ui/dev
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: skillshare-cache
+              mountPath: /home/skillshare/.cache
+            - name: skillshare-tmp
+              mountPath: /tmp
       containers:
         - name: skillshare
           image: ghcr.io/runkids/skillshare:0.20.25
