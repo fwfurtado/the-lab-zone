@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: skillshare
-          image: ghcr.io/runkids/skillshare:v0.20.25
+          image: ghcr.io/runkids/skillshare:0.20.25
           command:
             - /opt/skillshare/start.sh
           workingDir: /home/skillshare
