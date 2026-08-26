@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: skillshare
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: skillshare
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: openebs-hostpath-ssd
+  resources:
+    requests:
+      storage: 5Gi

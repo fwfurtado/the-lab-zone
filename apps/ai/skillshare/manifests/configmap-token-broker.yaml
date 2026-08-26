@@ -1,0 +1,204 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: skillshare-github-token
+  namespace: ai
+data:
+  token-broker.mjs: |
+    #!/usr/bin/env node
+    import { randomBytes, createPrivateKey, createSign } from 'node:crypto';
+    import {
+      chmod,
+      mkdir,
+      open,
+      readFile,
+      rename,
+      unlink,
+    } from 'node:fs/promises';
+    import { dirname, join } from 'node:path';
+
+    const TOKEN_FILE = '/run/skillshare-git/github-token';
+    const REFRESH_INTERVAL_MS = 45 * 60 * 1000;
+    const REQUEST_TIMEOUT_MS = 30 * 1000;
+
+    function requiredNumber(name) {
+      const raw = process.env[name];
+      if (!raw) {
+        throw new Error(`missing ${name}`);
+      }
+      const value = Number(raw);
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error(`${name} must be a positive integer`);
+      }
+      return value;
+    }
+
+    async function requiredPrivateKey() {
+      const keyFile =
+        process.env.PRIVATE_KEY_FILE || '/var/run/secrets/skillshare/private-key';
+      let raw;
+      try {
+        raw = await readFile(keyFile, 'utf8');
+      } catch {
+        throw new Error('missing private key file');
+      }
+      if (!raw) {
+        throw new Error('missing private key file');
+      }
+      // Permit Secret values that were stored with literal escaped newlines.
+      return raw.includes('\\n') ? raw.replaceAll('\\n', '\n') : raw;
+    }
+
+    function base64url(value) {
+      return Buffer.from(JSON.stringify(value)).toString('base64url');
+    }
+
+    function createAppJwt(appId, privateKeyText) {
+      const now = Math.floor(Date.now() / 1000);
+      const encodedHeader = base64url({ alg: 'RS256', typ: 'JWT' });
+      const encodedPayload = base64url({
+        iat: now - 60,
+        exp: now + 540,
+        iss: appId,
+      });
+      const signingInput = `${encodedHeader}.${encodedPayload}`;
+      let signature;
+      try {
+        const signer = createSign('RSA-SHA256');
+        signer.update(signingInput);
+        signer.end();
+        signature = signer.sign(createPrivateKey(privateKeyText)).toString('base64url');
+      } catch {
+        throw new Error('failed to sign GitHub app JWT');
+      }
+      return `${signingInput}.${signature}`;
+    }
+
+    async function requestInstallationToken() {
+      const appId = requiredNumber('APP_ID');
+      const installationId = requiredNumber('INSTALLATION_ID');
+      const jwt = createAppJwt(appId, await requiredPrivateKey());
+      const endpoint = `https://api.github.com/app/installations/${installationId}/access_tokens`;
+      let response;
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.github+json',
+            Authorization: `Bearer ${jwt}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'skillshare-token-broker',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          body: JSON.stringify({
+            permissions: {
+              contents: 'write',
+              metadata: 'read',
+            },
+            repositories: ['ai-skills'],
+          }),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+      } catch {
+        throw new Error('GitHub installation token request failed');
+      }
+      if (!response.ok) {
+        throw new Error(`GitHub installation token request failed (HTTP ${response.status})`);
+      }
+
+      let result;
+      try {
+        result = await response.json();
+      } catch {
+        throw new Error('GitHub installation token response was invalid');
+      }
+      if (!result || typeof result.token !== 'string' || result.token.length === 0) {
+        throw new Error('GitHub installation token response did not contain a token');
+      }
+      return result.token;
+    }
+
+    async function writeTokenAtomically(token) {
+      const directory = dirname(TOKEN_FILE);
+      await mkdir(directory, { recursive: true, mode: 0o750 });
+      const temporary = join(
+        directory,
+        `.github-token.${process.pid}.${randomBytes(6).toString('hex')}`,
+      );
+      let handle;
+      try {
+        handle = await open(temporary, 'wx', 0o640);
+        await handle.writeFile(token, 'utf8');
+        await handle.sync();
+        await handle.chmod(0o640);
+        await handle.close();
+        handle = undefined;
+        await rename(temporary, TOKEN_FILE);
+      } finally {
+        if (handle) {
+          await handle.close().catch(() => {});
+        }
+        await unlink(temporary).catch(() => {});
+      }
+      await chmod(TOKEN_FILE, 0o640);
+    }
+
+    async function refreshToken() {
+      const token = await requestInstallationToken();
+      await writeTokenAtomically(token);
+      console.error('GitHub installation token refreshed');
+    }
+
+    function sleep(milliseconds) {
+      return new Promise((resolve) => setTimeout(resolve, milliseconds));
+    }
+
+    async function main() {
+      if (process.env.TOKEN_BROKER_ONESHOT === 'true') {
+        await refreshToken();
+        return;
+      }
+
+      for (;;) {
+        try {
+          await refreshToken();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'unknown token broker error';
+          console.error(`GitHub installation token refresh failed: ${message}`);
+        }
+        await sleep(REFRESH_INTERVAL_MS);
+      }
+    }
+
+    main().catch((error) => {
+      const message = error instanceof Error ? error.message : 'unknown token broker error';
+      console.error(`GitHub installation token broker stopped: ${message}`);
+      process.exitCode = 1;
+    });
+  github-askpass: |
+    #!/bin/sh
+    set -eu
+
+    token_file=/run/skillshare-git/github-token
+    prompt=${1-}
+    case "$prompt" in
+      *[Uu]sername*)
+        printf '%s\n' 'x-access-token'
+        ;;
+      *[Pp]assword*)
+        if [ ! -s "$token_file" ]; then
+          echo 'GitHub token is unavailable' >&2
+          exit 1
+        fi
+        token=$(cat "$token_file")
+        if [ -z "$token" ]; then
+          echo 'GitHub token is unavailable' >&2
+          exit 1
+        fi
+        printf '%s\n' "$token"
+        ;;
+      *)
+        echo 'unsupported Git credential prompt' >&2
+        exit 1
+        ;;
+    esac

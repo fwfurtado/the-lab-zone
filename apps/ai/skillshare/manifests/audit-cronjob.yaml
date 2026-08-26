@@ -1,0 +1,108 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: skillshare-audit
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: skillshare
+    app.kubernetes.io/component: audit
+spec:
+  schedule: "0 3 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: skillshare
+            app.kubernetes.io/component: audit
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: token-broker
+              image: node:24-bookworm-slim
+              command:
+                - node
+                - /opt/token-broker/token-broker.mjs
+              env:
+                - name: APP_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: skillshare-github-app
+                      key: app-id
+                - name: INSTALLATION_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: skillshare-github-app
+                      key: installation-id
+                - name: TOKEN_BROKER_ONESHOT
+                  value: "true"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: token-broker
+                  mountPath: /opt/token-broker
+                  readOnly: true
+                - name: github-app-secrets
+                  mountPath: /var/run/secrets/skillshare
+                  readOnly: true
+                - name: skillshare-git
+                  mountPath: /run/skillshare-git
+          containers:
+            - name: audit
+              image: ghcr.io/runkids/skillshare-ci:v0.20.0
+              command:
+                - /bin/sh
+                - -ec
+              args:
+                - |
+                  git clone https://github.com/the-lab-zone/ai-skills.git /workspace
+                  skillshare audit /workspace --profile strict --format sarif --no-tui
+              env:
+                - name: GIT_ASKPASS
+                  value: /opt/token-broker/github-askpass
+                - name: GIT_TERMINAL_PROMPT
+                  value: "0"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: token-broker
+                  mountPath: /opt/token-broker
+                  readOnly: true
+                - name: skillshare-git
+                  mountPath: /run/skillshare-git
+                  readOnly: true
+                - name: workspace
+                  mountPath: /workspace
+          volumes:
+            - name: token-broker
+              configMap:
+                name: skillshare-github-token
+                defaultMode: 0555
+            - name: github-app-secrets
+              secret:
+                secretName: skillshare-github-app
+                defaultMode: 0440
+            - name: skillshare-git
+              emptyDir: {}
+            - name: workspace
+              emptyDir: {}

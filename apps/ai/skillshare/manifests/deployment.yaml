@@ -1,0 +1,187 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skillshare
+  namespace: ai
+  labels:
+    app.kubernetes.io/name: skillshare
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: skillshare
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: skillshare
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: skillshare
+          image: ghcr.io/runkids/skillshare:v0.20.0
+          command:
+            - /opt/skillshare/start.sh
+          workingDir: /home/skillshare
+          ports:
+            - name: http
+              containerPort: 19420
+              protocol: TCP
+          env:
+            - name: GIT_ASKPASS
+              value: /opt/token-broker/github-askpass
+            - name: GIT_TERMINAL_PROMPT
+              value: "0"
+            - name: SKILLSHARE_REMOTE
+              value: https://github.com/the-lab-zone/ai-skills.git
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: skillshare-config
+              mountPath: /home/skillshare/.config/skillshare
+            - name: skillshare-cache
+              mountPath: /home/skillshare/.cache
+            - name: skillshare-tmp
+              mountPath: /tmp
+            - name: skillshare-git
+              mountPath: /run/skillshare-git
+              readOnly: true
+            - name: skillshare-startup
+              mountPath: /opt/skillshare/start.sh
+              subPath: start.sh
+              readOnly: true
+            - name: token-broker
+              mountPath: /opt/token-broker/token-broker.mjs
+              subPath: token-broker.mjs
+              readOnly: true
+            - name: github-askpass
+              mountPath: /opt/token-broker/github-askpass
+              subPath: github-askpass
+              readOnly: true
+
+        - name: token-broker
+          image: node:24-bookworm-slim
+          command:
+            - node
+            - /opt/token-broker/token-broker.mjs
+          env:
+            - name: APP_ID
+              valueFrom:
+                secretKeyRef:
+                  name: skillshare-github-app
+                  key: app-id
+            - name: INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: skillshare-github-app
+                  key: installation-id
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: github-app-secret
+              mountPath: /var/run/secrets/skillshare
+              readOnly: true
+            - name: skillshare-git
+              mountPath: /run/skillshare-git
+            - name: skillshare-tmp
+              mountPath: /tmp
+            - name: token-broker
+              mountPath: /opt/token-broker/token-broker.mjs
+              subPath: token-broker.mjs
+              readOnly: true
+            - name: github-askpass
+              mountPath: /opt/token-broker/github-askpass
+              subPath: github-askpass
+              readOnly: true
+      volumes:
+        - name: skillshare-config
+          persistentVolumeClaim:
+            claimName: skillshare
+        - name: skillshare-cache
+          emptyDir: {}
+        - name: skillshare-tmp
+          emptyDir: {}
+        - name: skillshare-git
+          emptyDir: {}
+        - name: skillshare-startup
+          configMap:
+            name: skillshare-startup
+            defaultMode: 0755
+            items:
+              - key: start.sh
+                path: start.sh
+        - name: token-broker
+          configMap:
+            name: skillshare-github-token
+            defaultMode: 0755
+            items:
+              - key: token-broker.mjs
+                path: token-broker.mjs
+        - name: github-askpass
+          configMap:
+            name: skillshare-github-token
+            defaultMode: 0755
+            items:
+              - key: github-askpass
+                path: github-askpass
+        - name: github-app-secret
+          secret:
+            secretName: skillshare-github-app
+            defaultMode: 0440

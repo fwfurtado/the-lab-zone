@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: skillshare-startup
+  namespace: ai
+data:
+  start.sh: |
+    #!/bin/sh
+    set -eu
+
+    token_file=/run/skillshare-git/github-token
+    deadline=$(( $(date +%s) + 180 ))
+    while [ ! -s "$token_file" ]; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo 'timed out waiting for GitHub token' >&2
+        exit 1
+      fi
+      sleep 2
+    done
+
+    config_file=/home/skillshare/.config/skillshare/config.yaml
+    if [ ! -f "$config_file" ]; then
+      skillshare init -g \
+        --source /home/skillshare/.config/skillshare/skills \
+        --remote "$SKILLSHARE_REMOTE" \
+        --no-targets \
+        --no-copy \
+        --no-skill
+    fi
+
+    exec skillshare ui -g --host 0.0.0.0 --no-open

@@ -106,3 +106,17 @@ schedules:
             values:
               - memgraph
               - valkey
+  # Skillshare UI state. Git is canonical; the PVC backup protects UI changes
+  # that have not been pushed yet, so unpushed work can be recovered.
+  skillshare-state:
+    disabled: false
+    schedule: "0 2 * * *"  # Daily at 02:00 UTC, after the other schedules.
+    template:
+      ttl: "720h"          # 30d
+      defaultVolumesToFsBackup: true
+      snapshotVolumes: false
+      includedNamespaces:
+        - ai
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: skillshare
