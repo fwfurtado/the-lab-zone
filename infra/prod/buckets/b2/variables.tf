@@ -58,5 +58,14 @@ variable "buckets" {
         }
       ]
     }
+
+    "the-lab-zone-haos-backup" = {
+      lifecycle_rules = [
+        {
+          prefix         = ""
+          retention_days = 60
+        }
+      ]
+    }
   }
 }
