@@ -14,7 +14,7 @@ metadata:
 spec:
   type: Python
   mode: cluster
-  image: ghcr.io/fwfurtado/lakehouse-jobs:0.2.0
+  image: ghcr.io/fwfurtado/lakehouse-jobs:0.2.2
   imagePullPolicy: IfNotPresent
   mainApplicationFile: local:///opt/spark/app/migrate.py
   sparkVersion: "4.1.1"
