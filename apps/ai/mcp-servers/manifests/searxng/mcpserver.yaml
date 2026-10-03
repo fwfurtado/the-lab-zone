@@ -21,7 +21,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "1"   # depois do engine SearXNG (wave 0)
 spec:
-  image: docker.io/isokoliuk/mcp-searxng:1.11.1
+  image: docker.io/isokoliuk/mcp-searxng:1.16.0
   transport: stdio
   proxyMode: streamable-http      # so vale com transport: stdio — expoe HTTP no proxy
   proxyPort: 8080
