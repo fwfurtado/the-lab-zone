@@ -4,7 +4,7 @@ metadata:
   name: victoria-logs
   namespace: ai
 spec:
-  image: ghcr.io/victoriametrics/mcp-victorialogs:v1.9.0
+  image: ghcr.io/victoriametrics/mcp-victorialogs:v1.11.0
   transport: streamable-http      # isto é o transport do ToolHive (correto)
   proxyPort: 8080
   groupRef:
